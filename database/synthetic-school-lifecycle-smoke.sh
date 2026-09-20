@@ -66,6 +66,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0041_certified_notification_publication_sync.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0042_certified_principal_academic_history_read.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0043_certified_report_governance_prerequisites.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0043b_certified_report_assignment_scope.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0044_certified_report_workflow_privacy_integrity.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
@@ -92,6 +93,7 @@ SQL
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0041_certified_notification_publication_sync'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0042_certified_principal_academic_history_read'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0043_certified_report_governance_prerequisites'")" = "1"
+  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0043b_certified_report_assignment_scope'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0044_certified_report_workflow_privacy_integrity'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
@@ -122,6 +124,7 @@ SQL
   test "$(psql "$db_url" -Atc "select to_regclass('public.academic_period_controls') is not null and to_regclass('public.emergency_academic_delegations') is not null and to_regclass('public.report_correction_requests') is not null and to_regclass('public.report_correction_events') is not null")" = "t"
   test "$(psql "$db_url" -Atc "select not has_table_privilege('edusentia_worker_runtime','public.academic_period_controls','select') and not has_table_privilege('edusentia_worker_runtime','public.emergency_academic_delegations','select') and not has_table_privilege('edusentia_worker_runtime','public.report_correction_requests','select') and not has_table_privilege('edusentia_worker_runtime','public.report_correction_events','select')")" = "t"
   test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_my_emergency_academic_delegations(uuid,uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.term_control_snapshot(uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.mark_report_correction_applied(uuid)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.is_assigned_class_teacher(uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_create_report_for_class_term(uuid,uuid)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_report_editor(uuid,uuid,uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.get_report_revisions(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.get_report_headteacher_signature(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.delete_report_card_permanently(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.transition_report_status(uuid,public.report_status,text,integer)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_view_report_internal(uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_delete_report(uuid)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select position('report_transition_deadline_allowed' in pg_get_functiondef(p.oid))>0 and position('mark_report_correction_applied' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='transition_report_status' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select position('REPORT_DRAFT_PERMANENTLY_DELETED' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='delete_report_card_permanently' limit 1")" = "t"
