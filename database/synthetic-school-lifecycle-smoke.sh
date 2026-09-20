@@ -60,6 +60,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0035_certified_teacher_principal_hardening.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0036_certified_staff_runtime_guards.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0037_certified_academic_configuration_mutations.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0038_certified_teacher_principal_crud.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -77,8 +78,9 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0037"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0038"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0037_certified_academic_configuration_mutations'")" = "1"
+  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0038_certified_teacher_principal_crud'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select legal_name='$school_name' and email=lower('$admin_email') from app.school_settings where tenant_id='$tenant_id'::uuid")" = "t"
@@ -99,6 +101,7 @@ SQL
   test "$(psql "$db_url" -Atc "select to_regclass('auth.users') is not null and not has_table_privilege('edusentia_worker_runtime','auth.users','select')")" = "t"
   test "$(psql "$db_url" -Atc "select exists(select 1 from pg_constraint where conname='classes_class_teacher_record_id_fkey' and conrelid='public.classes'::regclass)")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.enforce_licensed_write()','execute') and not has_function_privilege('edusentia_worker_runtime','public.sync_teacher_responsibility_access(uuid)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.list_teachers(text,text,text,integer,integer)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_teacher(jsonb)','execute') and has_function_privilege('edusentia_worker_runtime','public.archive_teacher(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.restore_teacher(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.list_headteachers(text,text,text,integer,integer)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_headteacher(jsonb)','execute') and has_function_privilege('edusentia_worker_runtime','public.archive_headteacher(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.restore_headteacher(uuid,text)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select count(*)=5 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal and ((c.relname='teachers' and t.tgname in('teachers_audit','teachers_license_write_guard','sync_teacher_record_class_links_trigger')) or (c.relname='headteachers' and t.tgname in('headteachers_audit','headteachers_license_write_guard')))")" = "t"
 
   WORKER_BOOTSTRAP_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.get_bootstrap_data() is not null; rollback;" | tail -1)"
@@ -111,6 +114,51 @@ SQL
   WORKER_PROMOTION_CUTOFF_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select (public.save_promotion_cutoff(55)->>'promotion_cutoff_score')::integer=55; rollback;" | tail -1)"
   WORKER_ACADEMIC_SAVE_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.save_academic_entity('academic_years',jsonb_build_object('name','Synthetic 2026/2027','start_date','2026-09-01','end_date','2027-07-31')) is not null; rollback;" | tail -1)"
   WORKER_ASSESSMENT_SAVE_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.save_assessment_scheme(jsonb_build_object('name','Synthetic Assessment Scheme','active',true,'components',jsonb_build_array(jsonb_build_object('name','Synthetic Component','code','SYN','maximum_score',100,'weight',100,'display_order',1,'required',true)))) is not null; rollback;" | tail -1)"
+  WORKER_STAFF_CRUD_OK="$(psql "$db_url" -X -qAtc "
+begin;
+set local role edusentia_worker_runtime;
+select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint);
+do \$staff_smoke\$
+declare
+  teacher_result jsonb;
+  teacher_id uuid;
+  principal_result jsonb;
+  principal_id uuid;
+begin
+  teacher_result:=public.save_teacher(jsonb_build_object(
+    'first_name','Synthetic',
+    'last_name','Teacher',
+    'gender','Other',
+    'qualification','Bachelor Degree',
+    'employment_status','active',
+    'active',true,
+    'reason','Synthetic lifecycle teacher'
+  ));
+  teacher_id:=nullif(teacher_result#>>'{teacher,id}','')::uuid;
+  if teacher_id is null then raise exception 'synthetic_teacher_not_created'; end if;
+  if public.get_teacher_record(teacher_id)#>>'{teacher,id}' is distinct from teacher_id::text then raise exception 'synthetic_teacher_read_failed'; end if;
+  if coalesce((public.list_teachers('Synthetic Teacher','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_teacher_list_failed'; end if;
+  if not public.archive_teacher(teacher_id,'Synthetic lifecycle archive') then raise exception 'synthetic_teacher_archive_failed'; end if;
+  if not public.restore_teacher(teacher_id,'Synthetic lifecycle restore') then raise exception 'synthetic_teacher_restore_failed'; end if;
+  if not exists(select 1 from public.audit_log where table_name='teachers' and record_id=teacher_id) then raise exception 'synthetic_teacher_audit_missing'; end if;
+
+  principal_result:=public.save_headteacher(jsonb_build_object(
+    'full_name','Synthetic Principal',
+    'contact','+233000000000',
+    'reason','Synthetic lifecycle principal'
+  ));
+  principal_id:=coalesce(nullif(principal_result#>>'{principal,id}','')::uuid,nullif(principal_result#>>'{headteacher,id}','')::uuid);
+  if principal_id is null then raise exception 'synthetic_principal_not_created'; end if;
+  if public.get_headteacher_record(principal_id)#>>'{principal,id}' is distinct from principal_id::text then raise exception 'synthetic_principal_read_failed'; end if;
+  if coalesce((public.list_headteachers('Synthetic Principal','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_principal_list_failed'; end if;
+  if not public.archive_headteacher(principal_id,'Synthetic lifecycle archive') then raise exception 'synthetic_principal_archive_failed'; end if;
+  if not public.restore_headteacher(principal_id,'Synthetic lifecycle restore') then raise exception 'synthetic_principal_restore_failed'; end if;
+  if not exists(select 1 from public.audit_log where table_name='headteachers' and record_id=principal_id) then raise exception 'synthetic_principal_audit_missing'; end if;
+end
+\$staff_smoke\$;
+select true;
+rollback;
+" | tail -1)"
   test "$WORKER_BOOTSTRAP_OK" = "t"
   test "$WORKER_ACCESS_OK" = "t"
   test "$WORKER_STUDENT_SEARCH_OK" = "t"
@@ -121,6 +169,7 @@ SQL
   test "$WORKER_PROMOTION_CUTOFF_OK" = "t"
   test "$WORKER_ACADEMIC_SAVE_OK" = "t"
   test "$WORKER_ASSESSMENT_SAVE_OK" = "t"
+  test "$WORKER_STAFF_CRUD_OK" = "t"
 }
 
 install_tenant "$BASIC_DB" "00000000-0000-4000-8000-000000000101" "BSC-900001" "Synthetic Basic School" "basic_jhs" "admin@basic.synthetic.invalid"
