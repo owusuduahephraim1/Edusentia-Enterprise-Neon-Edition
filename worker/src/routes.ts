@@ -154,8 +154,57 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       (select count(*)::int from finance.invoices where tenant_id=${ctx.tenantId}::uuid and status='overdue') overdue_invoices`]);
     return json(rows[0]||{});
   }
+
+  const reportPdfUpload=p.match(/^\/api\/reports\/([0-9a-f-]{36})\/pdf\/upload-url$/i);
+  if(method==="POST"&&reportPdfUpload){
+    const reportId=reportPdfUpload[1];
+    const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.can_manage_report_pdf(${reportId}::uuid) allowed`]);
+    if(!(allowedRows[0] as any)?.allowed)return error("forbidden","You are not authorized to manage the official report PDF",403,requestId);
+    const b=await readJson<any>(request);
+    const name=String(b.filename||"report.pdf").replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120);
+    const type=String(b.contentType||"application/pdf").split(";")[0].trim().toLowerCase();
+    const size=Number(b.size||0);
+    if(type!=="application/pdf")return error("invalid_content_type","Official report files must be PDF",415,requestId);
+    if(size<=0||size>20*1024*1024)return error("invalid_file_size","Report PDF size must be between 1 byte and 20 MB",422,requestId);
+    const key=`tenants/${ctx.tenantId}/report-pdfs/${reportId}/${crypto.randomUUID()}-${name}`;
+    await tenantTx<any[]>(sql,ctx,txn=>[txn`insert into storage.object_metadata(tenant_id,object_key,original_name,content_type,size_bytes,created_by,status) values(${ctx.tenantId}::uuid,${key},${name},'application/pdf',${size},${ctx.userId}::uuid,'pending')`]);
+    return json({objectKey:key,uploadUrl:`/api/files/upload?key=${encodeURIComponent(key)}`,method:"PUT",expiresInSeconds:900});
+  }
+
+  const reportPdfDownload=p.match(/^\/api\/reports\/([0-9a-f-]{36})\/pdf\/download$/i);
+  if(method==="GET"&&reportPdfDownload){
+    const reportId=reportPdfDownload[1];
+    const [descriptorRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_report_pdf_descriptor(${reportId}::uuid) descriptor`]);
+    const descriptor=(descriptorRows[0] as any)?.descriptor||{};
+    const key=String(descriptor.storage_path||"");
+    if(!key)return error("not_found","Official report PDF is not registered",404,requestId);
+    if(!key.startsWith(`tenants/${ctx.tenantId}/report-pdfs/${reportId}/`))return error("forbidden","Invalid report PDF scope",403,requestId);
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select content_type,original_name,status from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);
+    const meta=metaRows[0] as any;if(!meta)return error("not_found","Official report PDF object is not available",404,requestId);
+    const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","Official report PDF object is not available",404,requestId);
+    const h=new Headers();obj.writeHttpMetadata(h);
+    h.set("content-type","application/pdf");
+    h.set("content-disposition",`attachment; filename*=UTF-8''${encodeURIComponent(String(meta.original_name||"report.pdf"))}`);
+    h.set("cache-control","private, no-store");
+    h.set("x-content-type-options","nosniff");
+    return new Response(obj.body,{headers:h});
+  }
+
+  const reportPdfDelete=p.match(/^\/api\/reports\/([0-9a-f-]{36})\/pdf\/object$/i);
+  if(method==="DELETE"&&reportPdfDelete){
+    const reportId=reportPdfDelete[1],key=url.searchParams.get("key")||"";
+    if(!key.startsWith(`tenants/${ctx.tenantId}/report-pdfs/${reportId}/`))return error("forbidden","Invalid report PDF scope",403,requestId);
+    const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.can_delete_report_pdf_object(${reportId}::uuid,${key}) allowed`]);
+    if(!(allowedRows[0] as any)?.allowed)return error("forbidden","This report PDF object cannot be deleted",403,requestId);
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select id,status from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);
+    const meta=metaRows[0] as any;if(!meta)return error("not_found","Report PDF object was not found",404,requestId);
+    await env.OBJECTS.delete(key);
+    await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='deleted',deleted_at=now() where id=${meta.id}::uuid`]);
+    return json({ok:true,objectKey:key});
+  }
   if(method==="POST"&&p==="/api/files/upload-url"){
     const b=await readJson<any>(request),kind=String(b.kind||"document").replace(/[^a-z0-9_-]/gi,"_").slice(0,40),name=String(b.filename||"file").replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120),type=String(b.contentType||"application/octet-stream");
+    if(kind==="report-pdfs")return error("forbidden","Use the report PDF upload endpoint",403,requestId);
     const size=Number(b.size||0);if(size<=0||size>20*1024*1024)return error("invalid_file_size","File size must be between 1 byte and 20 MB",422,requestId);
     const allowed=["image/","application/pdf","text/csv","application/vnd.openxmlformats-officedocument"];
     if(!allowed.some(x=>type.startsWith(x)))return error("invalid_content_type","This file type is not allowed",422,requestId);
@@ -178,7 +227,13 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({ok:true,objectKey:key,size:bytes.byteLength});
   }
   if(method==="GET"&&p==="/api/files/download"){
-    const key=url.searchParams.get("key")||"";if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);const [meta]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select content_type,original_name from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);if(!meta[0])return error("not_found","File not found",404,requestId);const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","File not found",404,requestId);const h=new Headers();obj.writeHttpMetadata(h);h.set("content-type",String((meta[0] as any).content_type));h.set("content-disposition",`attachment; filename*=UTF-8''${encodeURIComponent(String((meta[0] as any).original_name))}`);h.set("cache-control","private, no-store");return new Response(obj.body,{headers:h});
+    const key=url.searchParams.get("key")||"";
+    if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);
+    if(key.startsWith(`tenants/${ctx.tenantId}/report-pdfs/`))return error("forbidden","Use the guarded report PDF download endpoint",403,requestId);
+    const [meta]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select content_type,original_name from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);
+    if(!meta[0])return error("not_found","File not found",404,requestId);
+    const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","File not found",404,requestId);
+    const h=new Headers();obj.writeHttpMetadata(h);h.set("content-type",String((meta[0] as any).content_type));h.set("content-disposition",`attachment; filename*=UTF-8''${encodeURIComponent(String((meta[0] as any).original_name))}`);h.set("cache-control","private, no-store");return new Response(obj.body,{headers:h});
   }
   return error("not_found","Endpoint not found",404,requestId);
 }
