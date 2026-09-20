@@ -11,3 +11,6 @@
 - Accounts Office Staff hard deletion is forbidden by product invariant.
 - Audit records avoid secret values.
 - Production errors return stable codes rather than SQL messages or stack traces.
+
+- Platform Super Administrator authority is separated from tenant memberships. Platform operators use dedicated platform sessions, require TOTP AAL2, and are never granted a school `system_admin` membership merely by holding platform authority.
+- Registration approval, licensing, tenant lifecycle, provisioning, student-capacity controls, and platform audit events are enforced through protected control-plane tables/functions rather than browser-side role flags.
