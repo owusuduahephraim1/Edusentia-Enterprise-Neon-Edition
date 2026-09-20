@@ -11,6 +11,9 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_report_editor",
   "get_report_revisions",
   "list_audit_events",
+  "list_audit_events_v2",
+  "list_audit_archives_v1",
+  "list_audit_archive_entries_v1",
   "list_notifications",
   "list_profiles_with_access",
   "search_students",
@@ -167,6 +170,26 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const page=intArg(args,"page_number",{min:1,max:100000});
       const pageSize=intArg(args,"page_size",{min:1,max:500});
       return singleResult(sql,ctx,txn=>txn`select public.list_audit_events(${table},${recordId}::uuid,${page}::integer,${pageSize}::integer) result`);
+    }
+    case "list_audit_events_v2":{
+      const table=textArg(args,"target_table",{max:128});
+      const action=textArg(args,"target_action",{max:64});
+      const actorId=uuidArg(args,"target_actor_id");
+      const recordId=uuidArg(args,"target_record_id");
+      const page=intArg(args,"page_number",{required:false,min:1,max:100000})??1;
+      const pageSize=intArg(args,"page_size",{required:false,min:1,max:100})??25;
+      return singleResult(sql,ctx,txn=>txn`select public.list_audit_events_v2(${table},${action},${actorId}::uuid,${recordId}::uuid,${page}::integer,${pageSize}::integer) result`);
+    }
+    case "list_audit_archives_v1":{
+      const page=intArg(args,"page_number",{required:false,min:1,max:100000})??1;
+      const pageSize=intArg(args,"page_size",{required:false,min:1,max:100})??25;
+      return singleResult(sql,ctx,txn=>txn`select public.list_audit_archives_v1(${page}::integer,${pageSize}::integer) result`);
+    }
+    case "list_audit_archive_entries_v1":{
+      const archiveId=uuidArg(args,"target_archive_id",true);
+      const page=intArg(args,"page_number",{required:false,min:1,max:100000})??1;
+      const pageSize=intArg(args,"page_size",{required:false,min:1,max:100})??25;
+      return singleResult(sql,ctx,txn=>txn`select public.list_audit_archive_entries_v1(${archiveId}::uuid,${page}::integer,${pageSize}::integer) result`);
     }
     case "list_notifications":{
       const page=intArg(args,"page_number",{min:1,max:100000});
