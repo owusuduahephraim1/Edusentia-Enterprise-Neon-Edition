@@ -1,3 +1,4 @@
+// Isolated school provisioning uses the locked Neon tenant template.
 import { neon } from "@neondatabase/serverless";
 import type { Env } from "./types";
 import { db } from "./db";
