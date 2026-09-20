@@ -8,6 +8,7 @@ import { verifyTurnstile } from "./turnstile";
 import { provisionIsolatedTenant } from "./provisioning";
 import { tenantDb } from "./tenant-db";
 import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
+import { deleteIsolatedTenant } from "./deletion";
 
 async function authed(request:Request,env:Env){
   const ctx=await authenticatePlatform(request,env);
@@ -169,7 +170,7 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
 
 
   if(method==="GET"&&p==="/api/platform/overview"){
-    const [registrations,tenants,plans,jobs,events,health,audit,recovery,authorizations,releaseRows]=await Promise.all([
+    const [registrations,tenants,plans,jobs,events,health,audit,recovery,authorizations,deletions,releaseRows]=await Promise.all([
       sql`select * from platform.school_registrations order by created_at desc limit 200`,
       sql`select * from platform.tenant_control order by created_at desc limit 500`,
       sql`select * from platform.license_plans order by sort_order,code`,
@@ -179,6 +180,7 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
       sql`select * from platform.admin_audit_events order by created_at desc limit 150`,
       sql`select * from platform.access_recovery_requests where status in('pending','processing') order by requested_at desc limit 200`,
       sql`select * from platform.plan_authorizations order by issued_at desc limit 200`,
+      sql`select * from platform.school_deletion_jobs order by created_at desc limit 100`,
       sql`select platform.release_gate() result`
     ]);
     const summary={
@@ -190,7 +192,7 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
       capacityAttention:tenants.filter((t:any)=>["near_limit","at_limit","over_limit"].includes(String(t.student_capacity_status||""))).length,
       pendingRecovery:recovery.length
     };
-    return json({ok:true,summary,registrations,tenants,plans,jobs,events,tenantHealth:health,auditEvents:audit,recoveryRequests:recovery,planAuthorizations:authorizations,releaseGate:(releaseRows[0] as any)?.result||null,checkedAt:new Date().toISOString()});
+    return json({ok:true,summary,registrations,tenants,plans,jobs,events,tenantHealth:health,auditEvents:audit,recoveryRequests:recovery,planAuthorizations:authorizations,deletionJobs:deletions,releaseGate:(releaseRows[0] as any)?.result||null,checkedAt:new Date().toISOString()});
   }
 
   let id=uuidPath(p,/^\/api\/platform\/registrations\/([0-9a-f-]{36})\/license$/i);
@@ -266,6 +268,12 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
     }
     const completed=await sql`select platform.complete_access_recovery(${requestIdValue}::uuid,${ctx.userId}::uuid,${mode}) result`;
     return json((completed[0] as any)?.result||{ok:true});
+  }
+
+  id=uuidPath(p,/^\/api\/platform\/tenants\/([0-9a-f-]{36})\/delete$/i);
+  if(method==="POST"&&id){
+    const b=await readJson<any>(request);
+    return json(await deleteIsolatedTenant(env,id,ctx.userId,String(b.confirmation||""),String(b.reason||"")));
   }
 
   id=uuidPath(p,/^\/api\/platform\/tenants\/([0-9a-f-]{36})\/health$/i);
