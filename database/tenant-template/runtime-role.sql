@@ -120,6 +120,36 @@ grant execute on function public.archive_teacher(uuid,text)
   to edusentia_worker_runtime;
 grant execute on function public.restore_teacher(uuid,text)
   to edusentia_worker_runtime;
+grant execute on function public.set_teacher_photo(uuid,text,timestamp with time zone)
+  to edusentia_worker_runtime;
+grant execute on function public.list_headteachers(text,text,text,integer,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.get_headteacher_record(uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.get_my_headteacher_signature()
+  to edusentia_worker_runtime;
+grant execute on function public.save_headteacher(jsonb)
+  to edusentia_worker_runtime;
+grant execute on function public.archive_headteacher(uuid,text)
+  to edusentia_worker_runtime;
+grant execute on function public.restore_headteacher(uuid,text)
+  to edusentia_worker_runtime;
+grant execute on function public.set_headteacher_photo(uuid,text,timestamp with time zone)
+  to edusentia_worker_runtime;
+grant execute on function public.set_my_headteacher_signature(text,timestamp with time zone)
+  to edusentia_worker_runtime;
+grant execute on function public.list_teachers(text,text,text,integer,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.get_teacher_record(uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.get_my_teacher_profile()
+  to edusentia_worker_runtime;
+grant execute on function public.save_teacher(jsonb)
+  to edusentia_worker_runtime;
+grant execute on function public.archive_teacher(uuid,text)
+  to edusentia_worker_runtime;
+grant execute on function public.restore_teacher(uuid,text)
+  to edusentia_worker_runtime;
 grant execute on function public.set_teacher_photo(uuid,text,timestamptz)
   to edusentia_worker_runtime;
 grant execute on function public.list_headteachers(text,text,text,integer,integer)
