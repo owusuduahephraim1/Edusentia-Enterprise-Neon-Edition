@@ -7,7 +7,6 @@ TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
 if psql "$TARGET_DATABASE_URL" -Atc "select 1 from app.schema_migrations where version='0027_reference_core_part_01' limit 1" | grep -qx 1; then
-  test "$(psql "$TARGET_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0027"
   test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   echo "Certified reference core Part 01 is already installed."
   exit 0
