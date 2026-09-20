@@ -148,6 +148,8 @@ grant execute on function public.list_audit_archives_v1(integer,integer)
   to edusentia_worker_runtime;
 grant execute on function public.list_audit_archive_entries_v1(uuid,integer,integer)
   to edusentia_worker_runtime;
+grant execute on function public.search_students_v5(text,uuid,public.student_status,text,integer,integer)
+  to edusentia_worker_runtime;
 grant execute on function public.list_teachers(text,text,text,integer,integer)
   to edusentia_worker_runtime;
 grant execute on function public.get_teacher_record(uuid)
