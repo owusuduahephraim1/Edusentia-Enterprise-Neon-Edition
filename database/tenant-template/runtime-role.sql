@@ -58,6 +58,12 @@ grant execute on function app.platform_apply_license(uuid,uuid,text,timestamptz,
 -- Certified compatibility operations exposed by the Worker allowlist.
 grant execute on function public.get_bootstrap_data()
   to edusentia_worker_runtime;
+grant execute on function public.get_academic_configuration()
+  to edusentia_worker_runtime;
+grant execute on function public.academic_configuration_readiness()
+  to edusentia_worker_runtime;
+grant execute on function public.set_active_period(uuid,uuid)
+  to edusentia_worker_runtime;
 grant execute on function public.get_report_editor(uuid,uuid,uuid)
   to edusentia_worker_runtime;
 grant execute on function public.get_report_revisions(uuid)
