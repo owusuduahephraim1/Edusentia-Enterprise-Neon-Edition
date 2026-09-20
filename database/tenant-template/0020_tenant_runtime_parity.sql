@@ -94,8 +94,9 @@ begin
          email=lower(trim(p_admin_email)),
          tenant_code=upper(trim(p_tenant_code)),
          identifier_root=replace(upper(trim(p_tenant_code)),'-',''),
-         institution_type=trim(p_institution_type),
-         updated_at=now();
+         institution_type=lower(trim(p_institution_type)),
+         updated_at=now()
+   where id=(select id from public.school_settings order by created_at,id limit 1);
   if not found then
     insert into public.school_settings(
       school_name,email,tenant_code,identifier_root,institution_type
@@ -104,7 +105,7 @@ begin
       lower(trim(p_admin_email)),
       upper(trim(p_tenant_code)),
       replace(upper(trim(p_tenant_code)),'-',''),
-      trim(p_institution_type)
+      lower(trim(p_institution_type))
     );
   end if;
 
