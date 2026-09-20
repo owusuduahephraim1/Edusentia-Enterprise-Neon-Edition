@@ -1,5 +1,5 @@
-const CACHE = "edusentia-neon-v2";
-const SHELL = ["./","./index.html","./config.js","./api-client.js","./app.js","./style.css","./r37-final-ui.css","./neon-edition.css","./manifest.webmanifest","./assets/edusentia-mark.svg","./platform-admin.html","./platform-api-client.js","./platform-admin.js","./platform-saas-admin.css","./register.html","./register.js"];
+const CACHE = "edusentia-neon-v3";
+const SHELL = ["./","./index.html","./config.js","./api-client.js","./app.js","./style.css","./r37-final-ui.css","./neon-edition.css","./manifest.webmanifest","./assets/edusentia-mark.svg","./platform-admin.html","./platform-api-client.js","./platform-admin.js","./platform-saas-admin.css","./register.html","./register.js","./admin-setup.html","./admin-setup.js"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {
