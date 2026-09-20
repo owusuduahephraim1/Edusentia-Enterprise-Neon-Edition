@@ -144,11 +144,65 @@ begin
   return jsonb_build_object('ok',true,'tenant_id',p_tenant_id,'database',current_database(),'active_students',v_active_students,'total_students',v_total_students,'active_users',v_active_users,'schema_version',coalesce(v_schema,''),'runtime_version',coalesce(v_release,''),'checked_at',now());
 end$$;
 
+create or replace function app.platform_apply_license(
+  p_tenant_id uuid,p_actor uuid,p_plan_code text,p_starts_at timestamptz,p_expires_at timestamptz,p_grace_days integer,p_period_type text,p_period_label text
+) returns jsonb
+language plpgsql security definer
+set search_path=app,platform,pg_catalog as $
+declare v_plan uuid;v_limit integer;grace integer;
+begin
+  if not exists(select 1 from app.tenant_memberships where tenant_id=p_tenant_id and user_id=p_actor and role='system_admin' and status='active') then raise exception 'system_admin_required' using errcode='42501'; end if;
+  select id,nullif(limits->>'max_students','')::integer into v_plan,v_limit from platform.license_plans where code=p_plan_code and active;
+  if v_plan is null then raise exception 'plan_not_found' using errcode='P0002'; end if;
+  if p_expires_at<=p_starts_at then raise exception 'invalid_licence_window' using errcode='22023'; end if;
+  grace:=greatest(0,least(90,coalesce(p_grace_days,14)));
+  perform set_config('app.tenant_id',p_tenant_id::text,true);perform set_config('app.user_id',p_actor::text,true);perform set_config('app.role','system_admin',true);perform set_config('app.aal','2',true);
+  update app.tenant_licenses set plan_id=v_plan,status='active',starts_at=p_starts_at,expires_at=p_expires_at,updated_at=now() where tenant_id=p_tenant_id;
+  insert into app.license_events(tenant_id,event_type,actor_id,metadata) values(p_tenant_id,'licence_authorization_redeemed',p_actor,jsonb_build_object('plan_code',p_plan_code,'period_type',p_period_type,'period_label',p_period_label,'grace_days',grace));
+  return jsonb_build_object('ok',true,'plan_code',p_plan_code,'student_capacity_base',v_limit,'expires_at',p_expires_at,'grace_days',grace);
+end$;
+
+create or replace function app.platform_capacity_snapshot(p_tenant_id uuid)
+returns jsonb
+language plpgsql security definer
+set search_path=app,platform,pg_catalog as $
+declare active_count integer;total_count integer;base_limit integer;override_limit integer;effective_limit integer;state text;blocked boolean;
+begin
+  perform set_config('app.tenant_id',p_tenant_id::text,true);perform set_config('app.user_id',p_tenant_id::text,true);perform set_config('app.role','system_admin',true);perform set_config('app.aal','2',true);
+  select count(*) filter(where status='active' and archived_at is null),count(*) filter(where archived_at is null) into active_count,total_count from app.students where tenant_id=p_tenant_id;
+  select nullif(lp.limits->>'max_students','')::integer,nullif(tl.limits_override->>'max_students','')::integer into base_limit,override_limit
+  from app.tenant_licenses tl left join platform.license_plans lp on lp.id=tl.plan_id where tl.tenant_id=p_tenant_id limit 1;
+  effective_limit:=coalesce(override_limit,base_limit);
+  if effective_limit is null then state:='unlimited';blocked:=false;
+  elsif active_count>effective_limit then state:='over_limit';blocked:=true;
+  elsif active_count=effective_limit then state:='at_limit';blocked:=true;
+  elsif effective_limit>0 and active_count::numeric/effective_limit>=0.8 then state:='near_limit';blocked:=false;
+  else state:='available';blocked:=false;end if;
+  return jsonb_build_object('ok',true,'base_limit',base_limit,'effective_limit',effective_limit,'active',active_count,'total',total_count,'status',state,'admissions_blocked',blocked,'checked_at',now());
+end$;
+
+create or replace function app.platform_set_student_capacity(p_tenant_id uuid,p_limit integer)
+returns jsonb
+language plpgsql security definer
+set search_path=app,pg_catalog as $
+declare overrides jsonb;
+begin
+  if p_limit is not null and (p_limit<1 or p_limit>1000000) then raise exception 'student_capacity_out_of_range' using errcode='22023'; end if;
+  perform set_config('app.tenant_id',p_tenant_id::text,true);perform set_config('app.user_id',p_tenant_id::text,true);perform set_config('app.role','system_admin',true);perform set_config('app.aal','2',true);
+  select coalesce(limits_override,'{}'::jsonb) into overrides from app.tenant_licenses where tenant_id=p_tenant_id for update;
+  if p_limit is null then overrides:=overrides-'max_students';else overrides:=jsonb_set(overrides,'{max_students}',to_jsonb(p_limit),true);end if;
+  update app.tenant_licenses set limits_override=overrides,updated_at=now() where tenant_id=p_tenant_id;
+  return app.platform_capacity_snapshot(p_tenant_id);
+end$;
+
 revoke all on function app.platform_initialize_tenant(uuid,text,text,text,text,text,text,timestamptz,timestamptz) from public;
 revoke all on function authn.platform_set_initial_password_by_email(uuid,text,text,text) from public;
 revoke all on function authn.platform_reset_mfa_by_email(uuid,text) from public;
 revoke all on function app.platform_health_snapshot(uuid) from public;
+revoke all on function app.platform_apply_license(uuid,uuid,text,timestamptz,timestamptz,integer,text,text) from public;
+revoke all on function app.platform_capacity_snapshot(uuid) from public;
+revoke all on function app.platform_set_student_capacity(uuid,integer) from public;
 
-grant execute on function app.platform_initialize_tenant(uuid,text,text,text,text,text,text,timestamptz,timestamptz),authn.platform_set_initial_password_by_email(uuid,text,text,text),authn.platform_reset_mfa_by_email(uuid,text),app.platform_health_snapshot(uuid) to edusentia_worker_runtime;
+grant execute on function app.platform_initialize_tenant(uuid,text,text,text,text,text,text,timestamptz,timestamptz),authn.platform_set_initial_password_by_email(uuid,text,text,text),authn.platform_reset_mfa_by_email(uuid,text),app.platform_health_snapshot(uuid),app.platform_apply_license(uuid,uuid,text,timestamptz,timestamptz,integer,text,text),app.platform_capacity_snapshot(uuid),app.platform_set_student_capacity(uuid,integer) to edusentia_worker_runtime;
 
 commit;
