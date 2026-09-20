@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "worker/**"
+      - "database/migrations/**"
+      - "database/install-master.sh"
       - "database/runtime-role.sql"
       - "database/provisioner-role.sql"
       - "database/tenant-template/**"
@@ -87,7 +89,9 @@ jobs:
             sudo apt-get install -y postgresql-client
           fi
 
-          WORKER_DB_PASSWORD="$(openssl rand -hex 32)"
+          BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" bash database/install-master.sh
+
+                    WORKER_DB_PASSWORD="$(openssl rand -hex 32)"
           PROVISIONER_DB_PASSWORD="$(openssl rand -hex 32)"
           echo "::add-mask::$WORKER_DB_PASSWORD"
           echo "::add-mask::$PROVISIONER_DB_PASSWORD"
