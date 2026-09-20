@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#062863">
+  <meta name="color-scheme" content="light">
+  <meta name="referrer" content="no-referrer">
+  <title>Edusentia Platform Administration</title>
+  <link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="platform-saas-admin.css">
+  <link rel="stylesheet" href="platform-r40-mobile.css">
+  <link rel="stylesheet" href="workspace-canvas.css">
+  <link rel="stylesheet" href="r40-v9.css">
+  <link rel="stylesheet" href="platform-r40-v9-mfa-resilience.css">
+  <link rel="stylesheet" href="platform-r40-v9-list-resilience.css">
+</head>
+<body class="pa-page">
+  <section id="paAuthView" class="pa-auth-view">
+    <img class="pa-auth-scene" src="assets/edusentia-auth-learning.webp" alt="" aria-hidden="true" decoding="async" fetchpriority="high">
+    <div class="pa-auth-panel">
+      <div class="pa-brand">
+        <img src="assets/edusentia-mark.svg" alt="Edusentia">
+        <span class="eyebrow">Secure control plane</span>
+        <h1>Platform Administration</h1>
+        <p>Manage school registrations, isolated Neon tenant provisioning, licensing, recovery and platform health from one protected console.</p>
+      </div>
+      <form id="paLogin" class="pa-form">
+        <label class="pa-field"><span>Email address</span><input id="paEmail" type="email" autocomplete="username" required></label>
+        <label class="pa-field"><span>Password</span><input id="paPassword" type="password" autocomplete="current-password" required></label>
+        <div id="paTurnstile" class="turnstile-slot" aria-label="Human verification"></div>
+        <button class="pa-primary" type="submit">Sign in securely</button>
+      </form>
+      <section id="paMfa" class="hidden">
+        <div id="paMfaQr" class="pa-mfa-qr hidden"></div>
+        <div id="paMfaSetup" class="pa-info hidden"></div>
+        <form id="paMfaForm" class="pa-form">
+          <label class="pa-field"><span>Authenticator or recovery code</span><input id="paMfaCode" autocomplete="one-time-code" maxlength="20" required></label>
+          <button class="pa-primary" type="submit">Verify and continue</button>
+          <button id="paMfaBack" class="pa-btn ghost" type="button">Back to sign in</button>
+          <p id="paMfaMessage" class="pa-message" role="alert"></p>
+        </form>
+      </section>
+      <section id="paRecoveryCodes" class="hidden">
+        <div class="pa-info success"><strong>Save your recovery codes</strong><span>Each code can be used once. Store them somewhere secure before continuing.</span></div>
+        <pre id="paRecoveryCodeList" class="recovery-codes"></pre>
+        <button id="paRecoveryContinue" class="pa-primary" type="button">I saved these codes</button>
+      </section>
+      <p id="paMessage" class="pa-message" role="alert"></p>
+      <div class="pa-security-note"><span aria-hidden="true">◆</span><div><strong>AAL2 protected.</strong> Platform administration requires a verified authenticator session before tenant-control actions are available.</div></div>
+      <nav class="pa-public-links" aria-label="Edusentia information"><a href="about.html">About Edusentia</a><a href="support.html">Support</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav>
+    </div>
+  </section>
+
+  <div id="paConsole" class="pa-app hidden">
+    <aside class="pa-sidebar">
+      <div class="pa-side-brand"><img src="assets/edusentia-mark.svg" alt=""><div><strong>Edusentia Platform</strong><small>Administration Console</small></div></div>
+      <nav class="pa-nav" aria-label="Platform administration">
+        <button type="button" class="active" data-view="overview"><span class="pa-nav-icon">⌂</span><span>Overview</span></button>
+        <button type="button" data-view="registrations"><span class="pa-nav-icon">✓</span><span>Registrations</span></button>
+        <button type="button" data-view="tenants"><span class="pa-nav-icon">▦</span><span>Tenants</span></button>
+        <button type="button" data-view="capacity"><span class="pa-nav-icon">◉</span><span>Student Capacity</span></button>
+        <button type="button" data-view="licensing"><span class="pa-nav-icon">▣</span><span>Licensing</span></button>
+        <button type="button" data-view="provisioning"><span class="pa-nav-icon">↻</span><span>Provisioning</span></button>
+        <button type="button" data-view="plans"><span class="pa-nav-icon">◇</span><span>Plans</span></button>
+        <button type="button" data-view="health"><span class="pa-nav-icon">●</span><span>Platform Health</span></button>
+      </nav>
+      <div class="pa-side-footer"><span id="paAdminIdentity" class="pa-admin-name">Platform Administrator</span><span class="pa-admin-role">Platform Super Administrator</span><span class="pa-aal">AAL2 verified</span></div>
+    </aside>
+    <section class="pa-workspace">
+      <header class="pa-topbar">
+        <div class="pa-title"><h2 id="paPageTitle">Platform Overview</h2><p id="paPageSubtitle">Control-plane status and tenant operations</p></div>
+        <div class="pa-top-actions"><span id="paConnection" class="pa-connection">Control plane connected</span><button id="paMfaManage" class="pa-btn secondary" type="button">Security &amp; MFA</button><button id="paRefresh" class="pa-btn secondary" type="button">Refresh</button><button id="paSignOut" class="pa-btn ghost" type="button">Sign out</button></div>
+      </header>
+      <div id="paStatus" class="pa-status hidden" role="status"></div>
+      <main id="paContent" class="pa-content" tabindex="-1"></main>
+    </section>
+  </div>
+
+  <dialog id="paModal" class="pa-modal">
+    <section class="pa-modal-card">
+      <header><h3 id="paModalTitle"></h3><button class="pa-modal-close" data-modal-close type="button" aria-label="Close">×</button></header>
+      <div id="paModalBody" class="pa-modal-body"></div>
+    </section>
+  </dialog>
+
+  <div id="qrScratch" class="qr-scratch" aria-hidden="true"></div>
+  <script src="config.js"></script>
+  <script src="api-client.js"></script>
+  <script src="assets/vendor/qrcode-1.0.0.min.js"></script>
+  <script src="platform-saas-admin.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onPlatformTurnstileLoad&render=explicit" async defer></script>
+</body>
+</html>
