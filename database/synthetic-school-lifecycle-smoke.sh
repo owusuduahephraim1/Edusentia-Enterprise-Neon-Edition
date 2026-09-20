@@ -137,7 +137,7 @@ begin
   teacher_id:=nullif(teacher_result#>>'{teacher,id}','')::uuid;
   if teacher_id is null then raise exception 'synthetic_teacher_not_created'; end if;
   if public.get_teacher_record(teacher_id)#>>'{teacher,id}' is distinct from teacher_id::text then raise exception 'synthetic_teacher_read_failed'; end if;
-  if coalesce((public.list_teachers('Synthetic Teacher','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_teacher_list_failed'; end if;
+  if coalesce((public.list_teachers('Synthetic','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_teacher_list_failed'; end if;
   if not public.archive_teacher(teacher_id,'Synthetic lifecycle archive') then raise exception 'synthetic_teacher_archive_failed'; end if;
   if not public.restore_teacher(teacher_id,'Synthetic lifecycle restore') then raise exception 'synthetic_teacher_restore_failed'; end if;
   if not exists(select 1 from public.audit_log where table_name='teachers' and record_id=teacher_id) then raise exception 'synthetic_teacher_audit_missing'; end if;
@@ -150,7 +150,7 @@ begin
   principal_id:=coalesce(nullif(principal_result#>>'{principal,id}','')::uuid,nullif(principal_result#>>'{headteacher,id}','')::uuid);
   if principal_id is null then raise exception 'synthetic_principal_not_created'; end if;
   if public.get_headteacher_record(principal_id)#>>'{principal,id}' is distinct from principal_id::text then raise exception 'synthetic_principal_read_failed'; end if;
-  if coalesce((public.list_headteachers('Synthetic Principal','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_principal_list_failed'; end if;
+  if coalesce((public.list_headteachers('Synthetic','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_principal_list_failed'; end if;
   if not public.archive_headteacher(principal_id,'Synthetic lifecycle archive') then raise exception 'synthetic_principal_archive_failed'; end if;
   if not public.restore_headteacher(principal_id,'Synthetic lifecycle restore') then raise exception 'synthetic_principal_restore_failed'; end if;
   if not exists(select 1 from public.audit_log where table_name='headteachers' and record_id=principal_id) then raise exception 'synthetic_principal_audit_missing'; end if;
