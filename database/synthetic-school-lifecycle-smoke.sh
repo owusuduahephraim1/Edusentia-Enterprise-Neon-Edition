@@ -54,6 +54,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0030_certified_academic_configuration.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0030b_certified_teacher_principal_records.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0031_certified_academic_configuration_rpc.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0032_certified_academic_calendar_context.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -71,7 +72,7 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0031"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0032"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select count(*) from app.tenant_memberships where tenant_id='$tenant_id'::uuid and role='system_admin' and status='active' and mfa_required")" = "1"
@@ -85,10 +86,12 @@ SQL
   WORKER_ACCESS_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.list_profiles_with_access() is not null; rollback;" | tail -1)"
   WORKER_STUDENT_SEARCH_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.search_students('',null,'active'::public.student_status,1,25) is not null; rollback;" | tail -1)"
   WORKER_ACADEMIC_CONFIG_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.get_academic_configuration() is not null; rollback;" | tail -1)"
+  WORKER_ACADEMIC_CALENDAR_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.get_academic_calendar_context() is not null; rollback;" | tail -1)"
   test "$WORKER_BOOTSTRAP_OK" = "t"
   test "$WORKER_ACCESS_OK" = "t"
   test "$WORKER_STUDENT_SEARCH_OK" = "t"
   test "$WORKER_ACADEMIC_CONFIG_OK" = "t"
+  test "$WORKER_ACADEMIC_CALENDAR_OK" = "t"
 }
 
 install_tenant "$BASIC_DB" "00000000-0000-4000-8000-000000000101" "BSC-900001" "Synthetic Basic School" "basic_jhs" "admin@basic.synthetic.invalid"
