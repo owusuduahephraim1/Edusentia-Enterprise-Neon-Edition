@@ -89,6 +89,7 @@ jobs:
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0031_certified_academic_configuration_rpc.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0032_certified_academic_calendar_context.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0033_certified_student_management_utilities.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0034_certified_student_management_hardening.sql
 
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"
@@ -96,7 +97,8 @@ jobs:
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_academic_configuration'")" -ge 1
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_academic_calendar_context'")" -ge 1
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='report_promotion_evaluation'")" -ge 1
-          test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0033"
+          test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('generate_school_identifier','validate_student_import','save_promotion_cutoff')")" = "3"
+          test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0034"
 
           echo "::group::Certified public function inventory"
           psql "$URL" -Atc "select p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and not exists (select 1 from pg_depend d join pg_extension e on e.oid=d.refobjid where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e') order by 1"
