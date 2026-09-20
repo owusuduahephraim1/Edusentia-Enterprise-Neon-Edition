@@ -11,12 +11,14 @@
 
   const NAV = [
     {id:"dashboard",label:"Dashboard",icon:"⌂",subtitle:"Academic performance overview",render:renderDashboard},
+    {id:"academics",label:"Academics",icon:"▦",subtitle:"Academic calendar, classes, subjects and readiness",roles:["system_admin"],render:renderAcademics},
     {id:"students",label:"Students",icon:"◎",subtitle:"Student directory and admission records",render:renderStudents},
     {id:"staff",label:"Staff",icon:"♙",subtitle:"Staff and teacher directory",render:renderStaff},
     {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees and collections overview",roles:["system_admin","principal","accountant"],render:renderFinance}
   ];
 
   function role(){return String(state.session?.membership?.role || state.boot?.capabilities?.role || "").toLowerCase();}
+  async function certified(operation,args={}){const response=await api().certifiedRpc(operation,args);return response?.result??null;}
   function can(item){return !item.roles || item.roles.includes(role());}
   function canCreateStudent(){return ["system_admin","principal","academic_admin","records_officer"].includes(role());}
   function friendly(error){return error?.message || "The requested operation could not be completed.";}
@@ -113,6 +115,78 @@
         <article class="panel pad"><div class="panel-header"><div><h3>School workspace</h3><p>Current institution context</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Institution model</span><strong>${escapeHtml(String(tenant.institution_type||"Not set").replaceAll("_"," "))}</strong></div><div><span>Tenant code</span><strong>${escapeHtml(tenant.code||"—")}</strong></div></div></div></article>
         <article class="panel pad"><div class="panel-header"><div><h3>Secure session</h3><p>Worker-resolved identity and authorization</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Role</span><strong>${escapeHtml(state.session?.membership?.roleLabel||state.session?.membership?.role||"Member")}</strong></div><div><span>Assurance level</span><strong>${escapeHtml(data.capabilities?.assuranceLevel||"AAL1")}</strong></div></div></div></article>
       </section>`;
+  }
+
+  async function renderAcademics(){
+    byId("content").innerHTML=`<div class="page-head"><div><h3>Academic configuration</h3><p>Certified academic calendar, curriculum and readiness controls.</p></div></div>${loading("Loading academic configuration")}`;
+    const [config,calendar,readiness]=await Promise.all([
+      certified("get_academic_configuration"),
+      certified("get_academic_calendar_context"),
+      certified("academic_configuration_readiness")
+    ]);
+    const years=Array.isArray(config?.academic_years)?config.academic_years:[];
+    const terms=Array.isArray(config?.terms)?config.terms:[];
+    const classes=Array.isArray(config?.classes)?config.classes:[];
+    const subjects=Array.isArray(config?.subjects)?config.subjects:[];
+    const assignments=Array.isArray(config?.class_subjects)?config.class_subjects:[];
+    const schemes=Array.isArray(config?.assessment_schemes)?config.assessment_schemes:[];
+    const yearName=calendar?.academic_year?.name||"No active academic year";
+    const termName=calendar?.term?.name||"No active term";
+    const readinessTone=readiness?.ready?"valid":"invalid";
+    const activeYearId=calendar?.academic_year?.id||"";
+    const activeTermId=calendar?.term?.id||"";
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>Academic configuration</h3><p>Certified academic calendar, curriculum and readiness controls.</p></div></div>
+      <section class="stat-grid">
+        <article class="stat-card"><span class="stat-icon blue" aria-hidden="true">◫</span><div><span>Academic years</span><strong>${years.length}</strong></div></article>
+        <article class="stat-card"><span class="stat-icon gold" aria-hidden="true">▦</span><div><span>Classes</span><strong>${classes.length}</strong></div></article>
+        <article class="stat-card"><span class="stat-icon green" aria-hidden="true">◇</span><div><span>Subjects</span><strong>${subjects.length}</strong></div></article>
+        <article class="stat-card"><span class="stat-icon purple" aria-hidden="true">✓</span><div><span>Assessment schemes</span><strong>${schemes.length}</strong></div></article>
+      </section>
+      <section class="grid two">
+        <article class="panel">
+          <div class="panel-header"><div><h3>Current academic period</h3><p>Date-aware certified calendar context</p></div></div>
+          <div class="panel-body">
+            <div class="detail-grid"><div><span>Academic year</span><strong>${escapeHtml(yearName)}</strong></div><div><span>Term</span><strong>${escapeHtml(termName)}</strong></div></div>
+            <form id="activePeriodForm" class="form-stack academic-active-period">
+              <label class="field"><span>Academic year</span><select id="activeAcademicYear" name="academicYearId" required><option value="">Select academic year</option>${years.map(y=>`<option value="${escapeHtml(y.id)}" ${String(y.id)===String(activeYearId)?"selected":""}>${escapeHtml(y.name||"Academic year")}</option>`).join("")}</select></label>
+              <label class="field"><span>Term</span><select id="activeTerm" name="termId" required></select></label>
+              <button class="button primary" type="submit">Set active period</button>
+              <p id="activePeriodMessage" class="form-message hidden" role="alert"></p>
+            </form>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-header"><div><h3>Configuration readiness</h3><p>Certified release checks before academic operations</p></div></div>
+          <div class="panel-body">
+            <div class="verify-state ${readinessTone}">${escapeHtml(readiness?.message|| (readiness?.ready?"Academic configuration is ready.":"Academic configuration needs attention."))}</div>
+            <div class="detail-grid"><div><span>Blocking items</span><strong>${escapeHtml(readiness?.blocking_count??0)}</strong></div><div><span>Warnings</span><strong>${escapeHtml(readiness?.warning_count??0)}</strong></div><div><span>Configured terms</span><strong>${escapeHtml(readiness?.term_count??terms.length)}</strong></div><div><span>Enrolled classes</span><strong>${escapeHtml(readiness?.enrolled_class_count??0)}</strong></div></div>
+          </div>
+        </article>
+      </section>
+      <section class="grid two academic-config-lists">
+        <article class="panel"><div class="panel-header"><div><h3>Classes</h3><p>Active school class structure</p></div><span class="status neutral">${classes.length} records</span></div><div class="table-wrap"><table><thead><tr><th>Class</th><th>Order</th><th>Active</th></tr></thead><tbody>${classes.length?classes.map(row=>`<tr><td><strong>${escapeHtml(row.name||"Unnamed class")}</strong></td><td>${escapeHtml(row.level_order??0)}</td><td>${status(row.active===false?"inactive":"active")}</td></tr>`).join(""):'<tr><td colspan="3">No classes configured.</td></tr>'}</tbody></table></div></article>
+        <article class="panel"><div class="panel-header"><div><h3>Subjects</h3><p>Certified curriculum subject directory</p></div><span class="status neutral">${subjects.length} records</span></div><div class="table-wrap"><table><thead><tr><th>Subject</th><th>Code</th><th>Active</th></tr></thead><tbody>${subjects.length?subjects.map(row=>`<tr><td><strong>${escapeHtml(row.name||"Unnamed subject")}</strong></td><td>${escapeHtml(row.code||"—")}</td><td>${status(row.active===false?"inactive":"active")}</td></tr>`).join(""):'<tr><td colspan="3">No subjects configured.</td></tr>'}</tbody></table></div></article>
+      </section>
+      <section class="panel pad"><div class="panel-header"><div><h3>Curriculum assignment coverage</h3><p>Class-subject assignments exposed by the certified compatibility layer</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Class-subject assignments</span><strong>${assignments.length}</strong></div><div><span>Active assessment schemes</span><strong>${schemes.filter(s=>s.active!==false).length}</strong></div></div></div></section>`;
+
+    const yearSelect=byId("activeAcademicYear"),termSelect=byId("activeTerm");
+    const refreshTerms=()=>{
+      const selected=String(yearSelect?.value||"");
+      const available=terms.filter(t=>String(t.academic_year_id)===selected);
+      termSelect.innerHTML='<option value="">Select term</option>'+available.map(t=>`<option value="${escapeHtml(t.id)}" ${String(t.id)===String(activeTermId)?"selected":""}>${escapeHtml(t.name||`Term ${t.sequence||""}`)}</option>`).join("");
+    };
+    yearSelect?.addEventListener("change",refreshTerms);refreshTerms();
+    byId("activePeriodForm")?.addEventListener("submit",async event=>{
+      event.preventDefault();
+      const button=event.currentTarget.querySelector('button[type="submit"]'),msg=byId("activePeriodMessage");
+      button.disabled=true;msg.classList.add("hidden");
+      try{
+        await certified("set_active_period",{target_academic_year_id:yearSelect.value,target_term_id:termSelect.value});
+        await renderAcademics();
+      }catch(error){msg.textContent=friendly(error);msg.classList.remove("hidden");}
+      finally{button.disabled=false;}
+    });
   }
 
   async function renderStudents(){
