@@ -58,8 +58,6 @@ grant execute on function app.platform_apply_license(uuid,uuid,text,timestamptz,
 -- Certified compatibility operations exposed by the Worker allowlist.
 grant execute on function public.get_bootstrap_data()
   to edusentia_worker_runtime;
-grant execute on function public.get_academic_configuration()
-  to edusentia_worker_runtime;
 
 alter default privileges in schema app grant select,insert,update,delete on tables to edusentia_worker_runtime;
 alter default privileges in schema academics grant select,insert,update,delete on tables to edusentia_worker_runtime;
