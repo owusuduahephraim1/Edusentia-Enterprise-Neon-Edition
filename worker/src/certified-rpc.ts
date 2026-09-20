@@ -19,7 +19,10 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "bulk_import_students",
   "bulk_import_scores",
   "save_report_card",
-  "transition_report_status"
+  "transition_report_status",
+  "generate_school_identifier",
+  "validate_student_import",
+  "save_promotion_cutoff"
 ] as const);
 
 export type CertifiedRpcOperation=(typeof CERTIFIED_RPC_OPERATIONS)[number];
@@ -168,6 +171,21 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const comment=textArg(args,"comment_text",{max:2000});
       const version=intArg(args,"expected_version",{min:0,max:2147483647});
       return singleResult(sql,ctx,txn=>txn`select public.transition_report_status(${reportId}::uuid,${status}::public.report_status,${comment},${version}::integer) result`);
+    }
+    case "generate_school_identifier":{
+      const kind=textArg(args,"identifier_kind",{required:true,max:32});
+      return singleResult(sql,ctx,txn=>txn`select public.generate_school_identifier(${kind}) result`);
+    }
+    case "validate_student_import":{
+      const rows=jsonArg(args,"rows");
+      const academicYearId=uuidArg(args,"target_academic_year_id",true);
+      const classId=uuidArg(args,"target_class_id",true);
+      const filename=textArg(args,"filename",{max:255})??"";
+      return singleResult(sql,ctx,txn=>txn`select public.validate_student_import(${rows}::jsonb,${academicYearId}::uuid,${classId}::uuid,${filename}) result`);
+    }
+    case "save_promotion_cutoff":{
+      const score=intArg(args,"target_score",{min:40,max:60});
+      return singleResult(sql,ctx,txn=>txn`select public.save_promotion_cutoff(${score}::integer) result`);
     }
   }
 }
