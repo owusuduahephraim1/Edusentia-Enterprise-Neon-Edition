@@ -12,22 +12,43 @@ alter table public.school_settings
 
 do $student_settings_constraints$
 begin
-  if not exists(select 1 from pg_constraint where conname='school_settings_promotion_cutoff_score_chk' and conrelid='public.school_settings'::regclass) then
+  if not exists(
+    select 1 from pg_constraint
+    where conname='school_settings_promotion_cutoff_score_chk'
+      and conrelid='public.school_settings'::regclass
+  ) then
     alter table public.school_settings
       add constraint school_settings_promotion_cutoff_score_chk
       check(promotion_cutoff_score>=40 and promotion_cutoff_score<=60);
   end if;
-  if not exists(select 1 from pg_constraint where conname='school_settings_tenant_code_chk' and conrelid='public.school_settings'::regclass) then
-    alter table public.school_settings
-      add constraint school_settings_tenant_code_chk
-      check(tenant_code ~ '^[A-Z]{3}-[0-9]{6}
-  if exists(select 1 from pg_constraint where conname='school_settings_tenant_code_chk' and conrelid='public.school_settings'::regclass) then
+
+  if exists(
+    select 1 from pg_constraint
+    where conname='school_settings_tenant_code_chk'
+      and conrelid='public.school_settings'::regclass
+  ) then
     alter table public.school_settings drop constraint school_settings_tenant_code_chk;
   end if;
   alter table public.school_settings
     add constraint school_settings_tenant_code_chk
     check(tenant_code ~ '^[A-Z]{3}-[0-9]{6}$');
-  if exists(select 1 from pg_constraint where conname='school_settings_institution_type_chk' and conrelid='public.school_settings'::regclass) then
+
+  if exists(
+    select 1 from pg_constraint
+    where conname='school_settings_identifier_root_chk'
+      and conrelid='public.school_settings'::regclass
+  ) then
+    alter table public.school_settings drop constraint school_settings_identifier_root_chk;
+  end if;
+  alter table public.school_settings
+    add constraint school_settings_identifier_root_chk
+    check(identifier_root ~ '^[A-Z]{3}[0-9]{6}$');
+
+  if exists(
+    select 1 from pg_constraint
+    where conname='school_settings_institution_type_chk'
+      and conrelid='public.school_settings'::regclass
+  ) then
     alter table public.school_settings drop constraint school_settings_institution_type_chk;
   end if;
   alter table public.school_settings
