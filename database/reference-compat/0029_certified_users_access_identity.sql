@@ -173,7 +173,7 @@ end
 $function$;
 
 revoke all on function public.user_account_lifecycle_summary() from public;
-grant execute on function public.user_account_lifecycle_summary() to edusentia_worker_runtime,service_role;
+grant execute on function public.user_account_lifecycle_summary() to edusentia_worker_runtime;
 
 
 insert into app.schema_migrations(version)
