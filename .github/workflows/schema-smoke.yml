@@ -1,3 +1,4 @@
+# refresh after SQL quoting repair
 name: Neon Schema Smoke Test
 
 on:
