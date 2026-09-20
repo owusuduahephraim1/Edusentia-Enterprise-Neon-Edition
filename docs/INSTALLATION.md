@@ -1,7 +1,7 @@
 # Fresh installation
 
 1. Create a new Neon project and empty `edusentia` database.
-2. Create a non-owner PostgreSQL role named `edusentia_runtime`.
+2. Keep the Neon-managed deployment credential outside the application runtime. Apply `database/runtime-role.sql` so the live Worker uses the separate `edusentia_worker_runtime` role.
 3. Apply `database/migrations/*.sql` in lexical order as the database owner.
 4. Apply `database/seeds/0001_permissions.sql`.
 5. Create a private Cloudflare R2 bucket named `edusentia-enterprise-neon` (or adjust the Worker binding).
