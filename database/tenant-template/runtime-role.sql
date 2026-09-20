@@ -96,6 +96,18 @@ grant execute on function public.validate_student_import(jsonb,uuid,uuid,text)
   to edusentia_worker_runtime;
 grant execute on function public.save_promotion_cutoff(integer)
   to edusentia_worker_runtime;
+grant execute on function public.save_academic_entity(text,jsonb)
+  to edusentia_worker_runtime;
+grant execute on function public.archive_academic_entity(text,uuid,text)
+  to edusentia_worker_runtime;
+grant execute on function public.save_grading_scale(jsonb)
+  to edusentia_worker_runtime;
+grant execute on function public.archive_grading_scale(uuid,text)
+  to edusentia_worker_runtime;
+grant execute on function public.save_assessment_scheme(jsonb)
+  to edusentia_worker_runtime;
+grant execute on function public.save_class_subject_assignments_batch(jsonb)
+  to edusentia_worker_runtime;
 
 alter default privileges in schema app grant select,insert,update,delete on tables to edusentia_worker_runtime;
 alter default privileges in schema academics grant select,insert,update,delete on tables to edusentia_worker_runtime;
