@@ -1,0 +1,82 @@
+name: Bootstrap Platform Super Administrator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/bootstrap-platform-super-admin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-super-admin-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check bootstrap configuration
+        id: cfg
+        env:
+          PLATFORM_ADMIN_EMAIL: ${{ secrets.PLATFORM_ADMIN_EMAIL }}
+          PLATFORM_ADMIN_DISPLAY_NAME: ${{ secrets.PLATFORM_ADMIN_DISPLAY_NAME }}
+          PLATFORM_ADMIN_PASSWORD: ${{ secrets.PLATFORM_ADMIN_PASSWORD }}
+          PLATFORM_BOOTSTRAP_SECRET: ${{ secrets.PLATFORM_BOOTSTRAP_SECRET || secrets.BOOTSTRAP_ADMIN_SECRET }}
+        shell: bash
+        run: |
+          ready=true
+          for name in PLATFORM_ADMIN_EMAIL PLATFORM_ADMIN_DISPLAY_NAME PLATFORM_ADMIN_PASSWORD PLATFORM_BOOTSTRAP_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "$name is not configured."
+              ready=false
+            fi
+          done
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != true ]; then
+            echo "Platform Super Administrator bootstrap is intentionally skipped until the required repository secrets are configured."
+          fi
+
+      - name: Create first Platform Super Administrator
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          PLATFORM_ADMIN_EMAIL: ${{ secrets.PLATFORM_ADMIN_EMAIL }}
+          PLATFORM_ADMIN_DISPLAY_NAME: ${{ secrets.PLATFORM_ADMIN_DISPLAY_NAME }}
+          PLATFORM_ADMIN_PASSWORD: ${{ secrets.PLATFORM_ADMIN_PASSWORD }}
+          PLATFORM_BOOTSTRAP_SECRET: ${{ secrets.PLATFORM_BOOTSTRAP_SECRET || secrets.BOOTSTRAP_ADMIN_SECRET }}
+          WORKER_URL: "https://edusentia-enterprise-neon-api.edusentia-enterprise-neon.workers.dev"
+        shell: bash
+        run: |
+          node <<'NODE'
+          const body = JSON.stringify({
+            email: process.env.PLATFORM_ADMIN_EMAIL,
+            displayName: process.env.PLATFORM_ADMIN_DISPLAY_NAME,
+            password: process.env.PLATFORM_ADMIN_PASSWORD
+          });
+          const response = await fetch(process.env.WORKER_URL + "/api/platform/bootstrap/initialize", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-bootstrap-secret": process.env.PLATFORM_BOOTSTRAP_SECRET
+            },
+            body
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const code = payload?.error?.code || "platform_bootstrap_failed";
+            const message = payload?.error?.message || ("HTTP " + response.status);
+            if (code === "request_failed" && /bootstrap_closed/i.test(message)) {
+              console.log("Platform bootstrap is already closed because a Platform Super Administrator exists.");
+              process.exit(0);
+            }
+            console.error("Platform bootstrap failed:", code, message);
+            process.exit(1);
+          }
+          if (!payload?.ok) {
+            console.error("Platform bootstrap response did not confirm success.");
+            process.exit(1);
+          }
+          console.log("First Platform Super Administrator created successfully.");
+          NODE
