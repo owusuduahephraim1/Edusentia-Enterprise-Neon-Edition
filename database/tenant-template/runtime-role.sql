@@ -152,6 +152,10 @@ grant execute on function public.search_students_v5(text,uuid,public.student_sta
   to edusentia_worker_runtime;
 grant execute on function public.get_my_emergency_academic_delegations(uuid,uuid)
   to edusentia_worker_runtime;
+grant execute on function public.get_report_headteacher_signature(uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.delete_report_card_permanently(uuid,text)
+  to edusentia_worker_runtime;
 grant execute on function public.list_teachers(text,text,text,integer,integer)
   to edusentia_worker_runtime;
 grant execute on function public.get_teacher_record(uuid)
