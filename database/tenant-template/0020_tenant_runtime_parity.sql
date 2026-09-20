@@ -156,7 +156,7 @@ create or replace function app.platform_apply_license(
   p_tenant_id uuid,p_actor uuid,p_plan_code text,p_starts_at timestamptz,p_expires_at timestamptz,p_grace_days integer,p_period_type text,p_period_label text
 ) returns jsonb
 language plpgsql security definer
-set search_path=app,platform,pg_catalog as $
+set search_path=app,platform,pg_catalog as $apply_license$
 declare v_plan uuid;v_limit integer;grace integer;
 begin
   if not exists(select 1 from app.tenant_memberships where tenant_id=p_tenant_id and user_id=p_actor and role='system_admin' and status='active') then raise exception 'system_admin_required' using errcode='42501'; end if;
@@ -168,7 +168,8 @@ begin
   update app.tenant_licenses set plan_id=v_plan,status='active',starts_at=p_starts_at,expires_at=p_expires_at,updated_at=now() where tenant_id=p_tenant_id;
   insert into app.license_events(tenant_id,event_type,actor_id,metadata) values(p_tenant_id,'licence_authorization_redeemed',p_actor,jsonb_build_object('plan_code',p_plan_code,'period_type',p_period_type,'period_label',p_period_label,'grace_days',grace));
   return jsonb_build_object('ok',true,'plan_code',p_plan_code,'student_capacity_base',v_limit,'expires_at',p_expires_at,'grace_days',grace);
-end$;
+end
+$apply_license$;
 
 create or replace function app.platform_capacity_snapshot(p_tenant_id uuid)
 returns jsonb
