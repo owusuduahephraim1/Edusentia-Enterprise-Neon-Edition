@@ -61,6 +61,7 @@ jobs:
           echo "::add-mask::$PROBE_URL"
 
           BOOTSTRAP_DATABASE_URL="$PROBE_URL" bash database/install-master.sh
+          psql "$PROBE_URL" -v ON_ERROR_STOP=1 -f database/runtime-role.sql
 
           test "$(psql "$PROBE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
           test "$(psql "$PROBE_URL" -Atc "select count(*) from information_schema.tables where table_schema='platform' and table_name='school_deletion_jobs'")" = "1"
