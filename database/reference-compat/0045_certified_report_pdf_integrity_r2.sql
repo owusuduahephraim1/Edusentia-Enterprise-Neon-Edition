@@ -284,7 +284,7 @@ language plpgsql
 stable
 security definer
 set search_path to 'public','extensions'
-as $
+as $pdf_descriptor$
 declare result jsonb;
 begin
   if not public.can_view_report_pdf(target_report_id) then
@@ -306,7 +306,7 @@ begin
   limit 1;
   return coalesce(result,'{}'::jsonb);
 end
-$;
+$pdf_descriptor$;
 
 revoke all on function public.finance_feature_enabled(text) from public;
 revoke all on function public.finance_student_outstanding(uuid) from public;
