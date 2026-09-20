@@ -64,6 +64,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0039_certified_timetable_academic_alignment.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0040_certified_audit_trail_v1.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0041_certified_notification_publication_sync.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0042_certified_principal_academic_history_read.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -81,12 +82,13 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0041"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0042"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0037_certified_academic_configuration_mutations'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0038_certified_teacher_principal_crud'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0039_certified_timetable_academic_alignment'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0040_certified_audit_trail_v1'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0041_certified_notification_publication_sync'")" = "1"
+  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0042_certified_principal_academic_history_read'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select legal_name='$school_name' and email=lower('$admin_email') from app.school_settings where tenant_id='$tenant_id'::uuid")" = "t"
@@ -112,6 +114,7 @@ SQL
   test "$(psql "$db_url" -Atc "select to_regclass('public.class_timetable_entries') is not null and not has_table_privilege('edusentia_worker_runtime','public.class_timetable_entries','select') and has_function_privilege('edusentia_worker_runtime','public.get_class_timetable_console(uuid,uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_class_timetable_entry(jsonb)','execute') and not has_function_privilege('edusentia_worker_runtime','public.validate_class_timetable_entry()','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_view_class_timetable(uuid)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select to_regclass('public.audit_log_archives') is not null and to_regclass('public.audit_log_archive_entries') is not null and not has_table_privilege('edusentia_worker_runtime','public.audit_log_archives','select') and not has_table_privilege('edusentia_worker_runtime','public.audit_log_archive_entries','select') and has_function_privilege('edusentia_worker_runtime','public.list_audit_events_v2(text,text,uuid,uuid,integer,integer)','execute') and has_function_privilege('edusentia_worker_runtime','public.list_audit_archives_v1(integer,integer)','execute') and has_function_privilege('edusentia_worker_runtime','public.list_audit_archive_entries_v1(uuid,integer,integer)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.create_workflow_notifications(uuid,public.report_status)','execute') and has_function_privilege('edusentia_worker_runtime','public.transition_report_status(uuid,public.report_status,text,integer)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.search_students_v5(text,uuid,public.student_status,text,integer,integer)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_manage_student(uuid)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select position('studentprofile' in lower(pg_get_functiondef(p.oid)))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_workflow_notifications' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='class_timetable_entries' and t.tgname='class_timetable_entry_integrity_guard' and not t.tgisinternal) and exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='class_timetable_entries' and t.tgname='class_timetable_entries_audit' and not t.tgisinternal)")" = "t"
   test "$(psql "$db_url" -Atc "select count(*)=5 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal and ((c.relname='teachers' and t.tgname in('teachers_audit','teachers_license_write_guard','sync_teacher_record_class_links_trigger')) or (c.relname='headteachers' and t.tgname in('headteachers_audit','headteachers_license_write_guard')))")" = "t"
@@ -259,6 +262,15 @@ rollback;
 " | tail -1)"
 
   test "$WORKER_AUDIT_ARCHIVE_OK" = "t"
+  WORKER_PRINCIPAL_HISTORY_OK="$(psql "$db_url" -X -qAtc "
+begin;
+set local role edusentia_worker_runtime;
+select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'principal',2::smallint);
+select public.search_students_v5('',null,null,'all',1,20) is not null;
+rollback;
+" | tail -1)"
+
+  test "$WORKER_PRINCIPAL_HISTORY_OK" = "t"
 }
 
 install_tenant "$BASIC_DB" "00000000-0000-4000-8000-000000000101" "BSC-900001" "Synthetic Basic School" "basic_jhs" "admin@basic.synthetic.invalid"
