@@ -9,6 +9,7 @@ import { provisionIsolatedTenant } from "./provisioning";
 import { tenantDb } from "./tenant-db";
 import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
 import { deleteIsolatedTenant } from "./deletion";
+import { inspectTenantRelease } from "./tenant-release";
 
 async function authed(request:Request,env:Env){
   const ctx=await authenticatePlatform(request,env);
@@ -38,12 +39,13 @@ async function tenantControl(sql:any,tenantId:string){
 }
 async function refreshTenantSnapshot(env:Env,master:any,tenantId:string){
   const t=await tenantControl(master,tenantId),tenantSql=tenantDb(env,String(t.database_name));
-  const [healthRows,capacityRows]=await Promise.all([
+  const [healthRows,capacityRows,release]=await Promise.all([
     tenantSql`select app.platform_health_snapshot(${tenantId}::uuid) result`,
-    tenantSql`select app.platform_capacity_snapshot(${tenantId}::uuid) result`
+    tenantSql`select app.platform_capacity_snapshot(${tenantId}::uuid) result`,
+    inspectTenantRelease(tenantSql)
   ]);
   const health=(healthRows[0] as any)?.result||{},capacity=(capacityRows[0] as any)?.result||{};
-  const releaseHealthy=health.schema_version==="0020"&&health.runtime_version==="neon-v1.0.0-r42-parity";
+  const releaseHealthy=release.ready;
   const healthy=Boolean(health.ok)&&releaseHealthy;
   await master.transaction([
     master`update platform.tenant_control set
@@ -55,9 +57,9 @@ async function refreshTenantSnapshot(env:Env,master:any,tenantId:string){
       release_status=${releaseHealthy?"current":"drifted"},release_checked_at=now(),updated_at=now()
       where tenant_id=${tenantId}::uuid`,
     master`insert into platform.tenant_health(tenant_id,healthy,services) values(
-      ${tenantId}::uuid,${healthy},${JSON.stringify([{service:"database",healthy:Boolean(health.ok),database:t.database_name},{service:"release",healthy:releaseHealthy,schemaVersion:health.schema_version,runtimeVersion:health.runtime_version},{service:"storage",healthy:Boolean(env.OBJECTS)}])}::jsonb)`
+      ${tenantId}::uuid,${healthy},${JSON.stringify([{service:"database",healthy:Boolean(health.ok),database:t.database_name},{service:"release",healthy:releaseHealthy,schemaVersion:health.schema_version,runtimeVersion:health.runtime_version,compatibilitySchemaVersion:release.compatibilitySchemaVersion,certifiedCoreReady:release.certifiedCoreReady},{service:"storage",healthy:Boolean(env.OBJECTS)}])}::jsonb)`
   ]);
-  return {tenant:t,health:{...health,healthy,releaseHealthy},capacity};
+  return {tenant:t,health:{...health,healthy,releaseHealthy,compatibilitySchemaVersion:release.compatibilitySchemaVersion,certifiedCoreReady:release.certifiedCoreReady},capacity};
 }
 
 export async function platformRoute(request:Request,env:Env,requestId:string):Promise<Response|null>{
@@ -68,7 +70,7 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
     await verifyTurnstile(env,String(b.turnstileToken||""),request,"school_registration");
     const school=String(b.schoolName||"").trim().slice(0,200),name=String(b.contactName||"").trim().slice(0,160),email=String(b.contactEmail||"").trim().toLowerCase().slice(0,254);
     const phone=String(b.contactPhone||"").trim().slice(0,60),country=String(b.country||"").trim().slice(0,100),institutionType=String(b.institutionType||"basic_jhs").trim().toLowerCase();
-    const allowed=new Set(["basic_jhs","senior_high","combined_pretertiary","tertiary"]);
+    const allowed=new Set(["basic_jhs","senior_high"]);
     if(school.length<2||name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!allowed.has(institutionType))return error("invalid_registration","Enter valid school and contact details",422,requestId);
     try{
       const rows=await sql`insert into platform.school_registrations(school_name,contact_name,contact_email,contact_phone,country,requested_plan_code,institution_type,status) values(${school},${name},${email},${phone},${country},'starter',${institutionType},'pending') returning id,status,created_at,requested_plan_code,institution_type`;
