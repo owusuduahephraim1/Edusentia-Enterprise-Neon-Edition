@@ -54,17 +54,10 @@ end$$;
 
 revoke all on function authn.bootstrap_first_admin(text,text,text,text,text,text,text) from public;
 
-do $$
-begin
-  if exists(select 1 from pg_roles where rolname='edusentia_runtime') then
-    revoke all on authn.password_credentials,authn.mfa_totp_factors,authn.mfa_recovery_codes from edusentia_runtime;
-    revoke insert,update,delete on authn.users from edusentia_runtime;
-    grant select on authn.users to edusentia_runtime;
-    grant select,insert,update,delete on authn.sessions to edusentia_runtime;
-    grant execute on function authn.lookup_login(text,text) to edusentia_runtime;
-    grant execute on function authn.bootstrap_first_admin(text,text,text,text,text,text,text) to edusentia_runtime;
-  end if;
-end$$;
+-- Runtime privilege hardening is intentionally deferred until all schema
+-- migrations finish. database/runtime-role.sql configures the live
+-- edusentia_worker_runtime role. edusentia_runtime remains the deployment
+-- role so later migrations can create and alter authentication objects.
 
 insert into app.schema_migrations(version) values ('0014_bootstrap_auth_hardening') on conflict do nothing;
 update app.release_identity set schema_version='0014' where edition='Edusentia Enterprise Neon Edition';
