@@ -142,6 +142,12 @@ grant execute on function public.get_class_timetable_console(uuid,uuid)
   to edusentia_worker_runtime;
 grant execute on function public.save_class_timetable_entry(jsonb)
   to edusentia_worker_runtime;
+grant execute on function public.list_audit_events_v2(text,text,uuid,uuid,integer,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.list_audit_archives_v1(integer,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.list_audit_archive_entries_v1(uuid,integer,integer)
+  to edusentia_worker_runtime;
 grant execute on function public.list_teachers(text,text,text,integer,integer)
   to edusentia_worker_runtime;
 grant execute on function public.get_teacher_record(uuid)
