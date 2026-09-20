@@ -210,6 +210,22 @@ grant execute on function public.generate_school_identifier(text) to edusentia_w
 grant execute on function public.save_promotion_cutoff(integer) to edusentia_worker_runtime;
 
 
+
+revoke all on function public.is_records_manager() from public;
+revoke all on function public.can_manage_student(uuid) from public;
+revoke all on function public.enforce_student_management_aal2_write() from public;
+revoke all on function public.generate_school_identifier(text) from public;
+revoke all on function public.validate_student_import(jsonb,uuid,uuid,text) from public;
+revoke all on function public.save_promotion_cutoff(integer) from public;
+
+revoke all on function public.is_records_manager() from edusentia_worker_runtime;
+revoke all on function public.can_manage_student(uuid) from edusentia_worker_runtime;
+revoke all on function public.enforce_student_management_aal2_write() from edusentia_worker_runtime;
+
+grant execute on function public.generate_school_identifier(text) to edusentia_worker_runtime;
+grant execute on function public.validate_student_import(jsonb,uuid,uuid,text) to edusentia_worker_runtime;
+grant execute on function public.save_promotion_cutoff(integer) to edusentia_worker_runtime;
+
 insert into app.schema_migrations(version)
 values ('0034_certified_student_management_hardening')
 on conflict do nothing;
