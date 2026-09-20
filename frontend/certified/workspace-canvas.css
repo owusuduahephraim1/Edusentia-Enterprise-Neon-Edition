@@ -1,0 +1,56 @@
+@import url("r40-v9-premium-workspace.css?edusentia=r40-product-ready-v9-premium-1");
+
+/* Edusentia workspace canvas: lightweight, static and presentation-safe. */
+.app-shell .workspace,
+.pa-app .pa-workspace{
+  min-height:100vh;
+  background-color:#f3f7fc;
+  background-image:
+    url("assets/edusentia-workspace-canvas.svg?edusentia=r39-product-release-v1"),
+    radial-gradient(circle at 12% 8%,rgba(13,94,200,.055),transparent 34rem),
+    radial-gradient(circle at 88% 92%,rgba(21,132,93,.045),transparent 36rem),
+    linear-gradient(145deg,#f8fbff 0%,#f2f6fb 52%,#eef4fa 100%);
+  background-repeat:no-repeat,no-repeat,no-repeat,no-repeat;
+  background-position:right bottom,left top,right bottom,center;
+  background-size:clamp(620px,58vw,940px) auto,44rem 44rem,46rem 46rem,cover;
+  background-attachment:fixed,fixed,fixed,fixed;
+}
+
+.app-shell .workspace>.content,
+.pa-app .pa-workspace>.pa-content,
+.pa-app .pa-workspace>.pa-status{
+  position:relative;
+  z-index:1;
+}
+
+@media(max-width:820px){
+  .app-shell .workspace,
+  .pa-app .pa-workspace{
+    background-size:660px auto,34rem 34rem,36rem 36rem,cover;
+    background-position:118% 100%,left top,right bottom,center;
+    background-attachment:scroll,scroll,scroll,scroll;
+  }
+}
+
+@media(max-width:560px){
+  .app-shell .workspace,
+  .pa-app .pa-workspace{
+    background-image:
+      url("assets/edusentia-workspace-canvas.svg?edusentia=r39-product-release-v1"),
+      radial-gradient(circle at 10% 8%,rgba(13,94,200,.05),transparent 23rem),
+      linear-gradient(155deg,#f8fbff,#eef4fa);
+    background-repeat:no-repeat,no-repeat,no-repeat;
+    background-size:500px auto,auto,cover;
+    background-position:125% 100%,left top,center;
+  }
+}
+
+@media(forced-colors:active){
+  .app-shell .workspace,
+  .pa-app .pa-workspace{background:Canvas}
+}
+
+@media print{
+  .app-shell .workspace,
+  .pa-app .pa-workspace{background:#fff!important}
+}

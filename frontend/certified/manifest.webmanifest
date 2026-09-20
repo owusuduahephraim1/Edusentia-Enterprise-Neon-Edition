@@ -1,0 +1,13 @@
+{
+  "name": "Edusentia Enterprise",
+  "short_name": "Edusentia",
+  "description": "Edusentia academic operations platform for school administration, academic records, reporting, analytics, attendance, transcripts, certificates, licensing, backup and recovery",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#072863",
+  "icons": [{"src":"assets/edusentia-mark.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}],
+  "id": "./",
+  "scope": "./",
+  "version": "7.4.0-r40-product-ready-v9"
+}
