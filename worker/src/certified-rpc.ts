@@ -11,6 +11,8 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "set_active_period",
   "get_report_editor",
   "get_report_revisions",
+  "get_report_headteacher_signature",
+  "delete_report_card_permanently",
   "list_audit_events",
   "list_audit_events_v2",
   "list_audit_archives_v1",
@@ -171,6 +173,15 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
     case "get_report_revisions":{
       const reportId=uuidArg(args,"target_report_id",true);
       return singleResult(sql,ctx,txn=>txn`select public.get_report_revisions(${reportId}::uuid) result`);
+    }
+    case "get_report_headteacher_signature":{
+      const reportId=uuidArg(args,"target_report_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.get_report_headteacher_signature(${reportId}::uuid) result`);
+    }
+    case "delete_report_card_permanently":{
+      const reportId=uuidArg(args,"target_report_id",true);
+      const reason=textArg(args,"reason_text",{max:2000});
+      return singleResult(sql,ctx,txn=>txn`select public.delete_report_card_permanently(${reportId}::uuid,${reason}) result`);
     }
     case "list_audit_events":{
       const table=textArg(args,"target_table",{max:128});
