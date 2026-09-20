@@ -1,0 +1,34 @@
+name: Check First Administrator Configuration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/check-bootstrap-config.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secret presence
+        env:
+          INITIAL_TENANT_CODE: ${{ secrets.INITIAL_TENANT_CODE }}
+          INITIAL_TENANT_NAME: ${{ secrets.INITIAL_TENANT_NAME }}
+          INITIAL_INSTITUTION_TYPE: ${{ secrets.INITIAL_INSTITUTION_TYPE }}
+          INITIAL_ADMIN_EMAIL: ${{ secrets.INITIAL_ADMIN_EMAIL }}
+          INITIAL_ADMIN_DISPLAY_NAME: ${{ secrets.INITIAL_ADMIN_DISPLAY_NAME }}
+          INITIAL_ADMIN_PASSWORD: ${{ secrets.INITIAL_ADMIN_PASSWORD }}
+          BOOTSTRAP_ADMIN_SECRET: ${{ secrets.BOOTSTRAP_ADMIN_SECRET }}
+        shell: bash
+        run: |
+          for name in INITIAL_TENANT_CODE INITIAL_TENANT_NAME INITIAL_INSTITUTION_TYPE INITIAL_ADMIN_EMAIL INITIAL_ADMIN_DISPLAY_NAME INITIAL_ADMIN_PASSWORD BOOTSTRAP_ADMIN_SECRET; do
+            if [ -n "${!name}" ]; then
+              echo "$name=configured"
+            else
+              echo "$name=missing"
+            fi
+          done
