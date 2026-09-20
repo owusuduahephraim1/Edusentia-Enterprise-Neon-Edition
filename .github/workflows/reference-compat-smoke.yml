@@ -105,6 +105,9 @@ jobs:
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='report_promotion_evaluation'")" -ge 1
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('save_academic_entity','archive_academic_entity','save_grading_scale','archive_grading_scale','save_assessment_scheme','save_class_subject_assignments_batch')")" = "6"
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('generate_school_identifier','validate_student_import','save_promotion_cutoff')")" = "3"
+          test "$(psql "$URL" -Atc "select to_regclass('public.class_timetable_entries') is not null")" = "t"
+          test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('get_class_timetable_console','save_class_timetable_entry')")" = "2"
+          test "$(psql "$URL" -Atc "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='class_timetable_entries' and t.tgname='class_timetable_entries_broadcast' and not t.tgisinternal")" = "0"
           test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0039"
 
           echo "::group::Certified public function inventory"
