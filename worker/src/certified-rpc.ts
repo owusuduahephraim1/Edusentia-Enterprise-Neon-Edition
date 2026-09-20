@@ -3,8 +3,7 @@ import type { Sql } from "./db";
 import { tenantTx } from "./db";
 
 export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
-  "get_bootstrap_data",
-  "get_academic_configuration"
+  "get_bootstrap_data"
 ] as const);
 
 export type CertifiedRpcOperation=(typeof CERTIFIED_RPC_OPERATIONS)[number];
@@ -30,13 +29,6 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       noArguments(args);
       const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
         txn`select public.get_bootstrap_data() result`
-      ]);
-      return (rows[0] as any)?.result??null;
-    }
-    case "get_academic_configuration":{
-      noArguments(args);
-      const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
-        txn`select public.get_academic_configuration() result`
       ]);
       return (rows[0] as any)?.result??null;
     }
