@@ -27,7 +27,16 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   if(method==="POST"&&p==="/api/auth/login"){
     const body=await readJson<any>(request);
     await verifyTurnstile(env,String(body.turnstileToken||""),request);
-    const result=await login(env,body.email,body.password,body.tenantCode);const r=json(result.session);r.headers.append("set-cookie",setCookie(env,result.token));return r;
+    const result=await login(env,body.email,body.password,body.tenantCode);
+    if(!("session" in result)) return json(result);
+    const r=json(result.session);r.headers.append("set-cookie",setCookie(env,result.token));return r;
+  }
+  if(method==="POST"&&p==="/api/auth/mfa/complete"){
+    const body=await readJson<any>(request);
+    const result=await completeMfa(env,body.challengeToken,body.code);
+    const r=json({...result.session,recoveryCodes:result.recoveryCodes});
+    r.headers.append("set-cookie",setCookie(env,result.token));
+    return r;
   }
   if(method==="POST"&&p==="/api/auth/logout"){
     await logout(request,env);const r=json({ok:true});r.headers.append("set-cookie",clearCookie(env));return r;
