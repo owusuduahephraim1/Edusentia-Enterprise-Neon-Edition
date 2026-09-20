@@ -11,8 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: npm}
+        with: {node-version: 22}
       - run: npm install --ignore-scripts
+      - name: Require configured Worker API
+        run: '! grep -q "REPLACE_WITH_WORKER" frontend/config.js'
       - run: npm run verify:no-supabase
       - run: npm run verify:pages
       - run: npm test
