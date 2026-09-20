@@ -174,7 +174,7 @@ $apply_license$;
 create or replace function app.platform_capacity_snapshot(p_tenant_id uuid)
 returns jsonb
 language plpgsql security definer
-set search_path=app,platform,pg_catalog as $
+set search_path=app,platform,pg_catalog as $capacity_snapshot$
 declare active_count integer;total_count integer;base_limit integer;override_limit integer;effective_limit integer;state text;blocked boolean;
 begin
   perform set_config('app.tenant_id',p_tenant_id::text,true);perform set_config('app.user_id',p_tenant_id::text,true);perform set_config('app.role','system_admin',true);perform set_config('app.aal','2',true);
@@ -188,12 +188,13 @@ begin
   elsif effective_limit>0 and active_count::numeric/effective_limit>=0.8 then state:='near_limit';blocked:=false;
   else state:='available';blocked:=false;end if;
   return jsonb_build_object('ok',true,'base_limit',base_limit,'effective_limit',effective_limit,'active',active_count,'total',total_count,'status',state,'admissions_blocked',blocked,'checked_at',now());
-end$;
+end
+$capacity_snapshot$;
 
 create or replace function app.platform_set_student_capacity(p_tenant_id uuid,p_limit integer)
 returns jsonb
 language plpgsql security definer
-set search_path=app,pg_catalog as $
+set search_path=app,pg_catalog as $set_student_capacity$
 declare overrides jsonb;
 begin
   if p_limit is not null and (p_limit<1 or p_limit>1000000) then raise exception 'student_capacity_out_of_range' using errcode='22023'; end if;
@@ -202,7 +203,8 @@ begin
   if p_limit is null then overrides:=overrides-'max_students';else overrides:=jsonb_set(overrides,'{max_students}',to_jsonb(p_limit),true);end if;
   update app.tenant_licenses set limits_override=overrides,updated_at=now() where tenant_id=p_tenant_id;
   return app.platform_capacity_snapshot(p_tenant_id);
-end$;
+end
+$set_student_capacity$;
 
 revoke all on function app.platform_initialize_tenant(uuid,text,text,text,text,text,text,timestamptz,timestamptz) from public;
 revoke all on function authn.platform_set_initial_password_by_email(uuid,text,text,text) from public;
