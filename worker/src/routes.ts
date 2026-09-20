@@ -4,7 +4,8 @@ import { readJson, json, error } from "./http";
 import { authenticate, login, completeMfa, logout, setCookie, clearCookie } from "./auth";
 import { verifyTurnstile } from "./turnstile";
 
-// Authentication and authorization routes fail closed before tenant data access.\nfunction requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
+// Authentication and authorization routes fail closed before tenant data access.
+function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}
 
 export async function route(request:Request,env:Env,requestId:string):Promise<Response>{
