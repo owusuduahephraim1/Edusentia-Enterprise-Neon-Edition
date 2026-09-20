@@ -75,7 +75,9 @@ begin
   on conflict(id) do update set code=excluded.code,name=excluded.name,institution_type=excluded.institution_type,status='active',updated_at=now();
 
   perform set_config('app.tenant_id',p_tenant_id::text,true);
-  perform set_config('app.user_id',p_tenant_id::text,true);
+  -- No authenticated actor exists yet. Keep auth.uid() null while the certified
+  -- compatibility trigger creates the first profile and its audit row.
+  perform set_config('app.user_id','',true);
   perform set_config('app.role','system_admin',true);
   perform set_config('app.aal','2',true);
 
@@ -89,6 +91,9 @@ begin
   else
     update authn.users set display_name=coalesce(nullif(trim(p_admin_display_name),''),display_name),disabled_at=null where id=v_user_id;
   end if;
+
+  -- Switch request context to the real school administrator after identity creation.
+  perform set_config('app.user_id',v_user_id::text,true);
 
   insert into app.tenant_memberships(tenant_id,user_id,role,status,mfa_required)
   values(p_tenant_id,v_user_id,'system_admin','active',true)
