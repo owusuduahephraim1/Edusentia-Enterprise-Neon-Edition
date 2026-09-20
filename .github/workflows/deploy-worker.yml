@@ -1,0 +1,103 @@
+name: Deploy Cloudflare Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - "database/runtime-role.sql"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-worker-production
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Quality gates
+        run: |
+          npm run check
+          npm test
+
+      - name: Validate deployment secrets
+        env:
+          BOOTSTRAP_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
+          SESSION_PEPPER_VALUE: ${{ secrets.SESSION_PEPPER || secrets.AUTH_SECRET }}
+          BOOTSTRAP_ADMIN_SECRET_VALUE: ${{ secrets.BOOTSTRAP_ADMIN_SECRET }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          test -n "$BOOTSTRAP_DATABASE_URL" || { echo "DATABASE_URL or NEON_DATABASE_URL is missing"; exit 1; }
+          test -n "$SESSION_PEPPER_VALUE" || { echo "SESSION_PEPPER or AUTH_SECRET is missing"; exit 1; }
+          test -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" || { echo "BOOTSTRAP_ADMIN_SECRET is missing"; exit 1; }
+
+      - name: Ensure private R2 bucket
+        working-directory: worker
+        run: |
+          if npx wrangler r2 bucket info edusentia-enterprise-neon --json >/tmp/r2-info.json 2>/tmp/r2-info.err; then
+            echo "R2 bucket already exists."
+          else
+            npx wrangler r2 bucket create edusentia-enterprise-neon
+          fi
+
+      - name: Create initial Worker deployment
+        id: initial_deploy
+        working-directory: worker
+        run: |
+          npx wrangler deploy 2>&1 | tee /tmp/initial-worker-deploy.log
+
+      - name: Provision least-privilege Neon Worker role and install Worker secrets
+        env:
+          BOOTSTRAP_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
+          SESSION_PEPPER_VALUE: ${{ secrets.SESSION_PEPPER || secrets.AUTH_SECRET }}
+          BOOTSTRAP_ADMIN_SECRET_VALUE: ${{ secrets.BOOTSTRAP_ADMIN_SECRET }}
+          TURNSTILE_SECRET_VALUE: ${{ secrets.TURNSTILE_SECRET }}
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+          WORKER_DB_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$WORKER_DB_PASSWORD"
+
+          psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/runtime-role.sql
+          psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter role edusentia_worker_runtime login password '$WORKER_DB_PASSWORD';"
+
+          WORKER_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" WORKER_DB_PASSWORD="$WORKER_DB_PASSWORD" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL); u.username="edusentia_worker_runtime"; u.password=process.env.WORKER_DB_PASSWORD; process.stdout.write(u.toString())')"
+          echo "::add-mask::$WORKER_DATABASE_URL"
+
+          printf '%s' "$WORKER_DATABASE_URL" | npx --prefix worker wrangler secret put DATABASE_URL --config worker/wrangler.jsonc
+          printf '%s' "$SESSION_PEPPER_VALUE" | npx --prefix worker wrangler secret put SESSION_PEPPER --config worker/wrangler.jsonc
+          printf '%s' "$BOOTSTRAP_ADMIN_SECRET_VALUE" | npx --prefix worker wrangler secret put BOOTSTRAP_ADMIN_SECRET --config worker/wrangler.jsonc
+          if [ -n "$TURNSTILE_SECRET_VALUE" ]; then
+            printf '%s' "$TURNSTILE_SECRET_VALUE" | npx --prefix worker wrangler secret put TURNSTILE_SECRET --config worker/wrangler.jsonc
+          fi
+
+      - name: Final deploy and live health check
+        id: live
+        working-directory: worker
+        run: |
+          npx wrangler deploy 2>&1 | tee /tmp/final-worker-deploy.log
+          WORKER_URL="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' /tmp/final-worker-deploy.log | tail -1)"
+          test -n "$WORKER_URL" || { echo "Could not determine workers.dev URL"; exit 1; }
+          echo "worker_url=$WORKER_URL" >> "$GITHUB_OUTPUT"
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$WORKER_URL/api/health" | tee /tmp/health.json
+          node --input-type=module -e 'const fs=require("fs"); const h=JSON.parse(fs.readFileSync("/tmp/health.json","utf8")); if(!h.ok || !h.database || !h.storage) process.exit(1); console.log("Live Worker health check passed.")'
