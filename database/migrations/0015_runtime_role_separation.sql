@@ -7,7 +7,6 @@ begin
   end if;
 end$$;
 
-alter role edusentia_worker_runtime nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
 grant connect on database edusentia to edusentia_worker_runtime;
 grant usage on schema app,authn,academics,finance,storage,audit,services,documents,ops,platform to edusentia_worker_runtime;
 grant select,insert,update,delete on all tables in schema app,academics,finance,storage,audit,services,documents,ops to edusentia_worker_runtime;
