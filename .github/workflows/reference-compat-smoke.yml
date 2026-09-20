@@ -99,6 +99,7 @@ jobs:
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0041_certified_notification_publication_sync.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0042_certified_principal_academic_history_read.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0043_certified_report_governance_prerequisites.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044_certified_report_workflow_privacy_integrity.sql
 
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"
@@ -118,7 +119,8 @@ jobs:
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='search_students_v5'")" = "1"
           test "$(psql "$URL" -Atc "select to_regclass('public.academic_period_controls') is not null and to_regclass('public.emergency_academic_delegations') is not null and to_regclass('public.report_correction_requests') is not null and to_regclass('public.report_correction_events') is not null")" = "t"
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('active_emergency_delegation_ids','has_active_emergency_delegation','is_official_class_teacher_for_class','is_official_subject_teacher_for_class','has_approved_report_correction','term_control_snapshot','term_phase_writable','can_manage_class_report_fields_scope','can_manage_class_report_fields_for_term','can_score_class_subject_scope','can_score_class_subject_for_term','get_my_emergency_academic_delegations','is_academic_manager','report_transition_deadline_allowed','mark_report_correction_applied')")" = "15"
-          test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0043"
+          test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('can_view_report_internal','get_report_revisions','get_report_headteacher_signature','get_report_editor','can_delete_report','delete_report_card_permanently','transition_report_status')")" = "7"
+          test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0044"
 
           echo "::group::Certified public function inventory"
           psql "$URL" -Atc "select p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and not exists (select 1 from pg_depend d join pg_extension e on e.oid=d.refobjid where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e') order by 1"
