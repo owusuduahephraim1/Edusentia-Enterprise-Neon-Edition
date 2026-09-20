@@ -40,10 +40,11 @@ psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0037_certif
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0038_certified_teacher_principal_crud.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0039_certified_timetable_academic_alignment.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0040_certified_audit_trail_v1.sql
+psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0041_certified_notification_publication_sync.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
 
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0040"
+test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0041"
 test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
 test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
 
