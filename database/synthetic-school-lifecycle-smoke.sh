@@ -49,6 +49,7 @@ install_tenant() {
 
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/0020_tenant_runtime_parity.sql >/dev/null
   TARGET_DATABASE_URL="$db_url" bash database/reference-compat/install-core.sh >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0028_certified_compat_foundation.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
