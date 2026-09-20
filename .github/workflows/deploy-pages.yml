@@ -27,6 +27,15 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
       - if: steps.api.outputs.configured == 'true'
+        name: Stage certified reference hero asset
+        shell: bash
+        run: |
+          mkdir -p frontend/assets
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/nduah385/Edusentia-Enterprise/a181e18e0ca044db756193209b5b089cd03efb0f/assets/edusentia-auth-learning.webp" \
+            -o frontend/assets/edusentia-auth-learning.webp
+          test "$(sha256sum frontend/assets/edusentia-auth-learning.webp | awk '{print $1}')" = "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1"
+      - if: steps.api.outputs.configured == 'true'
         uses: actions/configure-pages@v5
         with:
           enablement: true
