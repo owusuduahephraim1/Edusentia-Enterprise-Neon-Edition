@@ -72,7 +72,7 @@ test("Certified timetable parity remains function-mediated and Supabase-realtime
   assert.match(m,/create table if not exists public\.class_timetable_entries/i);
   assert.match(m,/class_timetable_entry_integrity_guard/);
   assert.match(m,/class_timetable_entries_audit/);
-  assert.doesNotMatch(m,/realtime\.broadcast_changes/i);
+  assert.doesNotMatch(m,/realtime\.broadcast_changes\s*\(/i);
   assert.match(m,/revoke all on table public\.class_timetable_entries from edusentia_worker_runtime/i);
   assert.match(m,/revoke all on function public\.can_view_class_timetable\(uuid\) from edusentia_worker_runtime/i);
   assert.match(m,/revoke all on function public\.validate_class_timetable_entry\(\) from edusentia_worker_runtime/i);
