@@ -57,6 +57,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0032_certified_academic_calendar_context.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0033_certified_student_management_utilities.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0034_certified_student_management_hardening.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0035_certified_teacher_principal_hardening.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -74,7 +75,7 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0034"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0035"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select legal_name='$school_name' and email=lower('$admin_email') from app.school_settings where tenant_id='$tenant_id'::uuid")" = "t"
@@ -89,6 +90,8 @@ SQL
   test "$(psql "$db_url" -Atc "select promotion_cutoff_score=50 and identifier_root='$EXPECTED_IDENTIFIER_ROOT' from public.school_settings order by created_at,id limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.safe_uuid(text)','execute') and not has_sequence_privilege('edusentia_worker_runtime','public.student_identifier_seq','usage')")" = "t"
   test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.generate_school_identifier(text)','execute') and has_function_privilege('edusentia_worker_runtime','public.validate_student_import(jsonb,uuid,uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_promotion_cutoff(integer)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_manage_student(uuid)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.can_manage_teachers()','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_manage_headteachers()','execute') and not has_function_privilege('edusentia_worker_runtime','public.enforce_single_current_principal()','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='headteachers' and t.tgname='headteachers_single_current_guard' and not t.tgisinternal)")" = "t"
 
   WORKER_BOOTSTRAP_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.get_bootstrap_data() is not null; rollback;" | tail -1)"
   WORKER_ACCESS_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.list_profiles_with_access() is not null; rollback;" | tail -1)"
