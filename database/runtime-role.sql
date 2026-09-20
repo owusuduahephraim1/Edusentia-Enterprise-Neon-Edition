@@ -5,7 +5,10 @@ begin
   end if;
 end$$;
 
-grant connect on database edusentia to edusentia_worker_runtime;
+do $
+begin
+  execute format('grant connect on database %I to edusentia_worker_runtime',current_database());
+end$;
 grant usage on schema app,authn,academics,finance,storage,audit,services,documents,ops,platform to edusentia_worker_runtime;
 grant select,insert,update,delete on all tables in schema app,academics,finance,storage,audit,services,documents,ops to edusentia_worker_runtime;
 grant usage,select on all sequences in schema app,academics,finance,storage,audit,services,documents,ops to edusentia_worker_runtime;
