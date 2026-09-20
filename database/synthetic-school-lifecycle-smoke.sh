@@ -50,6 +50,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/0020_tenant_runtime_parity.sql >/dev/null
   TARGET_DATABASE_URL="$db_url" bash database/reference-compat/install-core.sh >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0028_certified_compat_foundation.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0029_certified_users_access_identity.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -67,7 +68,7 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0028"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0029"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select count(*) from app.tenant_memberships where tenant_id='$tenant_id'::uuid and role='system_admin' and status='active' and mfa_required")" = "1"
