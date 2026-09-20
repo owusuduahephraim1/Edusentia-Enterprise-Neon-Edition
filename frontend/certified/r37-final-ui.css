@@ -1,0 +1,313 @@
+/* Edusentia v7.4.0 r39 FINAL PRODUCT READY authentication shell.
+   Uses a clean cropped academic scene (no embedded decorative login card) and a fixed two-column layout.
+   The login card never relies on transform offsets, so browser zoom cannot reveal a second mock login panel. */
+.auth-view{
+  position:relative;
+  isolation:isolate;
+  min-height:100vh;
+  overflow:hidden;
+  padding:0;
+  display:grid;
+  grid-template-columns:minmax(0,1.28fr) minmax(430px,.72fr);
+  align-items:stretch;
+  background:#f4f7fc;
+}
+.auth-hero-image{
+  position:absolute;
+  inset:0 auto 0 0;
+  z-index:0;
+  display:block;
+  width:100%;
+  height:100%;
+  max-width:none;
+  object-fit:cover;
+  object-position:center center;
+  image-rendering:auto;
+  opacity:1;
+  filter:none;
+  pointer-events:none;
+  user-select:none;
+  background:#edf4ff;
+}
+.auth-view::before{
+  content:"";
+  position:absolute;
+  inset:0 0 0 58%;
+  z-index:1;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 82% 12%,rgba(13,94,200,.11),transparent 28%),
+    radial-gradient(circle at 100% 90%,rgba(240,181,29,.10),transparent 34%),
+    linear-gradient(145deg,rgba(249,251,255,.82) 0%,rgba(242,246,252,.78) 55%,rgba(234,241,251,.84) 100%);
+  border-left:1px solid rgba(8,45,112,.06);
+  box-shadow:-30px 0 70px rgba(8,45,112,.06);
+  -webkit-backdrop-filter:blur(4px) saturate(.9);
+  backdrop-filter:blur(4px) saturate(.9);
+}
+.auth-view::after{
+  content:"";
+  position:absolute;
+  left:58%;
+  top:9%;
+  bottom:9%;
+  width:1px;
+  z-index:1;
+  background:linear-gradient(transparent,rgba(8,45,112,.11),transparent);
+  pointer-events:none;
+}
+.auth-view .auth-card{
+  position:relative;
+  z-index:2;
+  grid-column:2;
+  align-self:center;
+  justify-self:center;
+  width:min(470px,calc(100% - 64px));
+  min-height:auto;
+  margin:42px 32px;
+  padding:clamp(34px,3.2vw,48px);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  transform:none!important;
+  background:rgba(255,255,255,.985);
+  border:1px solid rgba(8,45,112,.10);
+  border-radius:24px;
+  box-shadow:0 28px 74px rgba(7,39,94,.18),0 0 0 1px rgba(255,255,255,.75) inset;
+  -webkit-backdrop-filter:blur(14px) saturate(112%);
+  backdrop-filter:blur(14px) saturate(112%);
+}
+#authView .brand-lockup{
+  flex-direction:column;
+  justify-content:center;
+  gap:8px;
+  margin:0 0 20px;
+  text-align:center;
+}
+#authView .brand-lockup>img{
+  width:88px;
+  height:88px;
+  object-fit:contain;
+  filter:drop-shadow(0 8px 18px rgba(8,45,112,.13));
+}
+#authView .brand-lockup>div{min-width:0}
+#authView .brand-lockup h1{
+  margin:0 0 4px;
+  color:#082d70;
+  font-size:clamp(26px,1.8vw,31px);
+  line-height:1.1;
+  letter-spacing:.012em;
+}
+#authView .brand-lockup p{
+  margin:0;
+  color:#9a6a08;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.135em;
+  text-transform:uppercase;
+}
+#authView .auth-card::before{
+  content:"";
+  display:block;
+  width:72%;
+  height:1px;
+  margin:0 auto 21px;
+  background:linear-gradient(90deg,transparent,#d6a12c,transparent);
+}
+#authView #loginForm{gap:15px}
+#authView #loginForm::before{
+  content:"Welcome Back";
+  display:block;
+  grid-column:1/-1;
+  margin:0 0 -2px;
+  color:#082d70;
+  font-size:clamp(29px,2vw,35px);
+  line-height:1.12;
+  font-weight:850;
+  letter-spacing:-.025em;
+  text-align:center;
+}
+#authView #loginForm .field:first-of-type::before{
+  content:"Sign in to continue to your account";
+  display:block;
+  margin:-2px 0 10px;
+  color:#65728a;
+  font-size:13px;
+  font-weight:500;
+  text-align:center;
+}
+#authView #authMessage:empty,
+#mfaView #mfaMessage:empty{display:none}
+.auth-view .field>span{color:#253858;font-weight:750}
+.auth-view input,.auth-view .password-wrap{
+  min-height:50px;
+  border-color:#cbd6e6;
+  background:#fff;
+  box-shadow:0 1px 0 rgba(8,45,112,.025);
+}
+.auth-view input:focus,.auth-view .password-wrap:focus-within{
+  border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(13,94,200,.14);
+}
+.auth-view .button.primary{
+  min-height:52px;
+  margin-top:3px;
+  border-radius:10px;
+  background:linear-gradient(135deg,#0a459a,#1269d3);
+  box-shadow:0 13px 28px rgba(13,94,200,.23);
+}
+#authView .auth-card::after{
+  content:"Your trusted partner in academic excellence";
+  display:block;
+  margin-top:21px;
+  color:#7a8799;
+  font-size:10px;
+  font-weight:650;
+  letter-spacing:.02em;
+  text-align:center;
+}
+
+#authView .auth-journey{
+  position:absolute;
+  left:clamp(38px,4.6vw,88px);
+  top:clamp(42px,6.5vh,76px);
+  z-index:2;
+  width:min(500px,40vw);
+  padding:14px 18px 16px;
+  color:#082d70;
+  border:1px solid rgba(8,45,112,.11);
+  border-radius:16px;
+  background:linear-gradient(135deg,rgba(255,255,255,.91),rgba(242,247,255,.78));
+  box-shadow:0 16px 34px rgba(7,39,94,.09);
+  -webkit-backdrop-filter:blur(10px) saturate(112%);
+  backdrop-filter:blur(10px) saturate(112%);
+  pointer-events:none;
+}
+#authView .auth-journey-heading{
+  margin:0;
+  color:#87600a;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+#authView .auth-journey ol{
+  position:relative;
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+  margin:11px 0 0;
+  padding:0;
+  list-style:none;
+}
+#authView .auth-journey ol::before{
+  content:"";
+  position:absolute;
+  left:12.5%;
+  right:12.5%;
+  top:18px;
+  height:2px;
+  background:linear-gradient(90deg,#1769c2,#00a86b 68%,#c89417);
+  opacity:.42;
+}
+#authView .auth-journey li{
+  position:relative;
+  z-index:1;
+  display:grid;
+  justify-items:center;
+  gap:6px;
+  color:#253858;
+  font-size:11px;
+  letter-spacing:.01em;
+}
+#authView .auth-journey-icon{
+  display:grid;
+  width:36px;
+  height:36px;
+  place-items:center;
+  color:#1769c2;
+  border:1px solid rgba(13,94,200,.16);
+  border-radius:50%;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 5px 12px rgba(7,39,94,.08);
+}
+#authView .auth-journey li:nth-child(2) .auth-journey-icon,
+#authView .auth-journey li:nth-child(3) .auth-journey-icon{color:#008d68}
+#authView .auth-journey li:last-child .auth-journey-icon{color:#9a6a08}
+#authView .auth-journey svg{
+  width:19px;
+  height:19px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+#authView .auth-story{
+  position:absolute;
+  left:clamp(38px,4.6vw,88px);
+  bottom:clamp(42px,6.5vh,78px);
+  z-index:2;
+  width:min(470px,39vw);
+  padding:22px 26px 24px;
+  color:#082d70;
+  border-left:4px solid #00a86b;
+  border-radius:0 18px 18px 0;
+  background:linear-gradient(90deg,rgba(244,248,255,.96) 0%,rgba(244,248,255,.82) 66%,rgba(244,248,255,0) 100%);
+  text-shadow:0 1px 0 rgba(255,255,255,.8);
+  pointer-events:none;
+}
+#authView .auth-story-kicker{
+  margin:0 0 9px;
+  color:#87600a;
+  font-size:11px;
+  font-weight:850;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+#authView .auth-story h2{
+  max-width:430px;
+  margin:0;
+  color:#082d70;
+  font-size:clamp(34px,3.05vw,54px);
+  font-weight:880;
+  letter-spacing:-.035em;
+  line-height:1.02;
+}
+#authView .auth-story-summary{
+  max-width:430px;
+  margin:14px 0 0;
+  color:#344968;
+  font-size:clamp(14px,1.05vw,17px);
+  font-weight:540;
+  line-height:1.55;
+}
+#mfaView .auth-card{
+  width:min(470px,calc(100% - 64px));
+  min-height:auto;
+  transform:none!important;
+}
+#mfaView .brand-lockup{margin-bottom:22px}
+@media(max-width:1280px){#authView .auth-journey{display:none}}
+@media(max-width:1120px){
+  .auth-view{grid-template-columns:1fr;place-items:center;padding:28px 20px}
+  .auth-hero-image{width:100%;object-position:left center;opacity:.24;filter:saturate(.86)}
+  .auth-view::before{inset:0;background:rgba(247,250,255,.76);box-shadow:none;border:0}
+  .auth-view::after{display:none}
+  #authView .auth-story{display:none}
+  .auth-view .auth-card,#mfaView .auth-card{grid-column:1;width:min(500px,100%);margin:0;transform:none!important}
+}
+@media(max-width:680px){
+  .auth-view{padding:16px 12px}
+  .auth-view .auth-card{padding:28px 21px;border-radius:20px}
+  #authView .brand-lockup{gap:6px;margin-bottom:17px}
+  #authView .brand-lockup>img{width:72px;height:72px}
+  #authView .brand-lockup h1{font-size:23px}
+  #authView #loginForm::before{font-size:28px}
+}
+@media(max-width:420px){
+  .auth-view{padding:10px 8px}
+  .auth-view .auth-card{padding:23px 17px;border-radius:18px}
+  #authView .brand-lockup>img{width:64px;height:64px}
+}
+@media(prefers-reduced-motion:reduce){.auth-view .button,.auth-view .icon-button{transition:none}}
+
