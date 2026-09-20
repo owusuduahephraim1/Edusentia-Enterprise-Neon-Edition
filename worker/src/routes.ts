@@ -5,6 +5,7 @@ import { authenticate, login, completeMfa, logout, setCookie, clearCookie } from
 import { verifyTurnstile } from "./turnstile";
 import { platformRoute } from "./platform-routes";
 import { tenantDb } from "./tenant-db";
+import { sha256Hex } from "./crypto";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -49,7 +50,35 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const ctx=await authenticate(request,env);if(!ctx)return json({authenticated:false});
     return json({authenticated:true,user:{id:ctx.userId,email:ctx.email,displayName:ctx.displayName},membership:{tenantId:ctx.tenantId,tenantCode:ctx.tenantCode,tenantName:ctx.tenantName,role:ctx.role,roleLabel:ctx.role.replaceAll('_',' ')},session:{id:ctx.sessionId,assuranceLevel:ctx.assuranceLevel}});
   }
-  const ctx=await authed(request,env),sql=tenantDb(env,ctx.databaseName);
+  const ctx=await authed(request,env),sql=tenantDb(env,ctx.databaseName),master=db(env);
+  if(method==="POST"&&p==="/api/license/activate"){
+    requireRole(ctx,["system_admin"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required to activate a licence",403,requestId);
+    const b=await readJson<any>(request),code=String(b.code||"").trim().toUpperCase();
+    if(!/^EDU-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(code))return error("invalid_license_code","Enter a valid Edusentia licence authorization code",422,requestId);
+    const hash=await sha256Hex(`edusentia:licence-authorization:v1:${code}:${env.SESSION_PEPPER}`);
+    const claimedRows=await master`select platform.claim_plan_authorization(${ctx.tenantId}::uuid,${hash},${ctx.userId}) result`,claim=(claimedRows[0] as any)?.result||{};
+    try{
+      const appliedRows=await sql`select app.platform_apply_license(
+        ${ctx.tenantId}::uuid,${ctx.userId}::uuid,${String(claim.plan_code)},
+        ${claim.starts_at}::timestamptz,${claim.expires_at}::timestamptz,${Number(claim.grace_days||0)}::integer,
+        ${String(claim.period_type)},${String(claim.period_label)}
+      ) result`;
+      const completedRows=await master`select platform.complete_plan_authorization(${claim.authorization_id}::uuid,${ctx.tenantId}::uuid,${ctx.userId}) result`;
+      return json({ok:true,license:(appliedRows[0] as any)?.result,authorization:(completedRows[0] as any)?.result});
+    }catch(e:any){
+      await master`select platform.release_plan_authorization_claim(${claim.authorization_id}::uuid,${ctx.tenantId}::uuid,${String(e?.message||e).slice(0,500)})`;
+      throw e;
+    }
+  }
+  if(method==="GET"&&p==="/api/license/status"){
+    requireRole(ctx,["system_admin","principal","accountant"]);
+    const rows=await sql`
+      select lp.code plan_code,lp.name plan_name,tl.status,tl.starts_at,tl.expires_at,tl.feature_overrides,tl.limits_override,lp.feature_flags,lp.limits
+      from app.tenant_licenses tl left join platform.license_plans lp on lp.id=tl.plan_id
+      where tl.tenant_id=${ctx.tenantId}::uuid limit 1`;
+    return json({license:rows[0]||null});
+  }
   if(method==="GET"&&p==="/api/bootstrap"){
     const [tenant,metrics]=await tenantTx<any[]>(sql,ctx,txn=>[
       txn`select id,code,name,institution_type,settings from app.tenants where id=${ctx.tenantId}::uuid`,
@@ -69,7 +98,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({rows,limit,offset});
   }
   if(method==="POST"&&p==="/api/students"){
-    requireRole(ctx,["system_admin","principal","academic_admin","records_officer"]);const b=await readJson<any>(request);
+    requireRole(ctx,["system_admin","principal","academic_admin","records_officer"]);const b=await readJson<any>(request);\n    const capacityRows=await sql`select app.platform_capacity_snapshot(${ctx.tenantId}::uuid) result`,capacity=(capacityRows[0] as any)?.result||{};\n    if(capacity.admissions_blocked)return error("student_capacity_reached","Student admission is blocked because the licensed capacity has been reached",409,requestId);
     if(!b.firstName||!b.lastName||!b.studentNo) return error("validation_error","Student number, first name and last name are required",422,requestId);
     const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`insert into app.students(tenant_id,student_no,first_name,middle_name,last_name,gender,date_of_birth,status,created_by) values(${ctx.tenantId}::uuid,${String(b.studentNo).trim()},${String(b.firstName).trim()},${String(b.middleName||'').trim()},${String(b.lastName).trim()},${String(b.gender||'unspecified')},${b.dateOfBirth||null},'active',${ctx.userId}::uuid) returning *`]);
     return json({student:rows[0]},201);
