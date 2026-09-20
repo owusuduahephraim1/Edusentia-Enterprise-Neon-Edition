@@ -76,9 +76,9 @@ SQL
   test "$(psql "$db_url" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_table_privilege('edusentia_worker_runtime','authn.sessions','insert') and not has_table_privilege('edusentia_worker_runtime','authn.password_credentials','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.get_bootstrap_data()','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select bool_and(relrowsecurity and relforcerowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='app' and c.relname='students'")" = "t"
 
-  WORKER_BOOTSTRAP_OK="$(psql "$db_url" -Atc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.get_bootstrap_data() is not null; rollback;" | tail -1)"
-  WORKER_ACCESS_OK="$(psql "$db_url" -Atc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.list_profiles_with_access() is not null; rollback;" | tail -1)"
-  WORKER_STUDENT_SEARCH_OK="$(psql "$db_url" -Atc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.search_students('',null,'active'::public.student_status,1,25) is not null; rollback;" | tail -1)"
+  WORKER_BOOTSTRAP_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.get_bootstrap_data() is not null; rollback;" | tail -1)"
+  WORKER_ACCESS_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.list_profiles_with_access() is not null; rollback;" | tail -1)"
+  WORKER_STUDENT_SEARCH_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.search_students('',null,'active'::public.student_status,1,25) is not null; rollback;" | tail -1)"
   test "$WORKER_BOOTSTRAP_OK" = "t"
   test "$WORKER_ACCESS_OK" = "t"
   test "$WORKER_STUDENT_SEARCH_OK" = "t"
