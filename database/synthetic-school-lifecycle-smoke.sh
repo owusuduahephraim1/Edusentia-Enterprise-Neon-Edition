@@ -68,6 +68,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0043_certified_report_governance_prerequisites.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0043b_certified_report_assignment_scope.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0044_certified_report_workflow_privacy_integrity.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0045_certified_report_pdf_integrity_r2.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -85,7 +86,7 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0044"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0037_certified_academic_configuration_mutations'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0038_certified_teacher_principal_crud'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0039_certified_timetable_academic_alignment'")" = "1"
@@ -95,6 +96,7 @@ SQL
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0043_certified_report_governance_prerequisites'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0043b_certified_report_assignment_scope'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0044_certified_report_workflow_privacy_integrity'")" = "1"
+  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0045_certified_report_pdf_integrity_r2'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select legal_name='$school_name' and email=lower('$admin_email') from app.school_settings where tenant_id='$tenant_id'::uuid")" = "t"
@@ -126,6 +128,10 @@ SQL
   test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_my_emergency_academic_delegations(uuid,uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.term_control_snapshot(uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.mark_report_correction_applied(uuid)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.is_assigned_class_teacher(uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_create_report_for_class_term(uuid,uuid)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_report_editor(uuid,uuid,uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.get_report_revisions(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.get_report_headteacher_signature(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.delete_report_card_permanently(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.transition_report_status(uuid,public.report_status,text,integer)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_view_report_internal(uuid)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_delete_report(uuid)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.can_view_report_pdf(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.can_manage_report_pdf(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.can_delete_report_pdf_object(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.get_report_pdf_descriptor(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.list_report_pdf_paths(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.register_report_pdf(uuid,text,text,integer)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select not has_table_privilege('edusentia_worker_runtime','public.finance_hold_policy','select') and not has_table_privilege('edusentia_worker_runtime','public.finance_hold_overrides','select')")" = "t"
+  test "$(psql "$db_url" -Atc "select (public.finance_student_hold_status('00000000-0000-4000-8000-00000000f001'::uuid)->>'locked')::boolean=false")" = "t"
+  test "$(psql "$db_url" -Atc "select position('storage.object_metadata' in pg_get_functiondef(p.oid))>0 and position('storage.objects' in pg_get_functiondef(p.oid))=0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='register_report_pdf' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select position('report_transition_deadline_allowed' in pg_get_functiondef(p.oid))>0 and position('mark_report_correction_applied' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='transition_report_status' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select position('REPORT_DRAFT_PERMANENTLY_DELETED' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='delete_report_card_permanently' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select c.relrowsecurity and c.relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='emergency_academic_delegations'")" = "t"
