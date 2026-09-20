@@ -178,3 +178,17 @@ test("Certified report workflow privacy layer exposes only stable frontend repor
   assert.doesNotMatch(b,/"can_view_report_internal"/);
   assert.doesNotMatch(b,/"can_delete_report"/);
 });
+
+
+test("Certified report assignment scope prerequisites stay internal before 0044",()=>{
+  const m=read("database/reference-compat/0043b_certified_report_assignment_scope.sql");
+  const i=read("database/tenant-template/install.sh");
+  const b=read("worker/src/certified-rpc.ts");
+  assert.match(i,/0043b_certified_report_assignment_scope\.sql/);
+  assert.match(m,/is_assigned_class_teacher/);
+  assert.match(m,/can_create_report_for_class_term/);
+  assert.match(m,/revoke all on function public\.is_assigned_class_teacher\(uuid\) from edusentia_worker_runtime/i);
+  assert.match(m,/revoke all on function public\.can_create_report_for_class_term\(uuid,uuid\) from edusentia_worker_runtime/i);
+  assert.doesNotMatch(b,/"is_assigned_class_teacher"/);
+  assert.doesNotMatch(b,/"can_create_report_for_class_term"/);
+});
