@@ -277,6 +277,36 @@ begin
 end
 $$;
 
+create or replace function public.get_report_pdf_descriptor(target_report_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','extensions'
+as $
+declare result jsonb;
+begin
+  if not public.can_view_report_pdf(target_report_id) then
+    raise exception 'Access denied' using errcode='42501';
+  end if;
+  select jsonb_build_object(
+    'report_id',p.report_id,
+    'publication_id',p.id,
+    'storage_path',p.storage_path,
+    'checksum',p.checksum,
+    'page_count',p.page_count,
+    'published_at',p.published_at
+  ) into result
+  from public.report_publications p
+  where p.report_id=target_report_id
+    and p.revoked_at is null
+    and btrim(coalesce(p.storage_path,''))<>''
+  order by p.published_at desc
+  limit 1;
+  return coalesce(result,'{}'::jsonb);
+end
+$;
+
 revoke all on function public.finance_feature_enabled(text) from public;
 revoke all on function public.finance_student_outstanding(uuid) from public;
 revoke all on function public.finance_student_hold_status(uuid) from public;
@@ -286,6 +316,7 @@ revoke all on function public.can_manage_report_pdf(uuid) from public;
 revoke all on function public.can_delete_report_pdf_object(uuid,text) from public;
 revoke all on function public.list_report_pdf_paths(uuid) from public;
 revoke all on function public.register_report_pdf(uuid,text,text,integer) from public;
+revoke all on function public.get_report_pdf_descriptor(uuid) from public;
 
 revoke all on function public.finance_feature_enabled(text) from edusentia_worker_runtime;
 revoke all on function public.finance_student_outstanding(uuid) from edusentia_worker_runtime;
@@ -296,11 +327,13 @@ revoke all on function public.can_manage_report_pdf(uuid) from edusentia_worker_
 revoke all on function public.can_delete_report_pdf_object(uuid,text) from edusentia_worker_runtime;
 revoke all on function public.list_report_pdf_paths(uuid) from edusentia_worker_runtime;
 revoke all on function public.register_report_pdf(uuid,text,text,integer) from edusentia_worker_runtime;
+revoke all on function public.get_report_pdf_descriptor(uuid) from edusentia_worker_runtime;
 
 -- Worker route helpers: callable only through fixed Worker endpoints, never arbitrary browser SQL.
 grant execute on function public.can_view_report_pdf(uuid) to edusentia_worker_runtime;
 grant execute on function public.can_manage_report_pdf(uuid) to edusentia_worker_runtime;
 grant execute on function public.can_delete_report_pdf_object(uuid,text) to edusentia_worker_runtime;
+grant execute on function public.get_report_pdf_descriptor(uuid) to edusentia_worker_runtime;
 
 -- Certified stable frontend RPC surface.
 grant execute on function public.list_report_pdf_paths(uuid) to edusentia_worker_runtime;
