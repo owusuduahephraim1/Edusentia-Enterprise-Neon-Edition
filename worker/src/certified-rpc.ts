@@ -4,6 +4,9 @@ import { tenantTx } from "./db";
 
 export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_bootstrap_data",
+  "get_academic_configuration",
+  "academic_configuration_readiness",
+  "set_active_period",
   "get_report_editor",
   "get_report_revisions",
   "list_audit_events",
@@ -79,6 +82,20 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
     case "get_bootstrap_data":
       noArguments(args);
       return singleResult(sql,ctx,txn=>txn`select public.get_bootstrap_data() result`);
+
+    case "get_academic_configuration":
+      noArguments(args);
+      return singleResult(sql,ctx,txn=>txn`select public.get_academic_configuration() result`);
+
+    case "academic_configuration_readiness":
+      noArguments(args);
+      return singleResult(sql,ctx,txn=>txn`select public.academic_configuration_readiness() result`);
+
+    case "set_active_period":{
+      const academicYearId=uuidArg(args,"target_academic_year_id",true);
+      const termId=uuidArg(args,"target_term_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.set_active_period(${academicYearId}::uuid,${termId}::uuid) result`);
+    }
 
     case "get_report_editor":{
       const reportId=uuidArg(args,"target_report_id");
