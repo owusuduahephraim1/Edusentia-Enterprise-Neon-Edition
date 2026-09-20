@@ -25,11 +25,19 @@ if ! psql "$MASTER_URL" -Atc "select 1 from pg_database where datname='$TEMPLATE
 fi
 
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/0020_tenant_runtime_parity.sql
+TARGET_DATABASE_URL="$TEMPLATE_URL" bash database/reference-compat/install-core.sh
+psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
+
+test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
+test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0027"
+test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
+test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 <<SQL
 alter database "$TEMPLATE_DB" owner to edusentia_provisioner;
 revoke connect on database "$TEMPLATE_DB" from public;
 grant connect on database "$TEMPLATE_DB" to edusentia_runtime;
+grant connect on database "$TEMPLATE_DB" to edusentia_worker_runtime;
 grant connect on database "$TEMPLATE_DB" to edusentia_provisioner;
 alter database "$TEMPLATE_DB" with allow_connections false;
 SQL
