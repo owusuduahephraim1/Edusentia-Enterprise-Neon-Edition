@@ -31,6 +31,27 @@
     return payload;
   }
 
+  async function uploadReportPdf(reportId,file){
+    const type=String(file?.type||"application/pdf");
+    const prepared=await post(`/api/reports/${encodeURIComponent(reportId)}/pdf/upload-url`,{filename:file?.name||"report.pdf",contentType:type,size:Number(file?.size||0)});
+    const response=await fetch(`${apiBase}${prepared.uploadUrl}`,{method:prepared.method||"PUT",credentials:"include",headers:{"content-type":type},body:file});
+    const payload=await response.json().catch(()=>({}));
+    if(!response.ok){const e=payload?.error||{};throw new ApiError(e.message||`Upload failed (${response.status})`,response.status,e.code||"upload_failed",e.details);}
+    return {...payload,objectKey:prepared.objectKey};
+  }
+  async function downloadReportPdf(reportId){
+    const response=await fetch(`${apiBase}/api/reports/${encodeURIComponent(reportId)}/pdf/download`,{credentials:"include",headers:{accept:"application/pdf"}});
+    if(!response.ok){
+      const payload=await response.json().catch(()=>({}));const e=payload?.error||{};
+      throw new ApiError(e.message||`Download failed (${response.status})`,response.status,e.code||"download_failed",e.details);
+    }
+    return response.blob();
+  }
+  async function deleteReportPdfObject(reportId,key){
+    return request(`/api/reports/${encodeURIComponent(reportId)}/pdf/object?key=${encodeURIComponent(key)}`,{method:"DELETE"});
+  }
+
+
   window.EdusentiaApi=Object.freeze({
     request,health:()=>request("/api/health"),
 
@@ -58,6 +79,9 @@
     listFinanceSummary:()=>request("/api/finance/summary"),
     prepareUpload:(payload)=>post("/api/files/upload-url",payload),
     uploadFile,
+    uploadReportPdf,
+    downloadReportPdf,
+    deleteReportPdfObject,
 
     platformSession:()=>request("/api/platform/session"),
     platformLogin:(email,password,turnstileToken="")=>post("/api/platform/auth/login",{email,password,turnstileToken}),
