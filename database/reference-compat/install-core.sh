@@ -6,6 +6,13 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
 
+if psql "$TARGET_DATABASE_URL" -Atc "select 1 from app.schema_migrations where version='0027_reference_core_part_01' limit 1" | grep -qx 1; then
+  test "$(psql "$TARGET_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0027"
+  test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
+  echo "Certified reference core Part 01 is already installed."
+  exit 0
+fi
+
 cat "$DIR/01_reference_base.part01.b64" "$DIR/01_reference_base.part02.b64" \
   | base64 --decode \
   | gzip --decompress > "$TMP"
@@ -29,4 +36,7 @@ update app.release_identity
  where edition='Edusentia Enterprise Neon Edition';
 SQL
 
-echo "Certified reference core Part 01 installed."
+test "$(psql "$TARGET_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0027"
+test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
+
+echo "Certified reference core Part 01 installed and verified."
