@@ -13,6 +13,8 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_report_revisions",
   "get_report_headteacher_signature",
   "delete_report_card_permanently",
+  "list_report_pdf_paths",
+  "register_report_pdf",
   "list_audit_events",
   "list_audit_events_v2",
   "list_audit_archives_v1",
@@ -182,6 +184,18 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const reportId=uuidArg(args,"target_report_id",true);
       const reason=textArg(args,"reason_text",{max:2000});
       return singleResult(sql,ctx,txn=>txn`select public.delete_report_card_permanently(${reportId}::uuid,${reason}) result`);
+    }
+    case "list_report_pdf_paths":{
+      const reportId=uuidArg(args,"target_report_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.list_report_pdf_paths(${reportId}::uuid) result`);
+    }
+    case "register_report_pdf":{
+      const reportId=uuidArg(args,"target_report_id",true);
+      const storagePath=textArg(args,"target_storage_path",{required:true,max:700});
+      const checksum=textArg(args,"target_checksum",{required:true,max:64});
+      if(!/^[0-9a-f]{64}$/i.test(checksum||""))throw Object.assign(new Error("target_checksum must be a SHA-256 digest"),{code:"invalid_rpc_arguments",status:422});
+      const pageCount=intArg(args,"target_page_count",{required:false,min:1,max:200})??1;
+      return singleResult(sql,ctx,txn=>txn`select public.register_report_pdf(${reportId}::uuid,${storagePath},${checksum},${pageCount}::integer) result`);
     }
     case "list_audit_events":{
       const table=textArg(args,"target_table",{max:128});
