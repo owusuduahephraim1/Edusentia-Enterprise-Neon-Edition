@@ -1,6 +1,7 @@
 export interface Env {
   DATABASE_URL: string;
   APP_ORIGIN: string;
+  APP_BASE_PATH?: string;
   SESSION_PEPPER: string;
   BOOTSTRAP_ADMIN_SECRET: string;
   PLATFORM_BOOTSTRAP_SECRET?: string;
