@@ -91,6 +91,7 @@ SQL
   test -n "$ADMIN_ID"
   test "$(psql "$db_url" -Atc "select count(*) from public.profiles where id='$ADMIN_ID'::uuid and role::text='system_admin' and active")" = "1"
   test "$(psql "$db_url" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_table_privilege('edusentia_worker_runtime','authn.sessions','insert') and not has_table_privilege('edusentia_worker_runtime','authn.password_credentials','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.get_bootstrap_data()','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select not has_table_privilege('edusentia_worker_runtime','public.audit_log','select') and has_function_privilege('edusentia_worker_runtime','public.list_audit_events(text,uuid,integer,integer)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select bool_and(relrowsecurity and relforcerowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='app' and c.relname='students'")" = "t"
   test "$(psql "$db_url" -Atc "select promotion_cutoff_score=50 and identifier_root='$EXPECTED_IDENTIFIER_ROOT' from public.school_settings order by created_at,id limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.safe_uuid(text)','execute') and not has_sequence_privilege('edusentia_worker_runtime','public.student_identifier_seq','usage')")" = "t"
@@ -140,7 +141,7 @@ begin
   if coalesce((public.list_teachers('Synthetic','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_teacher_list_failed'; end if;
   if not public.archive_teacher(teacher_id,'Synthetic lifecycle archive') then raise exception 'synthetic_teacher_archive_failed'; end if;
   if not public.restore_teacher(teacher_id,'Synthetic lifecycle restore') then raise exception 'synthetic_teacher_restore_failed'; end if;
-  if not exists(select 1 from public.audit_log where table_name='teachers' and record_id=teacher_id) then raise exception 'synthetic_teacher_audit_missing'; end if;
+  if coalesce((public.list_audit_events('teachers',teacher_id,1,25)->>'total')::integer,0)<1 then raise exception 'synthetic_teacher_audit_missing'; end if;
 
   principal_result:=public.save_headteacher(jsonb_build_object(
     'full_name','Synthetic Principal',
@@ -153,7 +154,7 @@ begin
   if coalesce((public.list_headteachers('Synthetic','','active',1,20)->>'total')::integer,0)<1 then raise exception 'synthetic_principal_list_failed'; end if;
   if not public.archive_headteacher(principal_id,'Synthetic lifecycle archive') then raise exception 'synthetic_principal_archive_failed'; end if;
   if not public.restore_headteacher(principal_id,'Synthetic lifecycle restore') then raise exception 'synthetic_principal_restore_failed'; end if;
-  if not exists(select 1 from public.audit_log where table_name='headteachers' and record_id=principal_id) then raise exception 'synthetic_principal_audit_missing'; end if;
+  if coalesce((public.list_audit_events('headteachers',principal_id,1,25)->>'total')::integer,0)<1 then raise exception 'synthetic_principal_audit_missing'; end if;
 end
 \$staff_smoke\$;
 select true;
