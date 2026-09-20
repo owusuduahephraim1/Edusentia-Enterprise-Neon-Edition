@@ -42,6 +42,16 @@
     createStudent: (payload) => request("/api/students", { method: "POST", body: payload }),
     listStaff: (query = {}) => request(`/api/staff?${new URLSearchParams(query)}`),
     listFinanceSummary: () => request("/api/finance/summary"),
-    prepareUpload: (payload) => request("/api/files/upload-url", { method: "POST", body: payload })
+    prepareUpload: (payload) => request("/api/files/upload-url", { method: "POST", body: payload }),
+    uploadFile: async (file, kind = "document") => {
+      const prepared = await request("/api/files/upload-url", { method: "POST", body: { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size, kind } });
+      const response = await fetch(`${apiBase}${prepared.uploadUrl}`, { method: prepared.method || "PUT", credentials: "include", headers: { "content-type": file.type || "application/octet-stream" }, body: file });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const err = payload?.error || {};
+        throw new ApiError(err.message || `Upload failed (${response.status})`, response.status, err.code || "upload_failed", err.details);
+      }
+      return payload;
+    }
   });
 })();
