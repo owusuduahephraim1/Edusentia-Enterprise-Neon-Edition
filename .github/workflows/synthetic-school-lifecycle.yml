@@ -1,0 +1,45 @@
+name: Synthetic School Lifecycle Smoke
+
+on:
+  push:
+    branches: [main, reference-parity-r42]
+    paths:
+      - "database/migrations/**"
+      - "database/tenant-template/**"
+      - "database/reference-compat/**"
+      - "database/synthetic-school-lifecycle-smoke.sh"
+      - "worker/src/provisioning.ts"
+      - "worker/src/tenant-release.ts"
+      - ".github/workflows/synthetic-school-lifecycle.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-school-lifecycle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  basic-and-shs:
+    runs-on: ubuntu-latest
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+
+      - name: Require deployment database credential
+        run: |
+          test -n "$BOOTSTRAP_DATABASE_URL" || { echo "DATABASE_URL/NEON_DATABASE_URL is required for lifecycle smoke tests."; exit 1; }
+
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Run synthetic Basic/JHS and Senior High lifecycle
+        run: bash database/synthetic-school-lifecycle-smoke.sh
