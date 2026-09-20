@@ -1,6 +1,6 @@
 name: Deploy GitHub Pages
 on:
-  push: {branches: [main], paths: ["frontend/**","scripts/**","package.json","package-lock.json"]}
+  push: {branches: [main], paths: ["frontend/**","scripts/**","package.json","package-lock.json",".github/workflows/deploy-pages.yml"]}
   workflow_dispatch:
 permissions: {contents: read, pages: write, id-token: write}
 concurrency: {group: pages, cancel-in-progress: true}
