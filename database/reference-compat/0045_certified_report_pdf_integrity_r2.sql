@@ -1,7 +1,7 @@
 -- Edusentia Enterprise Neon Edition — certified report PDF integrity + R2 adaptation.
 -- Certified source baseline: a181e18e0ca044db756193209b5b089cd03efb0f
 -- Certified source file: tenant-report-pdf-integrity-r40.sql
--- Provider adaptation: Supabase storage.objects is replaced by tenant-scoped storage.object_metadata + Cloudflare R2.
+-- Provider adaptation: the certified object-catalog dependency is replaced by tenant-scoped storage.object_metadata + Cloudflare R2.
 -- Finance adaptation: certified hold policy/override semantics use the Neon-native finance.invoices ledger until the
 -- full certified finance overlay supersedes this compatibility implementation.
 
