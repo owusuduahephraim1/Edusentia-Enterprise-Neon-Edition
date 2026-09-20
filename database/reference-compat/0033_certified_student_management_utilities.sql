@@ -445,6 +445,33 @@ begin
   );
 end $function$;
 
+
+revoke all on function public.safe_uuid(text) from public;
+revoke all on function public.safe_date(text) from public;
+revoke all on function public.safe_integer(text) from public;
+revoke all on function public.safe_numeric(text) from public;
+revoke all on function public.safe_boolean(text,boolean) from public;
+revoke all on function public.safe_timestamptz(text) from public;
+revoke all on function public.default_grading_interpretation(text,text) from public;
+revoke all on function public.generate_subject_code(text,uuid) from public;
+revoke all on function public.is_term_three(integer,text) from public;
+revoke all on function public.next_promotion_academic_year(uuid) from public;
+revoke all on function public.report_promotion_evaluation(uuid) from public;
+revoke all on function public.refresh_report_promotion(uuid,boolean) from public;
+
+revoke all on function public.safe_uuid(text) from edusentia_worker_runtime;
+revoke all on function public.safe_date(text) from edusentia_worker_runtime;
+revoke all on function public.safe_integer(text) from edusentia_worker_runtime;
+revoke all on function public.safe_numeric(text) from edusentia_worker_runtime;
+revoke all on function public.safe_boolean(text,boolean) from edusentia_worker_runtime;
+revoke all on function public.safe_timestamptz(text) from edusentia_worker_runtime;
+revoke all on function public.default_grading_interpretation(text,text) from edusentia_worker_runtime;
+revoke all on function public.generate_subject_code(text,uuid) from edusentia_worker_runtime;
+revoke all on function public.is_term_three(integer,text) from edusentia_worker_runtime;
+revoke all on function public.next_promotion_academic_year(uuid) from edusentia_worker_runtime;
+revoke all on function public.report_promotion_evaluation(uuid) from edusentia_worker_runtime;
+revoke all on function public.refresh_report_promotion(uuid,boolean) from edusentia_worker_runtime;
+
 insert into app.schema_migrations(version)
 values ('0033_certified_student_management_utilities')
 on conflict do nothing;
