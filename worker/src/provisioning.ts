@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import type { Env } from "./types";
 import { db } from "./db";
 import { tenantDatabaseName, tenantDb, validateDatabaseName } from "./tenant-db";
+import { inspectTenantRelease } from "./tenant-release";
 
 function ident(value:string){
   const v=validateDatabaseName(value);
@@ -30,8 +31,13 @@ export async function provisionIsolatedTenant(env:Env,tenantId:string,actorId:st
   if(!t)throw Object.assign(new Error("Tenant was not found"),{code:"tenant_not_found",status:404});
   if(t.status==="denied")throw Object.assign(new Error("Denied schools cannot be provisioned"),{code:"tenant_denied",status:409});
   if(t.database_state==="isolated_ready"&&t.database_name){
-    const health=await tenantDb(env,String(t.database_name))`select app.platform_health_snapshot(${tenantId}::uuid) result`;
-    return {ok:true,alreadyReady:true,databaseName:t.database_name,health:(health[0] as any)?.result};
+    const tenantSql=tenantDb(env,String(t.database_name));
+    const [healthRows,release]=await Promise.all([
+      tenantSql`select app.platform_health_snapshot(${tenantId}::uuid) result`,
+      inspectTenantRelease(tenantSql)
+    ]);
+    if(!release.ready)throw Object.assign(new Error("Tenant certified release verification failed"),{code:"tenant_release_invalid",status:503});
+    return {ok:true,alreadyReady:true,databaseName:t.database_name,health:(healthRows[0] as any)?.result,release};
   }
 
   const databaseName=tenantDatabaseName(String(t.tenant_code)),provisioner=neon(env.PROVISIONER_DATABASE_URL);
@@ -54,16 +60,19 @@ export async function provisionIsolatedTenant(env:Env,tenantId:string,actorId:st
       ${String(t.admin_email)},${String(t.contact_name||"System Administrator")},${String(t.plan_code||"starter")},
       ${t.license_started_at}::timestamptz,${t.license_expires_at}::timestamptz
     ) result`;
-    const healthRows=await tenantSql`select app.platform_health_snapshot(${tenantId}::uuid) result`;
+    const [healthRows,release]=await Promise.all([
+      tenantSql`select app.platform_health_snapshot(${tenantId}::uuid) result`,
+      inspectTenantRelease(tenantSql)
+    ]);
     const health=(healthRows[0] as any)?.result||{};
-    if(health.schema_version!=="0020")throw new Error("Tenant template schema verification failed");
+    if(!release.ready)throw new Error("Tenant certified release verification failed");
 
     await master`update platform.provisioning_jobs set stage='release_verify',updated_at=now() where tenant_id=${tenantId}::uuid and status='running'`;
     const ready=await master`select platform.mark_isolated_tenant_ready(
       ${tenantId}::uuid,${actorId}::uuid,${databaseName},'neon-v1.0.0-r42-parity',''
     ) result`;
 
-    return {ok:true,databaseName,initialized:(initialized[0] as any)?.result,health,control:(ready[0] as any)?.result};
+    return {ok:true,databaseName,initialized:(initialized[0] as any)?.result,health,release,control:(ready[0] as any)?.result};
   }catch(e:any){
     await master`update platform.provisioning_jobs set status='failed',stage='failed',last_error=${String(e?.message||e).slice(0,1000)},updated_at=now() where tenant_id=${tenantId}::uuid and status<>'cancelled'`;
     await master`update platform.tenant_control set database_state='failed',release_status='unhealthy',updated_at=now() where tenant_id=${tenantId}::uuid`;
