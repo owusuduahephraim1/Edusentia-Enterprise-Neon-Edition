@@ -156,6 +156,16 @@ grant execute on function public.get_report_headteacher_signature(uuid)
   to edusentia_worker_runtime;
 grant execute on function public.delete_report_card_permanently(uuid,text)
   to edusentia_worker_runtime;
+grant execute on function public.can_view_report_pdf(uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.can_manage_report_pdf(uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.can_delete_report_pdf_object(uuid,text)
+  to edusentia_worker_runtime;
+grant execute on function public.list_report_pdf_paths(uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.register_report_pdf(uuid,text,text,integer)
+  to edusentia_worker_runtime;
 grant execute on function public.list_teachers(text,text,text,integer,integer)
   to edusentia_worker_runtime;
 grant execute on function public.get_teacher_record(uuid)
