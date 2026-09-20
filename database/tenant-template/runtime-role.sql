@@ -90,6 +90,12 @@ grant execute on function public.save_report_card(jsonb,integer)
   to edusentia_worker_runtime;
 grant execute on function public.transition_report_status(uuid,public.report_status,text,integer)
   to edusentia_worker_runtime;
+grant execute on function public.generate_school_identifier(text)
+  to edusentia_worker_runtime;
+grant execute on function public.validate_student_import(jsonb,uuid,uuid,text)
+  to edusentia_worker_runtime;
+grant execute on function public.save_promotion_cutoff(integer)
+  to edusentia_worker_runtime;
 
 alter default privileges in schema app grant select,insert,update,delete on tables to edusentia_worker_runtime;
 alter default privileges in schema academics grant select,insert,update,delete on tables to edusentia_worker_runtime;
