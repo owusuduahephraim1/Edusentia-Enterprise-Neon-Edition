@@ -1,5 +1,5 @@
 export const TENANT_RUNTIME_SCHEMA_VERSION="0020";
-export const CERTIFIED_COMPAT_SCHEMA_VERSION="0029";
+export const CERTIFIED_COMPAT_SCHEMA_VERSION="0031";
 export const TENANT_RUNTIME_VERSION="neon-v1.0.0-r42-parity";
 
 export type TenantReleaseStatus={
