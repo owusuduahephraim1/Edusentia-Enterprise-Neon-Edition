@@ -7,6 +7,7 @@ import { authenticatePlatform, platformLogin, completePlatformMfa, logoutPlatfor
 import { verifyTurnstile } from "./turnstile";
 import { provisionIsolatedTenant } from "./provisioning";
 import { tenantDb } from "./tenant-db";
+import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
 
 async function authed(request:Request,env:Env){
   const ctx=await authenticatePlatform(request,env);
@@ -140,6 +141,32 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
 
   if(!p.startsWith("/api/platform/"))return null;
   const ctx=await authed(request,env);
+
+  if(method==="GET"&&p==="/api/platform/mfa/factors"){
+    return json({ok:true,factors:await listMfaFactors(sql,ctx.userId)});
+  }
+  if(method==="POST"&&p==="/api/platform/mfa/enroll"){
+    const b=await readJson<any>(request);
+    const enrollment=await beginMfaEnrollment(env,sql,ctx.userId,ctx.email,"Edusentia Platform Administration",String(b.friendlyName||""));
+    await sql`insert into platform.admin_audit_events(actor_user_id,action,target_type,target_id,details)
+      values(${ctx.userId}::uuid,'platform.mfa.enrollment_started','platform_admin',${ctx.userId},${JSON.stringify({friendlyName:"pending"})}::jsonb)`;
+    return json({ok:true,enrollment},201);
+  }
+  const platformMfaFactor=p.match(/^\/api\/platform\/mfa\/factors\/([0-9a-f-]{36})\/(verify|remove)$/i);
+  if(method==="POST"&&platformMfaFactor){
+    const [,factorId,action]=platformMfaFactor,b=await readJson<any>(request);
+    if(action==="verify"){
+      const result=await verifyMfaEnrollment(env,sql,ctx.userId,factorId,String(b.code||""));
+      await sql`insert into platform.admin_audit_events(actor_user_id,action,target_type,target_id,details)
+        values(${ctx.userId}::uuid,'platform.mfa.factor_verified','mfa_factor',${factorId},'{}'::jsonb)`;
+      return json(result);
+    }
+    const result=await removeMfaFactor(sql,ctx.userId,factorId);
+    await sql`insert into platform.admin_audit_events(actor_user_id,action,target_type,target_id,details)
+      values(${ctx.userId}::uuid,'platform.mfa.factor_removed','mfa_factor',${factorId},${JSON.stringify({verified:true})}::jsonb)`;
+    return json(result);
+  }
+
 
   if(method==="GET"&&p==="/api/platform/overview"){
     const [registrations,tenants,plans,jobs,events,health,audit,recovery,authorizations,releaseRows]=await Promise.all([
