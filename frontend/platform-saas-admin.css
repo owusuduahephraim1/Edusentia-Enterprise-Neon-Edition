@@ -36,10 +36,3 @@ body.pa-page{margin:0;min-height:100vh;background:var(--pa-bg);color:var(--pa-in
 .pa-badge.near_limit{background:#fff2d5;color:#8a5b00}
 .pa-badge.available,.pa-badge.unlimited{background:#e5f7ef;color:#08724f}.pa-badge.renewal,.pa-badge.grace{background:#fff2d5;color:#8a5b00}
 @media(max-width:720px){.pa-capacity-summary,.pa-form-grid{grid-template-columns:1fr}}
-
-.pa-turnstile{display:flex;justify-content:center;min-height:65px}
-.pa-recovery-codes{white-space:pre-wrap;padding:14px;border:1px solid var(--pa-line);border-radius:12px;background:#f8fbff;font-size:1rem;line-height:1.8}
-.pa-public-links{display:flex;justify-content:center;gap:16px;margin-top:18px;font-size:12px}
-.pa-public-links a{color:var(--pa-blue);font-weight:750;text-decoration:none}
-.pa-public-links a:hover{text-decoration:underline}
-.pa-info code{display:block;margin-top:8px;overflow-wrap:anywhere;font-weight:800;letter-spacing:.06em}
