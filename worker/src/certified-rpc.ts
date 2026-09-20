@@ -28,7 +28,22 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "save_grading_scale",
   "archive_grading_scale",
   "save_assessment_scheme",
-  "save_class_subject_assignments_batch"
+  "save_class_subject_assignments_batch",
+  "list_teachers",
+  "get_teacher_record",
+  "get_my_teacher_profile",
+  "save_teacher",
+  "archive_teacher",
+  "restore_teacher",
+  "set_teacher_photo",
+  "list_headteachers",
+  "get_headteacher_record",
+  "get_my_headteacher_signature",
+  "save_headteacher",
+  "archive_headteacher",
+  "restore_headteacher",
+  "set_headteacher_photo",
+  "set_my_headteacher_signature"
 ] as const);
 
 export type CertifiedRpcOperation=(typeof CERTIFIED_RPC_OPERATIONS)[number];
@@ -65,6 +80,28 @@ function jsonArg(args:Args,name:string){
   const value=args[name];
   if(value==null||typeof value!=="object")throw Object.assign(new Error(`${name} is required`),{code:"invalid_rpc_arguments",status:422});
   return JSON.stringify(value);
+}
+function pathArg(args:Args,name:string,max=1024){
+  const raw=args[name];
+  if(raw==null)return "";
+  if(typeof raw!=="string"||raw.length>max)throw Object.assign(new Error(`${name} is invalid`),{code:"invalid_rpc_arguments",status:422});
+  return raw;
+}
+function timestampArg(args:Args,name:string){
+  const raw=args[name];
+  if(raw==null||raw==="")return null;
+  if(typeof raw!=="string"||raw.length>64||Number.isNaN(Date.parse(raw)))throw Object.assign(new Error(`${name} is invalid`),{code:"invalid_rpc_arguments",status:422});
+  return raw;
+}
+function staffListArgs(args:Args){
+  const search=textArg(args,"search_text",{max:200})??"";
+  const status=textArg(args,"status_filter",{max:32})??"";
+  const archive=textArg(args,"archive_filter",{max:16})??"active";
+  if(status&&!["active","leave","suspended","resigned","retired"].includes(status))throw Object.assign(new Error("status_filter is invalid"),{code:"invalid_rpc_arguments",status:422});
+  if(!["active","archived","all"].includes(archive))throw Object.assign(new Error("archive_filter is invalid"),{code:"invalid_rpc_arguments",status:422});
+  const page=intArg(args,"page_number",{required:false,min:1,max:100000})??1;
+  const pageSize=intArg(args,"page_size",{required:false,min:1,max:100})??20;
+  return {search,status,archive,page,pageSize};
 }
 function uuidArrayArg(args:Args,name:string){
   const value=args[name];
@@ -220,6 +257,73 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
     case "save_class_subject_assignments_batch":{
       const payload=jsonArg(args,"payload");
       return singleResult(sql,ctx,txn=>txn`select public.save_class_subject_assignments_batch(${payload}::jsonb) result`);
+    }
+    case "list_teachers":{
+      const {search,status,archive,page,pageSize}=staffListArgs(args);
+      return singleResult(sql,ctx,txn=>txn`select public.list_teachers(${search},${status},${archive},${page}::integer,${pageSize}::integer) result`);
+    }
+    case "get_teacher_record":{
+      const id=uuidArg(args,"target_teacher_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.get_teacher_record(${id}::uuid) result`);
+    }
+    case "get_my_teacher_profile":
+      noArguments(args);
+      return singleResult(sql,ctx,txn=>txn`select public.get_my_teacher_profile() result`);
+    case "save_teacher":{
+      const payload=jsonArg(args,"payload");
+      return singleResult(sql,ctx,txn=>txn`select public.save_teacher(${payload}::jsonb) result`);
+    }
+    case "archive_teacher":{
+      const id=uuidArg(args,"target_teacher_id",true);
+      const reason=textArg(args,"reason_text",{max:1000});
+      return singleResult(sql,ctx,txn=>txn`select public.archive_teacher(${id}::uuid,${reason}) result`);
+    }
+    case "restore_teacher":{
+      const id=uuidArg(args,"target_teacher_id",true);
+      const reason=textArg(args,"reason_text",{max:1000});
+      return singleResult(sql,ctx,txn=>txn`select public.restore_teacher(${id}::uuid,${reason}) result`);
+    }
+    case "set_teacher_photo":{
+      const id=uuidArg(args,"target_teacher_id",true);
+      const photo=pathArg(args,"target_photo_url");
+      const expected=timestampArg(args,"expected_updated_at");
+      return singleResult(sql,ctx,txn=>txn`select public.set_teacher_photo(${id}::uuid,${photo},${expected}::timestamptz) result`);
+    }
+    case "list_headteachers":{
+      const {search,status,archive,page,pageSize}=staffListArgs(args);
+      return singleResult(sql,ctx,txn=>txn`select public.list_headteachers(${search},${status},${archive},${page}::integer,${pageSize}::integer) result`);
+    }
+    case "get_headteacher_record":{
+      const id=uuidArg(args,"target_headteacher_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.get_headteacher_record(${id}::uuid) result`);
+    }
+    case "get_my_headteacher_signature":
+      noArguments(args);
+      return singleResult(sql,ctx,txn=>txn`select public.get_my_headteacher_signature() result`);
+    case "save_headteacher":{
+      const payload=jsonArg(args,"payload");
+      return singleResult(sql,ctx,txn=>txn`select public.save_headteacher(${payload}::jsonb) result`);
+    }
+    case "archive_headteacher":{
+      const id=uuidArg(args,"target_headteacher_id",true);
+      const reason=textArg(args,"reason_text",{max:1000});
+      return singleResult(sql,ctx,txn=>txn`select public.archive_headteacher(${id}::uuid,${reason}) result`);
+    }
+    case "restore_headteacher":{
+      const id=uuidArg(args,"target_headteacher_id",true);
+      const reason=textArg(args,"reason_text",{max:1000});
+      return singleResult(sql,ctx,txn=>txn`select public.restore_headteacher(${id}::uuid,${reason}) result`);
+    }
+    case "set_headteacher_photo":{
+      const id=uuidArg(args,"target_headteacher_id",true);
+      const photo=pathArg(args,"target_photo_url");
+      const expected=timestampArg(args,"expected_updated_at");
+      return singleResult(sql,ctx,txn=>txn`select public.set_headteacher_photo(${id}::uuid,${photo},${expected}::timestamptz) result`);
+    }
+    case "set_my_headteacher_signature":{
+      const signature=pathArg(args,"target_signature_path");
+      const expected=timestampArg(args,"expected_updated_at");
+      return singleResult(sql,ctx,txn=>txn`select public.set_my_headteacher_signature(${signature},${expected}::timestamptz) result`);
     }
   }
 }
