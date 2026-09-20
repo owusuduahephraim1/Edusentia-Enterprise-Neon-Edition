@@ -1,6 +1,6 @@
 name: Worker Quality Gate
 on:
-  pull_request: {paths: ["worker/**","database/**","scripts/**"]}
+  pull_request: {paths: ["worker/**","database/**","scripts/**","tests/**",".github/workflows/worker-check.yml"]}
   push: {branches: [main, reference-parity-r42], paths: ["worker/**","database/**","scripts/**"]}
 permissions: {contents: read}
 jobs:
