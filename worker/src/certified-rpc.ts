@@ -43,7 +43,9 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "archive_headteacher",
   "restore_headteacher",
   "set_headteacher_photo",
-  "set_my_headteacher_signature"
+  "set_my_headteacher_signature",
+  "get_class_timetable_console",
+  "save_class_timetable_entry"
 ] as const);
 
 export type CertifiedRpcOperation=(typeof CERTIFIED_RPC_OPERATIONS)[number];
@@ -324,6 +326,15 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const signature=pathArg(args,"target_signature_path");
       const expected=timestampArg(args,"expected_updated_at");
       return singleResult(sql,ctx,txn=>txn`select public.set_my_headteacher_signature(${signature},${expected}::timestamptz) result`);
+    }
+    case "get_class_timetable_console":{
+      const academicYearId=uuidArg(args,"target_academic_year_id",true);
+      const classId=uuidArg(args,"target_class_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.get_class_timetable_console(${academicYearId}::uuid,${classId}::uuid) result`);
+    }
+    case "save_class_timetable_entry":{
+      const payload=jsonArg(args,"payload");
+      return singleResult(sql,ctx,txn=>txn`select public.save_class_timetable_entry(${payload}::jsonb) result`);
     }
   }
 }
