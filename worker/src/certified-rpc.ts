@@ -5,6 +5,7 @@ import { tenantTx } from "./db";
 export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_bootstrap_data",
   "get_academic_configuration",
+  "get_academic_calendar_context",
   "academic_configuration_readiness",
   "set_active_period",
   "get_report_editor",
@@ -86,6 +87,10 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
     case "get_academic_configuration":
       noArguments(args);
       return singleResult(sql,ctx,txn=>txn`select public.get_academic_configuration() result`);
+
+    case "get_academic_calendar_context":
+      noArguments(args);
+      return singleResult(sql,ctx,txn=>txn`select public.get_academic_calendar_context() result`);
 
     case "academic_configuration_readiness":
       noArguments(args);
