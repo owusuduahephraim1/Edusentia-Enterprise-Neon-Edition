@@ -59,6 +59,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0034_certified_student_management_hardening.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0035_certified_teacher_principal_hardening.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0036_certified_staff_runtime_guards.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0037_certified_academic_configuration_mutations.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -76,7 +77,7 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0036"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0037"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select legal_name='$school_name' and email=lower('$admin_email') from app.school_settings where tenant_id='$tenant_id'::uuid")" = "t"
@@ -91,6 +92,7 @@ SQL
   test "$(psql "$db_url" -Atc "select promotion_cutoff_score=50 and identifier_root='$EXPECTED_IDENTIFIER_ROOT' from public.school_settings order by created_at,id limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.safe_uuid(text)','execute') and not has_sequence_privilege('edusentia_worker_runtime','public.student_identifier_seq','usage')")" = "t"
   test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.generate_school_identifier(text)','execute') and has_function_privilege('edusentia_worker_runtime','public.validate_student_import(jsonb,uuid,uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_promotion_cutoff(integer)','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_manage_student(uuid)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.save_academic_entity(text,jsonb)','execute') and has_function_privilege('edusentia_worker_runtime','public.archive_academic_entity(text,uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_grading_scale(jsonb)','execute') and has_function_privilege('edusentia_worker_runtime','public.archive_grading_scale(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_assessment_scheme(jsonb)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_class_subject_assignments_batch(jsonb)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.can_manage_teachers()','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_manage_headteachers()','execute') and not has_function_privilege('edusentia_worker_runtime','public.enforce_single_current_principal()','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='headteachers' and t.tgname='headteachers_single_current_guard' and not t.tgisinternal)")" = "t"
   test "$(psql "$db_url" -Atc "select to_regclass('auth.users') is not null and not has_table_privilege('edusentia_worker_runtime','auth.users','select')")" = "t"
@@ -106,6 +108,8 @@ SQL
   WORKER_IDENTIFIER_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.generate_school_identifier('student') like '$EXPECTED_IDENTIFIER_ROOT-STU-%'; rollback;" | tail -1)"
   WORKER_IMPORT_VALIDATION_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select (public.validate_student_import(jsonb_build_array(jsonb_build_object('admission_no','SYN-VAL-001','first_name','Ama','last_name','Owusu','gender','Female')),null,null,'preview.csv')->>'valid_count')::integer=1; rollback;" | tail -1)"
   WORKER_PROMOTION_CUTOFF_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select (public.save_promotion_cutoff(55)->>'promotion_cutoff_score')::integer=55; rollback;" | tail -1)"
+  WORKER_ACADEMIC_SAVE_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.save_academic_entity('academic_years',jsonb_build_object('name','Synthetic 2026/2027','start_date','2026-09-01','end_date','2027-07-31')) is not null; rollback;" | tail -1)"
+  WORKER_ASSESSMENT_SAVE_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.save_assessment_scheme(jsonb_build_object('name','Synthetic Assessment Scheme','active',true,'components',jsonb_build_array(jsonb_build_object('name','Synthetic Component','code','SYN','maximum_score',100,'weight',100,'display_order',1,'required',true)))) is not null; rollback;" | tail -1)"
   test "$WORKER_BOOTSTRAP_OK" = "t"
   test "$WORKER_ACCESS_OK" = "t"
   test "$WORKER_STUDENT_SEARCH_OK" = "t"
@@ -114,6 +118,8 @@ SQL
   test "$WORKER_IDENTIFIER_OK" = "t"
   test "$WORKER_IMPORT_VALIDATION_OK" = "t"
   test "$WORKER_PROMOTION_CUTOFF_OK" = "t"
+  test "$WORKER_ACADEMIC_SAVE_OK" = "t"
+  test "$WORKER_ASSESSMENT_SAVE_OK" = "t"
 }
 
 install_tenant "$BASIC_DB" "00000000-0000-4000-8000-000000000101" "BSC-900001" "Synthetic Basic School" "basic_jhs" "admin@basic.synthetic.invalid"
