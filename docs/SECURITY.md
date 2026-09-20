@@ -14,3 +14,6 @@
 
 - Platform Super Administrator authority is separated from tenant memberships. Platform operators use dedicated platform sessions, require TOTP AAL2, and are never granted a school `system_admin` membership merely by holding platform authority.
 - Registration approval, licensing, tenant lifecycle, provisioning, student-capacity controls, and platform audit events are enforced through protected control-plane tables/functions rather than browser-side role flags.
+
+- School System Administrator onboarding uses a short-lived one-time administrator setup token. Only a domain-separated hash is stored in Neon; the plaintext token is delivered in the setup link and removed from the browser address bar after page load.
+- The Worker has no direct privilege on `authn.password_credentials` or `platform.tenant_admin_setup_tokens`. Password creation and setup-token consumption occur only through restricted `SECURITY DEFINER` functions.
