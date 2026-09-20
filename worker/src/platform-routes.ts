@@ -1,3 +1,4 @@
+// Platform control-plane routes enforce AAL2 and single-use tenant setup handoffs.
 import type { Env, PlatformSessionContext } from "./types";
 import { db } from "./db";
 import { readJson, json, error } from "./http";
