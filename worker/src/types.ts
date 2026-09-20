@@ -1,5 +1,7 @@
 export interface Env {
   DATABASE_URL: string;
+  PROVISIONER_DATABASE_URL?: string;
+  TENANT_TEMPLATE_DATABASE?: string;
   APP_ORIGIN: string;
   APP_BASE_PATH?: string;
   SESSION_PEPPER: string;
@@ -12,5 +14,5 @@ export interface Env {
   PRODUCT_VERSION?: string;
   OBJECTS: R2Bucket;
 }
-export type SessionContext = {sessionId:string; userId:string; tenantId:string; role:string; assuranceLevel:number; email:string; displayName:string};
+export type SessionContext = {sessionId:string; userId:string; tenantId:string; tenantCode:string; tenantName:string; databaseName:string; role:string; assuranceLevel:number; email:string; displayName:string};
 export type PlatformSessionContext = {sessionId:string; userId:string; role:"platform_super_admin"; assuranceLevel:number; email:string; displayName:string};
