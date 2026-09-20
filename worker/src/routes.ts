@@ -2,6 +2,7 @@ import type { Env, SessionContext } from "./types";
 import { db, tenantTx } from "./db";
 import { readJson, json, error } from "./http";
 import { authenticate, login, logout, setCookie, clearCookie } from "./auth";
+import { verifyTurnstile } from "./turnstile";
 
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}
@@ -24,7 +25,9 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({ok:true,result:(rows[0] as any)?.result},201);
   }
   if(method==="POST"&&p==="/api/auth/login"){
-    const body=await readJson<any>(request);const result=await login(env,body.email,body.password,body.tenantCode);const r=json(result.session);r.headers.append("set-cookie",setCookie(env,result.token));return r;
+    const body=await readJson<any>(request);
+    await verifyTurnstile(env,String(body.turnstileToken||""),request);
+    const result=await login(env,body.email,body.password,body.tenantCode);const r=json(result.session);r.headers.append("set-cookie",setCookie(env,result.token));return r;
   }
   if(method==="POST"&&p==="/api/auth/logout"){
     await logout(request,env);const r=json({ok:true});r.headers.append("set-cookie",clearCookie(env));return r;
