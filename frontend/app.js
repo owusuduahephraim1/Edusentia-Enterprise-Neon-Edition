@@ -1,3 +1,4 @@
+// MFA-enabled authentication UI.
 (() => {
   "use strict";
   const byId = id => document.getElementById(id);
