@@ -4,6 +4,7 @@ import { readJson, json, error } from "./http";
 import { authenticate, login, completeMfa, logout, setCookie, clearCookie } from "./auth";
 import { verifyTurnstile } from "./turnstile";
 import { platformRoute } from "./platform-routes";
+import { tenantDb } from "./tenant-db";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -46,9 +47,9 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   }
   if(method==="GET"&&p==="/api/session"){
     const ctx=await authenticate(request,env);if(!ctx)return json({authenticated:false});
-    return json({authenticated:true,user:{id:ctx.userId,email:ctx.email,displayName:ctx.displayName},membership:{tenantId:ctx.tenantId,role:ctx.role,roleLabel:ctx.role.replaceAll('_',' ')},session:{id:ctx.sessionId,assuranceLevel:ctx.assuranceLevel}});
+    return json({authenticated:true,user:{id:ctx.userId,email:ctx.email,displayName:ctx.displayName},membership:{tenantId:ctx.tenantId,tenantCode:ctx.tenantCode,tenantName:ctx.tenantName,role:ctx.role,roleLabel:ctx.role.replaceAll('_',' ')},session:{id:ctx.sessionId,assuranceLevel:ctx.assuranceLevel}});
   }
-  const ctx=await authed(request,env),sql=db(env);
+  const ctx=await authed(request,env),sql=tenantDb(env,ctx.databaseName);
   if(method==="GET"&&p==="/api/bootstrap"){
     const [tenant,metrics]=await tenantTx<any[]>(sql,ctx,txn=>[
       txn`select id,code,name,institution_type,settings from app.tenants where id=${ctx.tenantId}::uuid`,
