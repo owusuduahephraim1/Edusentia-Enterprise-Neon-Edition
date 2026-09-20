@@ -1,0 +1,68 @@
+name: Neon Schema Smoke Test
+
+on:
+  push:
+    branches: [main, reference-parity-r42]
+    paths:
+      - "database/migrations/**"
+      - "database/install-master.sh"
+      - "database/runtime-role.sql"
+      - "database/provisioner-role.sql"
+      - "database/tenant-template/**"
+      - ".github/workflows/schema-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-schema-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-install:
+    runs-on: ubuntu-latest
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+
+      - name: Require deployment database credential
+        run: |
+          test -n "$BOOTSTRAP_DATABASE_URL" || { echo "DATABASE_URL/NEON_DATABASE_URL is required for schema smoke tests."; exit 1; }
+
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Fresh database migration smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROBE_DB="edusentia_ci_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          PROBE_DB="${PROBE_DB//-/_}"
+          PROBE_DB="${PROBE_DB:0:60}"
+          echo "Using disposable database $PROBE_DB"
+
+          cleanup() {
+            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          cleanup
+          psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\";"
+
+          PROBE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PROBE_DB="$PROBE_DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.PROBE_DB;process.stdout.write(u.toString())')"
+          echo "::add-mask::$PROBE_URL"
+
+          BOOTSTRAP_DATABASE_URL="$PROBE_URL" bash database/install-master.sh
+
+          test "$(psql "$PROBE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
+          test "$(psql "$PROBE_URL" -Atc "select count(*) from information_schema.tables where table_schema='platform' and table_name='school_deletion_jobs'")" = "1"
+          test "$(psql "$PROBE_URL" -Atc "select count(*) from information_schema.columns where table_schema='authn' and table_name='mfa_totp_factors' and column_name='friendly_name'")" = "1"
+          echo "Fresh Neon schema migration smoke test passed."
