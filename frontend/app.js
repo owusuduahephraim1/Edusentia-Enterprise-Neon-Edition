@@ -16,7 +16,8 @@
     {id:"staff",label:"Staff",icon:"♙",subtitle:"Staff and teacher directory",render:renderStaff},
     {id:"teachers",label:"Teachers",icon:"♜",subtitle:"Certified teacher records and account links",roles:["system_admin"],render:renderTeachers},
     {id:"principal",label:"Principal",icon:"★",subtitle:"Certified Principal appointment record",roles:["system_admin"],render:renderPrincipal},
-    {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees and collections overview",roles:["system_admin","principal","accountant"],render:renderFinance}
+    {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees and collections overview",roles:["system_admin","principal","accountant"],render:renderFinance},
+    {id:"notifications",label:"Notifications",icon:"◆",subtitle:"Account notifications and workflow updates",nav:false,render:renderNotifications}
   ];
 
   function role(){return String(state.session?.membership?.role || state.boot?.capabilities?.role || "").toLowerCase();}
@@ -32,6 +33,7 @@
   function status(value){const v=String(value||"unknown").toLowerCase().replace(/[^a-z0-9_]+/g,"_");return `<span class="status ${escapeHtml(v)}">${escapeHtml(String(value||"Unknown").replaceAll("_"," "))}</span>`;}
   function fullName(row){return [row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ");}
   function formatDate(value){if(!value)return "—";const d=new Date(value);return Number.isNaN(d.valueOf())?escapeHtml(value):escapeHtml(new Intl.DateTimeFormat(undefined,{year:"numeric",month:"short",day:"2-digit"}).format(d));}
+  function formatDateTime(value){if(!value)return "—";const d=new Date(value);return Number.isNaN(d.valueOf())?escapeHtml(value):escapeHtml(new Intl.DateTimeFormat(undefined,{year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit"}).format(d));}
   function formatAmount(value){const n=Number(value||0);return Number.isFinite(n)?new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}).format(n):"0.00";}
   function empty(messageText){return `<div class="panel pad"><p class="muted">${escapeHtml(messageText)}</p></div>`;}
   function loading(label="Loading records"){return `<div class="panel pad"><div class="generator-progress"><span class="spinner small"></span><span>${escapeHtml(label)}</span></div></div>`;}
@@ -70,12 +72,13 @@
     renderNav();
     show("appShell");
     setSync("online","Connected");
+    await loadNotificationCount();
     await navigate("dashboard");
   }
 
   function renderNav(){
     const nav=byId("mainNav");
-    const items=NAV.filter(can);
+    const items=NAV.filter(item=>can(item)&&item.nav!==false);
     nav.innerHTML=items.map(item=>`<button class="nav-item" type="button" data-view="${item.id}"><span class="nav-icon" aria-hidden="true">${item.icon}</span><span class="nav-label">${escapeHtml(item.label)}</span><span class="nav-active-dot" aria-hidden="true"></span></button>`).join("");
     nav.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>navigate(button.dataset.view)));
   }
@@ -307,6 +310,25 @@
     byId("content").innerHTML=`<div class="page-head"><div><h3>Finance</h3><p>Current fee and collection position.</p></div></div><section class="stat-grid"><article class="stat-card"><span class="stat-icon gold" aria-hidden="true">¤</span><div><span>Outstanding balance</span><strong>${formatAmount(summary.outstanding)}</strong></div></article><article class="stat-card"><span class="stat-icon green" aria-hidden="true">+</span><div><span>Received today</span><strong>${formatAmount(summary.received_today)}</strong></div></article><article class="stat-card"><span class="stat-icon purple" aria-hidden="true">!</span><div><span>Overdue invoices</span><strong>${escapeHtml(summary.overdue_invoices??0)}</strong></div></article></section><section class="panel pad"><h3>Finance workspace</h3><p class="muted">Detailed fee schedules, invoices, payments, receipts, holds, and guardian follow-up continue through the certified Worker RPC compatibility layer as their UI slices are ported.</p></section>`;
   }
 
+  async function loadNotificationCount(){
+    if(!state.session)return;
+    try{
+      const data=await certified("list_notifications",{page_number:1,page_size:5});
+      const count=Number(data?.unread||0),badge=byId("notificationBadge");
+      if(badge){badge.textContent=count>99?"99+":String(count);badge.classList.toggle("hidden",count===0);}
+    }catch{}
+  }
+
+  async function renderNotifications(){
+    const data=await certified("list_notifications",{page_number:1,page_size:100});
+    const rows=Array.isArray(data?.rows)?data.rows:[],unread=Number(data?.unread||0),total=Number(data?.total??rows.length);
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>Notifications</h3><p>${escapeHtml(unread)} unread • ${escapeHtml(total)} total</p></div><div class="page-actions">${unread?'<button id="markAllRead" class="button secondary" type="button">Mark all read</button>':""}</div></div>
+      <section class="panel"><div class="managed-card-list">${rows.length?rows.map(item=>`<article class="panel-header" data-notification-id="${escapeHtml(item.id)}" style="${item.read_at?"opacity:.72":""}"><div><h4>${escapeHtml(item.title||"Notification")}</h4><p>${escapeHtml(item.body||"")} • ${formatDateTime(item.created_at)}</p></div>${item.read_at?"":`<button class="button ghost small" type="button" data-notification-read="${escapeHtml(item.id)}">Mark read</button>`}</article>`).join(""):'<div class="panel-body"><p class="muted">No notifications.</p></div>'}</div></section>`;
+    byId("markAllRead")?.addEventListener("click",async()=>{await certified("mark_notifications_read",{notification_ids:null});await loadNotificationCount();await renderNotifications();});
+    byId("content").querySelectorAll("[data-notification-read]").forEach(button=>button.addEventListener("click",async()=>{button.disabled=true;try{await certified("mark_notifications_read",{notification_ids:[button.dataset.notificationRead]});await loadNotificationCount();await renderNotifications();}finally{button.disabled=false;}}));
+  }
+
   function beginMfa(result){
     mfaChallenge=String(result.challengeToken||"");showAuthStep("mfaPanel");
     const enrolling=result.mode==="enroll";
@@ -335,6 +357,7 @@
   byId("logoutButton")?.addEventListener("click",async()=>{try{await api().logout();}finally{location.reload();}});
   byId("menuButton")?.addEventListener("click",()=>byId("sidebar")?.classList.toggle("open"));
   byId("refreshButton")?.addEventListener("click",()=>navigate(state.view));
+  byId("notificationButton")?.addEventListener("click",()=>navigate("notifications"));
   byId("modalClose")?.addEventListener("click",()=>byId("modal")?.close());
   byId("modal")?.addEventListener("click",event=>{if(event.target===event.currentTarget)event.currentTarget.close();});
   window.addEventListener("online",()=>setSync("online","Connected"));
