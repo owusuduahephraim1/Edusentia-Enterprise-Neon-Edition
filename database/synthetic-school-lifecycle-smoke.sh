@@ -52,6 +52,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0028_certified_compat_foundation.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0029_certified_users_access_identity.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0030_certified_academic_configuration.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0030b_certified_teacher_principal_records.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0031_certified_academic_configuration_rpc.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
