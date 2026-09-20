@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: reference-compat-smoke-${{ github.ref }}
+  group: reference-compat-smoke-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
