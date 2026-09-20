@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#062863">
+<meta name="referrer" content="no-referrer">
+<title>Set up School Administrator · Edusentia</title>
+<link rel="icon" href="assets/edusentia-mark.svg">
+<link rel="stylesheet" href="platform-saas-admin.css">
+</head>
+<body class="pa-page">
+<section class="pa-auth-view">
+  <img class="pa-auth-scene" src="assets/edusentia-workspace-canvas.svg" alt="" aria-hidden="true">
+  <div class="pa-auth-panel">
+    <div class="pa-brand"><img src="assets/edusentia-mark.svg" alt="Edusentia"><span class="eyebrow">Secure school onboarding</span><h1>Set up administrator access</h1><p id="setupIntro">Checking your one-time setup link…</p></div>
+    <section id="setupDetails" class="hidden">
+      <div class="pa-info"><strong id="setupSchool"></strong><span>Tenant code: <code id="setupTenant"></code></span><span>Administrator email: <code id="setupEmail"></code></span></div>
+      <form id="setupForm" class="pa-form">
+        <label class="pa-field"><span>New password</span><input id="setupPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+        <label class="pa-field"><span>Confirm password</span><input id="setupConfirm" type="password" autocomplete="new-password" minlength="12" required></label>
+        <div id="setupTurnstile" class="pa-turnstile"></div>
+        <button class="pa-primary" type="submit">Set password securely</button>
+      </form>
+    </section>
+    <section id="setupSuccess" class="hidden">
+      <div class="pa-info success"><strong>Administrator access is ready</strong><span>Your one-time link has been consumed. Use the credentials below to sign in. Your first sign-in will require authenticator MFA enrollment.</span></div>
+      <label class="pa-field"><span>Institution code</span><input id="successTenant" readonly></label>
+      <label class="pa-field"><span>Administrator email</span><input id="successEmail" readonly></label>
+      <a class="pa-primary" href="index.html" style="display:block;text-align:center;text-decoration:none">Continue to school sign in</a>
+    </section>
+    <p id="setupMessage" class="pa-message" role="alert"></p>
+    <nav class="pa-public-links"><a href="index.html">School sign in</a><a href="register.html">Register a school</a></nav>
+  </div>
+</section>
+<script src="config.js"></script>
+<script src="admin-setup.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onAdminSetupTurnstileLoad&render=explicit" async defer></script>
+</body>
+</html>
