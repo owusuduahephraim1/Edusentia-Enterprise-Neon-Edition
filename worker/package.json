@@ -1,0 +1,21 @@
+{
+  "name": "@edusentia/neon-worker",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.1.0",
+    "@noble/hashes": "2.4.0"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "wrangler": "4.135.0",
+    "@cloudflare/workers-types": "5.20260920.1"
+  }
+}

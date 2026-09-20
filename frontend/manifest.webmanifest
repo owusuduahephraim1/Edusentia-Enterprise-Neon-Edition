@@ -1,0 +1,10 @@
+{
+  "name": "Edusentia Enterprise Neon Edition",
+  "short_name": "Edusentia",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f8fc",
+  "theme_color": "#072863",
+  "icons": [{"src":"assets/edusentia-mark.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

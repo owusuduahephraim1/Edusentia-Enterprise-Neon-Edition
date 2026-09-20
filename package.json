@@ -1,0 +1,15 @@
+{
+  "name": "edusentia-enterprise-neon-edition",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": ["worker"],
+  "scripts": {
+    "check": "npm run verify:no-supabase && npm run verify:pages && npm run check:worker",
+    "check:worker": "npm --workspace worker run check",
+    "test": "node --test tests/*.test.mjs",
+    "verify:no-supabase": "node scripts/verify-no-supabase-runtime.mjs",
+    "verify:pages": "node scripts/verify-github-pages-deployment.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

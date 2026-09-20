@@ -1,0 +1,71 @@
+/* Edusentia v9 Platform Administration list-density and history controls. */
+.pa-content .pa-grid.two{align-items:start}
+.pa-content .pa-grid.two>.pa-panel{align-self:start;height:auto;min-height:0}
+
+.pa-content .pa-scroll-region{
+  max-height:380px;
+  overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable both-edges;
+  -webkit-overflow-scrolling:touch;
+}
+.pa-content .pa-grid.two .pa-scroll-region{max-height:300px}
+.pa-content .pa-scroll-region.pa-scroll-region-expanded{max-height:min(72vh,860px)}
+.pa-content .pa-table-wrap.pa-scroll-region{overflow:auto}
+.pa-content .pa-table-wrap.pa-scroll-region .pa-table{margin-bottom:0}
+.pa-content .pa-table-wrap.pa-scroll-region .pa-table thead th{
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:#f7faff;
+  box-shadow:0 1px 0 #dbe5f1;
+}
+.pa-content .pa-card-list.pa-scroll-region{padding-right:6px}
+.pa-content .pa-plan-grid.pa-scroll-region{padding-right:8px}
+
+.pa-list-toolbar,
+.pa-history-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.pa-list-toolbar{
+  padding:10px 14px 0;
+}
+.pa-panel-head .pa-list-size-toggle{margin-left:auto;white-space:nowrap}
+.pa-history-toolbar{
+  margin:0 0 14px;
+  padding:12px 14px;
+  border:1px solid #d7e4f2;
+  border-radius:12px;
+  background:rgba(248,251,255,.92);
+  color:#526982;
+  font-size:.85rem;
+}
+.pa-history-toolbar strong{color:#123d74}
+.pa-history-toolbar .pa-history-copy{display:grid;gap:2px}
+.pa-history-toolbar .pa-history-copy small{line-height:1.4}
+
+.pa-history-reset-note{
+  margin-top:7px;
+  color:#677b93;
+  font-size:.78rem;
+  line-height:1.4;
+}
+.pa-licence-retention-note{
+  display:block;
+  margin-top:5px;
+  color:#5c718b;
+  font-size:.78rem;
+  line-height:1.4;
+}
+
+@media(max-width:760px){
+  .pa-content .pa-scroll-region{max-height:330px}
+  .pa-content .pa-grid.two .pa-scroll-region{max-height:280px}
+  .pa-content .pa-scroll-region.pa-scroll-region-expanded{max-height:68vh}
+  .pa-list-toolbar,.pa-history-toolbar{align-items:stretch}
+  .pa-history-toolbar .pa-btn,.pa-list-toolbar .pa-btn{width:100%}
+}

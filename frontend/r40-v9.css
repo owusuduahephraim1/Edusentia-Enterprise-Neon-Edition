@@ -1,0 +1,78 @@
+/* Edusentia r40 Product-Ready v9: public information and protected access recovery */
+.button.link-button{background:transparent;border-color:transparent;color:var(--navy,#082d70);box-shadow:none;text-decoration:underline;text-underline-offset:3px}.button.link-button:hover{background:rgba(8,45,112,.06)}
+.auth-public-links,.pa-public-links{display:flex;flex-wrap:wrap;gap:10px 16px;justify-content:center;margin-top:14px;font-size:12px}.auth-public-links a,.pa-public-links a{color:#5a6a82;text-decoration:none}.auth-public-links a:hover,.pa-public-links a:hover{text-decoration:underline;color:#082d70}
+.recovery-code-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:16px 0}.recovery-code-grid code{display:block;padding:10px 12px;border:1px solid #d8e0ec;border-radius:10px;background:#f7f9fc;text-align:center;font-weight:800;letter-spacing:.06em;color:#082d70}
+.security-information{margin-top:18px;padding:13px 15px;border:1px solid #d8e0ec;border-radius:12px;background:#f6f9fd;display:grid;gap:4px;font-size:13px;color:#41516a}.security-information strong{color:#082d70}.recovery-frame{max-width:620px}.v9-recovery-pending{outline:2px solid rgba(240,181,29,.35)}
+@media(max-width:620px){.recovery-code-grid{grid-template-columns:1fr}.auth-public-links,.pa-public-links{gap:8px 12px}}
+
+/* v9 desktop authentication viewport fit.
+   Keep the full login composition inside the native Windows work area while
+   preserving scrolling on genuinely compact/mobile layouts. */
+@media(min-width:1121px){
+  #authView.auth-view{height:100vh;height:100dvh;min-height:0;overflow:hidden}
+  #authView .auth-card{margin:0 32px;padding-block:clamp(22px,3.5vh,42px)}
+  #authView .auth-journey{display:block;left:clamp(24px,3.6vw,68px);top:clamp(16px,3vh,38px);width:min(500px,42vw)}
+  #authView .auth-story{left:clamp(24px,3.6vw,68px);bottom:clamp(16px,3vh,38px);width:min(470px,40vw)}
+}
+@media(min-width:1121px) and (max-height:820px){
+  #authView .auth-card{padding:24px clamp(28px,2.8vw,40px);border-radius:22px}
+  #authView .auth-card::before{margin-bottom:13px}
+  #authView .brand-lockup{gap:6px;margin-bottom:13px}
+  #authView .brand-lockup>img{width:72px;height:72px}
+  #authView #loginForm{gap:11px}
+  #authView #loginForm::before{font-size:31px}
+  #authView #loginForm .field:first-of-type::before{margin:0 0 7px}
+  #authView input,#authView .password-wrap{min-height:46px}
+  #authView .button.primary{min-height:48px}
+  #authView .auth-public-links{margin-top:9px}
+  #authView .auth-card::after{margin-top:12px}
+  #authView .auth-journey{padding:12px 16px 13px}
+  #authView .auth-journey ol{margin-top:9px}
+  #authView .auth-story{padding:18px 22px 20px}
+  #authView .auth-story h2{font-size:clamp(32px,2.8vw,46px)}
+  #authView .auth-story-summary{margin-top:9px;line-height:1.42}
+}
+@media(min-width:1121px) and (max-height:700px){
+  #authView .auth-card{padding:18px clamp(24px,2.5vw,34px);border-radius:20px}
+  #authView .auth-card::before{margin-bottom:8px}
+  #authView .brand-lockup{gap:4px;margin-bottom:8px}
+  #authView .brand-lockup>img{width:58px;height:58px}
+  #authView .brand-lockup h1{font-size:24px}
+  #authView .brand-lockup p{font-size:9px}
+  #authView #loginForm{gap:8px}
+  #authView #loginForm::before{font-size:27px}
+  #authView #loginForm .field:first-of-type::before{margin:0 0 5px;font-size:12px}
+  #authView .field{gap:5px}
+  #authView input,#authView .password-wrap{min-height:42px}
+  #authView .button{min-height:38px;padding-block:7px}
+  #authView .button.primary{min-height:44px;margin-top:1px}
+  #authView .auth-public-links{gap:7px 13px;margin-top:6px;font-size:11px}
+  #authView .auth-card::after{margin-top:7px;font-size:9px}
+  #authView .auth-journey{top:12px;padding:10px 14px 11px;border-radius:14px}
+  #authView .auth-journey-heading{font-size:9px}
+  #authView .auth-journey ol{margin-top:7px}
+  #authView .auth-journey-icon{width:32px;height:32px}
+  #authView .auth-journey ol::before{top:16px}
+  #authView .auth-journey li{gap:4px;font-size:10px}
+  #authView .auth-story{bottom:12px;padding:14px 18px 16px}
+  #authView .auth-story-kicker{margin-bottom:5px;font-size:10px}
+  #authView .auth-story h2{font-size:clamp(30px,2.55vw,42px)}
+  #authView .auth-story-summary{margin-top:7px;font-size:13px;line-height:1.35}
+}
+
+/* v9 tenant workspace long-list resilience */
+#content .tenant-scroll-region{max-height:420px;overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable both-edges;-webkit-overflow-scrolling:touch}
+#content .grid.two .tenant-scroll-region{max-height:340px}
+#content .tenant-scroll-region.tenant-scroll-region-expanded{max-height:min(78vh,900px)}
+#content .tenant-scroll-region table{margin-bottom:0}
+#content .tenant-scroll-region table thead th{position:sticky;top:0;z-index:4;background:#f7f9fc;box-shadow:0 1px 0 #dce4ef}
+#content .tenant-scroll-region.timeline,#content .tenant-scroll-region.bar-list,#content .tenant-scroll-region[role="list"]{padding-right:6px}
+#content .tenant-list-toolbar,#content .tenant-list-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+#content .tenant-list-toolbar{padding:10px 18px;border-bottom:1px solid var(--line,#dce4ef);background:#fbfcfe}
+#content .panel-header .tenant-list-controls{margin-left:auto}
+#content .tenant-list-toggle{white-space:nowrap}
+#content .grid.two{align-items:start}
+#content .grid.two>.panel{align-self:start;height:auto;min-height:0}
+@media(max-width:820px){#content .tenant-scroll-region{max-height:350px}#content .grid.two .tenant-scroll-region{max-height:310px}#content .tenant-scroll-region.tenant-scroll-region-expanded{max-height:72vh}#content .tenant-list-toolbar{padding:9px 14px}}
+@media(max-width:560px){#content .tenant-scroll-region{max-height:320px}#content .grid.two .tenant-scroll-region{max-height:290px}#content .tenant-scroll-region.tenant-scroll-region-expanded{max-height:68vh}#content .tenant-list-toolbar,#content .tenant-list-controls{align-items:stretch}#content .tenant-list-toolbar .tenant-list-toggle{width:100%}}
+@media print{#content .tenant-scroll-region,#content .tenant-scroll-region.tenant-scroll-region-expanded{max-height:none!important;overflow:visible!important}#content .tenant-list-toolbar,#content .tenant-list-controls{display:none!important}}

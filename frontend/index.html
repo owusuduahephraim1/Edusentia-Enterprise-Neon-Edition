@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#072863"><meta name="referrer" content="no-referrer">
+<title>Edusentia Enterprise Neon Edition</title>
+<link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="r37-final-ui.css"><link rel="stylesheet" href="neon-edition.css">
+</head><body class="neon-shell">
+<a class="skip-link" href="#mainContent">Skip to main content</a>
+<div id="loader" class="loader-screen"><img data-school-logo src="assets/edusentia-mark.svg" alt="Edusentia"><span class="spinner"></span></div>
+<main id="authView" class="auth-view hidden" aria-labelledby="loginTitle">
+  <section class="neon-auth-card">
+    <img src="assets/edusentia-mark.svg" alt="" width="48" height="48"><h1 id="loginTitle">Edusentia Enterprise</h1>
+    <p>Secure Neon Edition sign in</p>
+    <form id="loginForm"><label for="tenantCode">School / institution code</label><input id="tenantCode" name="tenantCode" autocomplete="organization" required>
+    <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required>
+    <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button></form><p id="authMessage" class="auth-status" aria-live="polite"></p>
+  </section>
+</main>
+<div id="appShell" class="hidden">
+<header class="neon-topbar"><div class="neon-brand"><img src="assets/edusentia-mark.svg" alt=""><div><strong id="tenantName">Edusentia Enterprise</strong><span>Neon Edition</span></div></div><div><strong id="userName"></strong> <span id="userRole"></span> <button id="logoutButton" type="button">Sign out</button></div></header>
+<main id="mainContent" class="neon-main"><div class="page-head"><div><h1>Dashboard</h1><p>Operational overview</p></div></div><section id="dashboardCards" class="neon-grid"></section></main>
+</div>
+<main id="fatalView" class="hidden"><section class="neon-auth-card"><h1>Application unavailable</h1><p>A secure service could not be initialized.</p></section></main>
+<script src="config.js"></script><script src="api-client.js"></script><script src="app.js"></script>
+</body></html>

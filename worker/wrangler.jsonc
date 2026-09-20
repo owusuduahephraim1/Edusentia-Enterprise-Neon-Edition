@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "edusentia-enterprise-neon-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-20",
+  "observability": {"enabled": true},
+  "vars": {
+    "APP_ORIGIN": "https://owusuduahephraim1.github.io",
+    "SESSION_COOKIE_NAME": "__Host-edusentia_session",
+    "SESSION_TTL_SECONDS": "28800",
+    "PRODUCT_VERSION": "neon-v1.0.0"
+  },
+  "r2_buckets": [{"binding":"OBJECTS","bucket_name":"edusentia-enterprise-neon"}]
+}

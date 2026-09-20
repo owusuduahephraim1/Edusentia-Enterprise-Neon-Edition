@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 960" role="img" aria-labelledby="title desc">
+  <title id="title">Edusentia academic workspace pattern</title>
+  <desc id="desc">A subtle open book connected to learning and reporting nodes.</desc>
+  <defs>
+    <linearGradient id="blueLine" x1="190" y1="750" x2="820" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d5ec8" stop-opacity=".24"/>
+      <stop offset=".62" stop-color="#15845d" stop-opacity=".20"/>
+      <stop offset="1" stop-color="#f0b51d" stop-opacity=".17"/>
+    </linearGradient>
+    <linearGradient id="pageWash" x1="280" y1="530" x2="800" y2="880" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d5ec8" stop-opacity=".05"/>
+      <stop offset="1" stop-color="#15845d" stop-opacity=".09"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="764" cy="224" r="148" fill="#0d5ec8" opacity=".03"/>
+  <circle cx="842" cy="648" r="208" fill="#15845d" opacity=".03"/>
+  <path d="M532 478C646 378 720 311 818 216M547 508C682 475 761 438 876 350M558 542C688 560 782 581 886 659" fill="none" stroke="url(#blueLine)" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 13"/>
+
+  <g fill="#fff" stroke-width="2">
+    <circle cx="818" cy="216" r="12" stroke="#0d5ec8" stroke-opacity=".28"/>
+    <circle cx="876" cy="350" r="9" stroke="#15845d" stroke-opacity=".28"/>
+    <circle cx="886" cy="659" r="11" stroke="#f0b51d" stroke-opacity=".30"/>
+  </g>
+  <g fill="#0d5ec8" opacity=".08">
+    <circle cx="818" cy="216" r="4"/>
+    <circle cx="876" cy="350" r="3"/>
+  </g>
+  <circle cx="886" cy="659" r="4" fill="#f0b51d" opacity=".11"/>
+
+  <g stroke="#0d5ec8" stroke-opacity=".17" stroke-width="2" fill="url(#pageWash)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M116 600c133-34 257-10 416 88v184c-150-89-283-119-416-83z"/>
+    <path d="M532 688c135-96 258-126 390-93v186c-129-35-258-7-390 91z"/>
+    <path d="M149 641c117-19 225 7 342 73M149 687c117-12 225 17 342 76M149 733c111-7 214 21 342 76" fill="none"/>
+    <path d="M573 714c105-67 205-91 314-75M573 762c101-58 201-79 314-72M573 810c105-51 204-67 314-61" fill="none"/>
+    <path d="M532 688v184" fill="none" stroke-opacity=".24"/>
+  </g>
+
+  <g fill="#0d5ec8" opacity=".035">
+    <circle cx="128" cy="232" r="5"/><circle cx="156" cy="232" r="5"/><circle cx="184" cy="232" r="5"/>
+    <circle cx="128" cy="260" r="5"/><circle cx="156" cy="260" r="5"/><circle cx="184" cy="260" r="5"/>
+    <circle cx="128" cy="288" r="5"/><circle cx="156" cy="288" r="5"/><circle cx="184" cy="288" r="5"/>
+  </g>
+  <path d="M210 340h84M252 298v84" stroke="#15845d" stroke-opacity=".045" stroke-width="3" stroke-linecap="round"/>
+  <path d="M686 112l18 18-18 18-18-18z" fill="none" stroke="#0d5ec8" stroke-opacity=".07" stroke-width="2"/>
+</svg>
