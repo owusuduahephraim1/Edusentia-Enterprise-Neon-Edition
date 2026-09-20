@@ -2,9 +2,9 @@
 
 The certified r42 UI source is stored as reference material under `reference/certified-ui/` so legacy vendor transport cannot enter the GitHub Pages artifact.
 
-## Current runtime
+## Runtime boundary
 
-The production `frontend/` shell already uses:
+The production `frontend/` shell uses:
 - `window.EDS_MASTER_CONFIG.apiBaseUrl`
 - credentialed Cloudflare Worker requests
 - Worker-managed tenant and platform authentication
@@ -12,19 +12,46 @@ The production `frontend/` shell already uses:
 - explicit certified RPC calls
 - Cloudflare R2 upload/download routes
 
-## Active parity work
+The full quality workflow is path-gated on `frontend/**`, so frontend-only changes run the same no-vendor-runtime, Pages, contract, and Worker checks as backend changes.
 
-The next UI parity work is to port certified behavior from `reference/certified-ui/` into the production frontend without copying Supabase transport.
+## Completed parity slices
+
+- Certified authentication visual shell while retaining Neon tenant-code login, Turnstile, MFA, and recovery
+- Certified signed-in sidebar, topbar, responsive navigation, profile context, and refresh state
+- Worker-backed Dashboard bootstrap metrics
+- Student directory, search, and protected student creation
+- General staff directory
+- Certified Academic configuration for System Administrator + AAL2:
+  - academic calendar context
+  - configuration readiness
+  - academic years, classes, subjects, assignments, and assessment-scheme summaries
+  - protected active-period selection
+- Certified teacher directory and teacher record creation for System Administrator + AAL2
+- Certified Principal appointment directory and record creation for System Administrator + AAL2
+- Certified notification count, notification center, and mark-read behavior
+- Legacy certified UI source isolated outside the production frontend tree
+
+## Next UI parity work
+
+Continue porting certified behavior from `reference/certified-ui/` without copying legacy transport.
 
 Priority sequence:
-1. certified application shell and navigation
-2. dashboard/bootstrap rendering
-3. academic configuration and student workflows
-4. teacher/headteacher/timetable workflows
-5. report workflow and R2-backed PDF behavior
-6. finance and remaining active modules
+1. teacher/Principal record editing, archive/restore, photographs, and Principal signature
+2. class timetable console and timetable mutations
+3. report editor, report workflow transitions, and R2-backed official PDF behavior
+4. richer student lifecycle, import, promotion, and enrollment workflows
+5. finance workflows beyond the current summary
+6. remaining active certified modules and role-specific workspaces
 
-Each ported slice must use Worker APIs or allowlisted certified RPC operations, preserve tenant routing and AAL requirements, and remain covered by the no-Supabase runtime gate.
+Retired Inventory, Library, and Transport workspaces must remain retired.
+
+## Current Neon environment note
+
+The non-primary Neon branch `reference-parity-r42-20260920` is still at control-plane schema `0019` while the repository release manifest is `0025`.
+
+The repository migrations `0020` through `0025` were located and reviewed. A no-compute rollback branch named `backup-reference-parity-r42-pre-0025-20260920` was created before any attempted persistent migration. No migration was applied, and the parity control-plane database remains unchanged at `0019`.
+
+Applying `0020` through `0025` contains schema operations such as constraint/index replacement and therefore requires explicit approval before executing against the persistent parity database.
 
 ## Release rule
 
