@@ -58,83 +58,6 @@ AS $function$
   select coalesce((public.license_effective_entitlement()->'plan'->'feature_flags'->>feature_code)::boolean,false)
 $function$;
 
-CREATE OR REPLACE FUNCTION public.can_publish_report(target_report_id uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'extensions'
-AS $function$
-  select public.is_system_admin()
-    or public.is_assigned_class_teacher(public.report_class_id(target_report_id))
-$function$;
-
-CREATE OR REPLACE FUNCTION public.can_view_report_pdf(target_report_id uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'extensions'
-AS $function$
-  select public.can_view_report(target_report_id)
-    and (
-      public.current_app_role()::text in ('system_admin','principal','class_teacher','subject_teacher')
-      or not coalesce((public.finance_student_hold_status(public.report_student_id(target_report_id))->>'block_report_pdf')::boolean,false)
-    )
-$function$;
-
-CREATE OR REPLACE FUNCTION public.can_manage_report_pdf(target_report_id uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'extensions'
-AS $function$
-  select exists(
-    select 1 from public.student_reports r
-    where r.id=target_report_id and r.status='published' and r.deleted_at is null
-  )
-  and public.can_publish_report(target_report_id)
-  and exists(
-    select 1 from public.profiles p
-    where p.id=auth.uid() and p.active
-      and (
-        (not coalesce(p.mfa_required,false) and public.current_app_role()::text<>'system_admin')
-        or public.current_aal()='aal2'
-      )
-  )
-$function$;
-
-CREATE OR REPLACE FUNCTION public.can_delete_report_pdf_object(target_report_id uuid, target_storage_path text)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'extensions'
-AS $function$
-  select public.can_manage_report_pdf(target_report_id)
-    and not exists(
-      select 1 from public.report_publications p
-      where p.report_id=target_report_id
-        and p.revoked_at is null
-        and p.storage_path=target_storage_path
-    )
-$function$;
-
-CREATE OR REPLACE FUNCTION public.list_report_pdf_paths(target_report_id uuid)
- RETURNS text[]
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'extensions'
-AS $function$
-begin
-  if not public.can_delete_report(target_report_id) then
-    raise exception 'Access denied' using errcode='42501';
-  end if;
-  return coalesce(
-    (select array_agg(distinct p.storage_path order by p.storage_path)
-     from public.report_publications p
-     where p.report_id=target_report_id and btrim(coalesce(p.storage_path,''))<>''),
-    '{}'::text[]
-  );
-end $function$;
-
 create or replace function public.finance_student_outstanding(target_student_id uuid)
 returns numeric
 language sql
@@ -212,6 +135,84 @@ begin
   );
 end
 $$;
+
+
+CREATE OR REPLACE FUNCTION public.can_publish_report(target_report_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+  select public.is_system_admin()
+    or public.is_assigned_class_teacher(public.report_class_id(target_report_id))
+$function$;
+
+CREATE OR REPLACE FUNCTION public.can_view_report_pdf(target_report_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+  select public.can_view_report(target_report_id)
+    and (
+      public.current_app_role()::text in ('system_admin','principal','class_teacher','subject_teacher')
+      or not coalesce((public.finance_student_hold_status(public.report_student_id(target_report_id))->>'block_report_pdf')::boolean,false)
+    )
+$function$;
+
+CREATE OR REPLACE FUNCTION public.can_manage_report_pdf(target_report_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+  select exists(
+    select 1 from public.student_reports r
+    where r.id=target_report_id and r.status='published' and r.deleted_at is null
+  )
+  and public.can_publish_report(target_report_id)
+  and exists(
+    select 1 from public.profiles p
+    where p.id=auth.uid() and p.active
+      and (
+        (not coalesce(p.mfa_required,false) and public.current_app_role()::text<>'system_admin')
+        or public.current_aal()='aal2'
+      )
+  )
+$function$;
+
+CREATE OR REPLACE FUNCTION public.can_delete_report_pdf_object(target_report_id uuid, target_storage_path text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+  select public.can_manage_report_pdf(target_report_id)
+    and not exists(
+      select 1 from public.report_publications p
+      where p.report_id=target_report_id
+        and p.revoked_at is null
+        and p.storage_path=target_storage_path
+    )
+$function$;
+
+CREATE OR REPLACE FUNCTION public.list_report_pdf_paths(target_report_id uuid)
+ RETURNS text[]
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+begin
+  if not public.can_delete_report(target_report_id) then
+    raise exception 'Access denied' using errcode='42501';
+  end if;
+  return coalesce(
+    (select array_agg(distinct p.storage_path order by p.storage_path)
+     from public.report_publications p
+     where p.report_id=target_report_id and btrim(coalesce(p.storage_path,''))<>''),
+    '{}'::text[]
+  );
+end $function$;
 
 create or replace function public.register_report_pdf(
   target_report_id uuid,
