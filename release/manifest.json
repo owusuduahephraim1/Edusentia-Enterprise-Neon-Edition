@@ -4,7 +4,7 @@
   "sourceBaseline": "Edusentia-Enterprise-r42-v18-STABLE-20260919",
   "sourceCommit": "a181e18e0ca044db756193209b5b089cd03efb0f",
   "suppliedBlueprint": "Edusentia-Enterprise-r42-v17-STABLE-20260913",
-  "databaseSchemaVersion": "0015",
+  "databaseSchemaVersion": "0016",
   "apiVersion": "v1",
   "frontendVersion": "neon-v1.0.0-dev",
   "workerVersion": "neon-v1.0.0-dev",

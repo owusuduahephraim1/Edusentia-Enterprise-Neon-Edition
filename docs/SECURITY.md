@@ -2,7 +2,7 @@
 
 - No database or R2 credentials in browser code.
 - Credentialed CORS is restricted to the configured GitHub Pages origin.
-- Opaque sessions use Secure + HttpOnly cookies and server-side revocation.
+- Opaque sessions use Secure + HttpOnly cookies and server-side revocation.\n- MFA-required memberships cannot obtain an authenticated session until TOTP or a one-time recovery code completes an assurance-level-2 challenge. TOTP secrets are AES-GCM encrypted at rest with domain-separated key material derived from the server-side session secret.
 - Passwords use salted scrypt with versioned algorithm metadata.
 - Tenant IDs are resolved from sessions and reinforced by forced PostgreSQL RLS.
 - The deployed Worker uses `edusentia_worker_runtime`, a SQL-created role with no `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, or inherited Neon superuser membership. The Neon-managed deployment credential is never used by the live Worker.

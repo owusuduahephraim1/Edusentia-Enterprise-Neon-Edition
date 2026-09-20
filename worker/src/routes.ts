@@ -1,7 +1,7 @@
 import type { Env, SessionContext } from "./types";
 import { db, tenantTx } from "./db";
 import { readJson, json, error } from "./http";
-import { authenticate, login, logout, setCookie, clearCookie } from "./auth";
+import { authenticate, login, completeMfa, logout, setCookie, clearCookie } from "./auth";
 import { verifyTurnstile } from "./turnstile";
 
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}

@@ -17,7 +17,7 @@
     <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required>
     <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
     <div id="turnstileWidget" class="turnstile-slot" aria-label="Human verification"></div>
-    <button type="submit">Sign in</button></form><p id="authMessage" class="auth-status" aria-live="polite"></p>
+    <button type="submit">Sign in</button></form>\n    <section id="mfaPanel" class="hidden" aria-labelledby="mfaTitle"><h2 id="mfaTitle">Two-step verification</h2><p id="mfaHelp"></p><div id="mfaSetup" class="mfa-setup hidden"><p>Add this account to your authenticator app using the setup key:</p><code id="mfaSecret"></code><p class="auth-note">Use a time-based (TOTP), 6-digit, 30-second account.</p></div><form id="mfaForm"><label for="mfaCode">Authenticator or recovery code</label><input id="mfaCode" name="mfaCode" autocomplete="one-time-code" inputmode="numeric" required><button type="submit">Verify and continue</button><button id="mfaBack" class="secondary-button" type="button">Back to sign in</button></form></section>\n    <section id="recoveryPanel" class="hidden" aria-labelledby="recoveryTitle"><h2 id="recoveryTitle">Save your recovery codes</h2><p>Store these one-time codes somewhere secure. They will not be shown again.</p><pre id="recoveryCodes" class="recovery-codes"></pre><button id="recoveryContinue" type="button">I saved these codes</button></section>\n    <p id="authMessage" class="auth-status" aria-live="polite"></p>
   </section>
 </main>
 <div id="appShell" class="hidden">
