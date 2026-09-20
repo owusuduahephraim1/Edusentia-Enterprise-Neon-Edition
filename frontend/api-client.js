@@ -35,7 +35,7 @@
     request,
     health: () => request("/api/health"),
     session: () => request("/api/session"),
-    login: (email, password, tenantCode) => request("/api/auth/login", { method: "POST", body: { email, password, tenantCode } }),
+    login: (email, password, tenantCode, turnstileToken) => request("/api/auth/login", { method: "POST", body: { email, password, tenantCode, turnstileToken } }),
     logout: () => request("/api/auth/logout", { method: "POST" }),
     bootstrap: () => request("/api/bootstrap"),
     listStudents: (query = {}) => request(`/api/students?${new URLSearchParams(query)}`),
