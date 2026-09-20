@@ -1,0 +1,88 @@
+name: Reference Tenant Compatibility Smoke
+
+on:
+  push:
+    branches: [reference-parity-r42]
+    paths:
+      - "database/reference-compat/**"
+      - "database/tenant-template/**"
+      - "database/migrations/0001_platform_and_context.sql"
+      - "database/migrations/0002_identity_auth.sql"
+      - "database/migrations/0003_school_people.sql"
+      - "database/migrations/0004_academics_reporting.sql"
+      - "database/migrations/0005_finance_hr_admissions.sql"
+      - "database/migrations/0006_audit_storage_security.sql"
+      - "database/migrations/0007_rls_and_runtime_grants.sql"
+      - "database/migrations/0008_bootstrap_and_retention.sql"
+      - "database/migrations/0009_academic_models.sql"
+      - "database/migrations/0010_student_services.sql"
+      - "database/migrations/0011_finance_enterprise.sql"
+      - "database/migrations/0012_documents_and_identity.sql"
+      - "database/migrations/0013_operations_compliance.sql"
+      - "database/migrations/0014_bootstrap_auth_hardening.sql"
+      - "database/migrations/0016_mfa_login_challenges.sql"
+      - ".github/workflows/reference-compat-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-compat-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certified-core:
+    runs-on: ubuntu-latest
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Require Neon deployment credential
+        run: test -n "$BOOTSTRAP_DATABASE_URL"
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Install certified core into disposable isolated tenant
+        shell: bash
+        run: |
+          set -euo pipefail
+          DB="edusentia_ref_ci_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          DB="${DB//-/_}"; DB="${DB:0:60}"
+          cleanup(){ psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$DB\" with (force);" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          cleanup
+          psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$DB\";"
+          URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" DB="$DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.DB;process.stdout.write(u.toString())')"
+          echo "::add-mask::$URL"
+
+          for migration in \
+            database/migrations/0001_platform_and_context.sql \
+            database/migrations/0002_identity_auth.sql \
+            database/migrations/0003_school_people.sql \
+            database/migrations/0004_academics_reporting.sql \
+            database/migrations/0005_finance_hr_admissions.sql \
+            database/migrations/0006_audit_storage_security.sql \
+            database/migrations/0007_rls_and_runtime_grants.sql \
+            database/migrations/0008_bootstrap_and_retention.sql \
+            database/migrations/0009_academic_models.sql \
+            database/migrations/0010_student_services.sql \
+            database/migrations/0011_finance_enterprise.sql \
+            database/migrations/0012_documents_and_identity.sql \
+            database/migrations/0013_operations_compliance.sql \
+            database/migrations/0014_bootstrap_auth_hardening.sql \
+            database/migrations/0016_mfa_login_challenges.sql
+          do psql "$URL" -v ON_ERROR_STOP=1 -f "$migration"; done
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/tenant-template/0020_tenant_runtime_parity.sql
+          TARGET_DATABASE_URL="$URL" bash database/reference-compat/install-core.sh
+
+          test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
+          test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"
+          test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
+          test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0027"
+          echo "Certified reference core compatibility smoke passed."
