@@ -1,13 +1,13 @@
 {
   "edition": "Edusentia Enterprise Neon Edition",
-  "version": "neon-v1.0.0-dev",
+  "version": "neon-v1.0.0-r42-parity",
   "sourceBaseline": "Edusentia-Enterprise-r42-v18-STABLE-20260919",
   "sourceCommit": "a181e18e0ca044db756193209b5b089cd03efb0f",
   "suppliedBlueprint": "Edusentia-Enterprise-r42-v17-STABLE-20260913",
-  "databaseSchemaVersion": "0019",
+  "databaseSchemaVersion": "0025",
   "apiVersion": "v1",
-  "frontendVersion": "neon-v1.0.0-dev",
-  "workerVersion": "neon-v1.0.0-dev",
+  "frontendVersion": "neon-v1.0.0-r42-parity",
+  "workerVersion": "neon-v1.0.0-r42-parity",
   "runtime": {
     "frontend": "GitHub Pages",
     "api": "Cloudflare Workers",
