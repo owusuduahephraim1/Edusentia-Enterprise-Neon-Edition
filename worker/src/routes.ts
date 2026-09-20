@@ -127,7 +127,9 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({rows,limit,offset});
   }
   if(method==="POST"&&p==="/api/students"){
-    requireRole(ctx,["system_admin","principal","academic_admin","records_officer"]);const b=await readJson<any>(request);\n    const capacityRows=await sql`select app.platform_capacity_snapshot(${ctx.tenantId}::uuid) result`,capacity=(capacityRows[0] as any)?.result||{};\n    if(capacity.admissions_blocked)return error("student_capacity_reached","Student admission is blocked because the licensed capacity has been reached",409,requestId);
+    requireRole(ctx,["system_admin","principal","academic_admin","records_officer"]);const b=await readJson<any>(request);
+    const capacityRows=await sql`select app.platform_capacity_snapshot(${ctx.tenantId}::uuid) result`,capacity=(capacityRows[0] as any)?.result||{};
+    if(capacity.admissions_blocked)return error("student_capacity_reached","Student admission is blocked because the licensed capacity has been reached",409,requestId);
     if(!b.firstName||!b.lastName||!b.studentNo) return error("validation_error","Student number, first name and last name are required",422,requestId);
     const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`insert into app.students(tenant_id,student_no,first_name,middle_name,last_name,gender,date_of_birth,status,created_by) values(${ctx.tenantId}::uuid,${String(b.studentNo).trim()},${String(b.firstName).trim()},${String(b.middleName||'').trim()},${String(b.lastName).trim()},${String(b.gender||'unspecified')},${b.dateOfBirth||null},'active',${ctx.userId}::uuid) returning *`]);
     return json({student:rows[0]},201);
