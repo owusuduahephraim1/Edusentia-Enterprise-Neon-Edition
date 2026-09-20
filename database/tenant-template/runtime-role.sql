@@ -58,6 +58,30 @@ grant execute on function app.platform_apply_license(uuid,uuid,text,timestamptz,
 -- Certified compatibility operations exposed by the Worker allowlist.
 grant execute on function public.get_bootstrap_data()
   to edusentia_worker_runtime;
+grant execute on function public.get_report_editor(uuid,uuid,uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.get_report_revisions(uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.list_audit_events(text,uuid,integer,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.list_notifications(integer,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.list_profiles_with_access()
+  to edusentia_worker_runtime;
+grant execute on function public.search_students(text,uuid,public.student_status,integer,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.mark_notifications_read(uuid[])
+  to edusentia_worker_runtime;
+grant execute on function public.save_student(jsonb)
+  to edusentia_worker_runtime;
+grant execute on function public.bulk_import_students(jsonb,text)
+  to edusentia_worker_runtime;
+grant execute on function public.bulk_import_scores(uuid,uuid,jsonb,text)
+  to edusentia_worker_runtime;
+grant execute on function public.save_report_card(jsonb,integer)
+  to edusentia_worker_runtime;
+grant execute on function public.transition_report_status(uuid,public.report_status,text,integer)
+  to edusentia_worker_runtime;
 
 alter default privileges in schema app grant select,insert,update,delete on tables to edusentia_worker_runtime;
 alter default privileges in schema academics grant select,insert,update,delete on tables to edusentia_worker_runtime;
