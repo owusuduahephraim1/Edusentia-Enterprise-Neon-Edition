@@ -3,6 +3,30 @@
   const byId = id => document.getElementById(id);
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const api = () => window.EdusentiaApi;
+  const turnstileSiteKey = String(window.EDS_MASTER_CONFIG?.turnstileSiteKey || "").trim();
+  let turnstileToken = "";
+  let turnstileWidgetId = null;
+
+  function resetTurnstile() {
+    turnstileToken = "";
+    if (window.turnstile && turnstileWidgetId != null) {
+      try { window.turnstile.reset(turnstileWidgetId); } catch {}
+    }
+  }
+
+  function renderTurnstile() {
+    if (!turnstileSiteKey || !window.turnstile || turnstileWidgetId != null || !byId("turnstileWidget")) return;
+    turnstileWidgetId = window.turnstile.render("#turnstileWidget", {
+      sitekey: turnstileSiteKey,
+      action: "login",
+      theme: "auto",
+      size: "flexible",
+      callback: token => { turnstileToken = String(token || ""); message(""); },
+      "expired-callback": () => { turnstileToken = ""; message("Verification expired. Please verify again.", "error"); },
+      "error-callback": () => { turnstileToken = ""; message("Human verification could not be completed. Please try again.", "error"); }
+    });
+  }
+  window.onTurnstileLoad = renderTurnstile;
 
   function show(view) {
     for (const id of ["loader","authView","appShell","fatalView"]) byId(id)?.classList.add("hidden");
@@ -15,10 +39,10 @@
     show("loader");
     try {
       const session = await api().session();
-      if (!session?.authenticated) return show("authView");
+      if (!session?.authenticated) { show("authView"); renderTurnstile(); return; }
       await enter(session);
     } catch (error) {
-      show("authView");
+      show("authView"); renderTurnstile();
       if (error?.code !== "unauthenticated") message("The secure API is not reachable yet. Check the Worker configuration.", "error");
     }
   }
@@ -38,9 +62,14 @@
   byId("loginForm")?.addEventListener("submit", async event => {
     event.preventDefault(); message("");
     const fd=new FormData(event.currentTarget); const button=event.currentTarget.querySelector('button[type="submit"]');
+    if (turnstileSiteKey && !turnstileToken) { message("Complete the human verification before signing in.", "error"); renderTurnstile(); return; }
     button.disabled=true;
-    try { const s=await api().login(fd.get("email"),fd.get("password"),fd.get("tenantCode")); await enter(s); }
-    catch(error){ message(error.message || "Sign-in failed", "error"); }
+    try {
+      const s=await api().login(fd.get("email"),fd.get("password"),fd.get("tenantCode"),turnstileToken);
+      turnstileToken="";
+      await enter(s);
+    }
+    catch(error){ message(error.message || "Sign-in failed", "error"); resetTurnstile(); }
     finally { button.disabled=false; }
   });
   byId("logoutButton")?.addEventListener("click", async () => { try { await api().logout(); } finally { location.reload(); } });
