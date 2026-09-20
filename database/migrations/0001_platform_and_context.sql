@@ -17,6 +17,16 @@ create table if not exists app.release_identity(
   edition text primary key, version text not null, source_baseline text not null, source_commit text not null,
   schema_version text not null, api_version text not null, frontend_version text not null, worker_version text not null, created_at timestamptz not null default now()
 );
+insert into app.release_identity(edition,version,source_baseline,source_commit,schema_version,api_version,frontend_version,worker_version)
+values(
+  'Edusentia Enterprise Neon Edition',
+  'neon-v1.0.0-dev',
+  'Edusentia-Enterprise-r42-v18-STABLE-20260919',
+  'a181e18e0ca044db756193209b5b089cd03efb0f',
+  '0001','v1','neon-v1.0.0-dev','neon-v1.0.0-dev'
+)
+on conflict(edition) do nothing;
+
 create or replace function app.current_tenant_id() returns uuid language sql stable as $$select nullif(current_setting('app.tenant_id',true),'')::uuid$$;
 create or replace function app.current_user_id() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;
 create or replace function app.current_role() returns text language sql stable as $$select nullif(current_setting('app.role',true),'')$$;
