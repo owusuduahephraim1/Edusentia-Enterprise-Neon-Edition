@@ -61,6 +61,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0036_certified_staff_runtime_guards.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0037_certified_academic_configuration_mutations.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0038_certified_teacher_principal_crud.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0039_certified_timetable_academic_alignment.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -78,9 +79,10 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0038"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0039"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0037_certified_academic_configuration_mutations'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0038_certified_teacher_principal_crud'")" = "1"
+  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0039_certified_timetable_academic_alignment'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
   test "$(psql "$db_url" -Atc "select institution_type from app.tenants where id='$tenant_id'::uuid")" = "$institution_type"
   test "$(psql "$db_url" -Atc "select legal_name='$school_name' and email=lower('$admin_email') from app.school_settings where tenant_id='$tenant_id'::uuid")" = "t"
@@ -103,6 +105,8 @@ SQL
   test "$(psql "$db_url" -Atc "select exists(select 1 from pg_constraint where conname='classes_class_teacher_record_id_fkey' and conrelid='public.classes'::regclass)")" = "t"
   test "$(psql "$db_url" -Atc "select not has_function_privilege('edusentia_worker_runtime','public.enforce_licensed_write()','execute') and not has_function_privilege('edusentia_worker_runtime','public.sync_teacher_responsibility_access(uuid)','execute')")" = "t"
   test "$(psql "$db_url" -Atc "select has_function_privilege('edusentia_worker_runtime','public.list_teachers(text,text,text,integer,integer)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_teacher(jsonb)','execute') and has_function_privilege('edusentia_worker_runtime','public.archive_teacher(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.restore_teacher(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.list_headteachers(text,text,text,integer,integer)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_headteacher(jsonb)','execute') and has_function_privilege('edusentia_worker_runtime','public.archive_headteacher(uuid,text)','execute') and has_function_privilege('edusentia_worker_runtime','public.restore_headteacher(uuid,text)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select to_regclass('public.class_timetable_entries') is not null and not has_table_privilege('edusentia_worker_runtime','public.class_timetable_entries','select') and has_function_privilege('edusentia_worker_runtime','public.get_class_timetable_console(uuid,uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.save_class_timetable_entry(jsonb)','execute') and not has_function_privilege('edusentia_worker_runtime','public.validate_class_timetable_entry()','execute') and not has_function_privilege('edusentia_worker_runtime','public.can_view_class_timetable(uuid)','execute')")" = "t"
+  test "$(psql "$db_url" -Atc "select exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='class_timetable_entries' and t.tgname='class_timetable_entry_integrity_guard' and not t.tgisinternal) and exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='class_timetable_entries' and t.tgname='class_timetable_entries_audit' and not t.tgisinternal)")" = "t"
   test "$(psql "$db_url" -Atc "select count(*)=5 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal and ((c.relname='teachers' and t.tgname in('teachers_audit','teachers_license_write_guard','sync_teacher_record_class_links_trigger')) or (c.relname='headteachers' and t.tgname in('headteachers_audit','headteachers_license_write_guard')))")" = "t"
 
   WORKER_BOOTSTRAP_OK="$(psql "$db_url" -X -qAtc "begin; set local role edusentia_worker_runtime; select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint); select public.get_bootstrap_data() is not null; rollback;" | tail -1)"
@@ -160,6 +164,54 @@ end
 select true;
 rollback;
 " | tail -1)"
+  WORKER_TIMETABLE_CONSOLE_OK="$(psql "$db_url" -X -qAtc "
+begin;
+set local role edusentia_worker_runtime;
+select app.set_request_context('$tenant_id'::uuid,'$ADMIN_ID'::uuid,'system_admin',2::smallint);
+do \$timetable_smoke\$
+declare
+  cfg jsonb;
+  year_id uuid;
+  class_id uuid;
+  console jsonb;
+begin
+  cfg:=public.save_academic_entity(
+    'academic_years',
+    jsonb_build_object(
+      'name','Synthetic Timetable 2026/2027',
+      'start_date','2026-09-01',
+      'end_date','2027-07-31'
+    )
+  );
+  select nullif(x->>'id','')::uuid into year_id
+  from jsonb_array_elements(cfg->'academic_years') x
+  where x->>'name'='Synthetic Timetable 2026/2027'
+  limit 1;
+  if year_id is null then raise exception 'synthetic_timetable_year_missing'; end if;
+
+  cfg:=public.save_academic_entity(
+    'classes',
+    jsonb_build_object(
+      'name','Synthetic Timetable Class',
+      'level_order',900,
+      'active',true
+    )
+  );
+  select nullif(x->>'id','')::uuid into class_id
+  from jsonb_array_elements(cfg->'classes') x
+  where x->>'name'='Synthetic Timetable Class'
+  limit 1;
+  if class_id is null then raise exception 'synthetic_timetable_class_missing'; end if;
+
+  console:=public.get_class_timetable_console(year_id,class_id);
+  if console is null or not coalesce((console->>'can_manage')::boolean,false) then
+    raise exception 'synthetic_timetable_console_failed';
+  end if;
+end
+\$timetable_smoke\$;
+select true;
+rollback;
+" | tail -1)"
   test "$WORKER_BOOTSTRAP_OK" = "t"
   test "$WORKER_ACCESS_OK" = "t"
   test "$WORKER_STUDENT_SEARCH_OK" = "t"
@@ -171,6 +223,7 @@ rollback;
   test "$WORKER_ACADEMIC_SAVE_OK" = "t"
   test "$WORKER_ASSESSMENT_SAVE_OK" = "t"
   test "$WORKER_STAFF_CRUD_OK" = "t"
+  test "$WORKER_TIMETABLE_CONSOLE_OK" = "t"
 }
 
 install_tenant "$BASIC_DB" "00000000-0000-4000-8000-000000000101" "BSC-900001" "Synthetic Basic School" "basic_jhs" "admin@basic.synthetic.invalid"
