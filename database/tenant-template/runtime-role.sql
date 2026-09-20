@@ -162,6 +162,8 @@ grant execute on function public.can_manage_report_pdf(uuid)
   to edusentia_worker_runtime;
 grant execute on function public.can_delete_report_pdf_object(uuid,text)
   to edusentia_worker_runtime;
+grant execute on function public.get_report_pdf_descriptor(uuid)
+  to edusentia_worker_runtime;
 grant execute on function public.list_report_pdf_paths(uuid)
   to edusentia_worker_runtime;
 grant execute on function public.register_report_pdf(uuid,text,text,integer)
