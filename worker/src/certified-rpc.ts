@@ -17,6 +17,7 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "list_notifications",
   "list_profiles_with_access",
   "search_students",
+  "search_students_v5",
   "mark_notifications_read",
   "save_student",
   "bulk_import_students",
@@ -207,6 +208,17 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const page=intArg(args,"page_number",{min:1,max:100000});
       const pageSize=intArg(args,"page_size",{min:1,max:500});
       return singleResult(sql,ctx,txn=>txn`select public.search_students(${search},${classId}::uuid,${status}::public.student_status,${page}::integer,${pageSize}::integer) result`);
+    }
+    case "search_students_v5":{
+      const search=textArg(args,"search_text",{max:200})??"";
+      const classId=uuidArg(args,"target_class_id");
+      const status=textArg(args,"target_status",{max:32});
+      if(status&&!["active","graduated","withdrawn","suspended"].includes(status))throw Object.assign(new Error("target_status is invalid"),{code:"invalid_rpc_arguments",status:422});
+      const archive=textArg(args,"archive_filter",{max:16})??"active";
+      if(!["active","archived","all"].includes(archive))throw Object.assign(new Error("archive_filter is invalid"),{code:"invalid_rpc_arguments",status:422});
+      const page=intArg(args,"page_number",{required:false,min:1,max:100000})??1;
+      const pageSize=intArg(args,"page_size",{required:false,min:1,max:100})??20;
+      return singleResult(sql,ctx,txn=>txn`select public.search_students_v5(${search},${classId}::uuid,${status}::public.student_status,${archive},${page}::integer,${pageSize}::integer) result`);
     }
     case "mark_notifications_read":{
       const ids=uuidArrayArg(args,"notification_ids");
