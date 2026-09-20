@@ -2,6 +2,7 @@ import test from "node:test";import assert from "node:assert/strict";import fs f
 const read=p=>fs.readFileSync(p,"utf8");
 test("r42-v18 accounts staff deletion invariant is preserved",()=>{const sql=read("database/migrations/0005_finance_hr_admissions.sql");assert.match(sql,/archive-only/);assert.doesNotMatch(sql,/delete from finance\.accounts_office_staff/i)});
 test("frontend never receives database configuration",()=>{const c=read("frontend/config.js");assert.doesNotMatch(c,/DATABASE_URL|postgresql:\/\//i)});
+test("certified UI parity stays inside the Worker-backed production boundary",()=>{const h=read("frontend/index.html"),a=read("frontend/app.js"),w=read(".github/workflows/worker-check.yml");assert.match(h,/id="mainNav"/);assert.match(h,/class="app-shell hidden"/);assert.match(a,/window\.EdusentiaApi/);assert.match(a,/get_academic_configuration/);assert.match(a,/set_active_period/);assert.match(w,/"frontend\/\*\*"/);assert.equal(fs.existsSync("frontend/certified"),false);assert.equal(fs.existsSync("reference/certified-ui/app.js"),true);});
 test("session cookie is HttpOnly and Secure",()=>{const a=read("worker/src/auth.ts");assert.match(a,/HttpOnly/);assert.match(a,/Secure/)});
 test("RLS migration forces tenant policies",()=>{const s=read("database/migrations/0007_rls_and_runtime_grants.sql");assert.match(s,/force row level security/i);assert.match(s,/tenant_isolation/)});
 
