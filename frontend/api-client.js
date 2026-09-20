@@ -45,6 +45,7 @@
     completeMfa:(challengeToken,code)=>post("/api/auth/mfa/complete",{challengeToken,code}),
     logout:()=>post("/api/auth/logout"),
     bootstrap:()=>request("/api/bootstrap"),
+    certifiedRpc:(operation,args={})=>post(`/api/compat/rpc/${encodeURIComponent(String(operation||""))}`,{args}),
     licenseStatus:()=>request("/api/license/status"),
     activateLicense:(code)=>post("/api/license/activate",{code}),
     mfaFactors:()=>request("/api/security/mfa/factors"),
