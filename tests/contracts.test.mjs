@@ -24,8 +24,8 @@ test("Tenant template owns school auth and operational data",()=>{const t=read("
 test("School sessions route to isolated databases rather than the master",()=>{const a=read("worker/src/auth.ts"),r=read("worker/src/routes.ts"),d=read("worker/src/tenant-db.ts");assert.match(a,/platform\.resolve_login_route/);assert.match(a,/tenantDb\(env/);assert.match(a,/routedToken/);assert.match(r,/tenantDb\(env,ctx\.databaseName\)/);assert.match(d,/databaseUrl/);assert.match(d,/tokenTenantCode/);});
 test("Tenant template is locked between provisioning operations",()=>{const s=read("database/tenant-template/install.sh");assert.match(s,/allow_connections false/i);assert.match(s,/revoke connect on database/);assert.match(s,/grant connect on database.*edusentia_provisioner/i);});
 
-test("Tenant template installs certified core and least-privilege Worker grants",()=>{const i=read("database/tenant-template/install.sh"),g=read("database/tenant-template/runtime-role.sql"),r=read("database/reference-compat/install-core.sh");assert.match(i,/reference-compat\/install-core\.sh/);assert.match(i,/tenant-template\/runtime-role\.sql/);assert.match(i,/0043/);assert.match(g,/revoke all on authn\.password_credentials from edusentia_worker_runtime/i);assert.match(g,/grant select on authn\.users to edusentia_worker_runtime/i);assert.match(g,/authn\.lookup_login\(text,text\)/);assert.match(r,/0027_reference_core_part_01/);});
-test("Tenant release health requires runtime and certified compatibility identities",()=>{const x=read("worker/src/tenant-release.ts"),p=read("worker/src/provisioning.ts"),r=read("worker/src/platform-routes.ts");assert.match(x,/TENANT_RUNTIME_SCHEMA_VERSION="0020"/);assert.match(x,/CERTIFIED_COMPAT_SCHEMA_VERSION="0043"/);assert.match(x,/get_bootstrap_data/);assert.match(p,/inspectTenantRelease/);assert.match(p,/tenant_release_invalid/);assert.match(r,/certifiedCoreReady/);});
+test("Tenant template installs certified core and least-privilege Worker grants",()=>{const i=read("database/tenant-template/install.sh"),g=read("database/tenant-template/runtime-role.sql"),r=read("database/reference-compat/install-core.sh");assert.match(i,/reference-compat\/install-core\.sh/);assert.match(i,/tenant-template\/runtime-role\.sql/);assert.match(i,/0044/);assert.match(g,/revoke all on authn\.password_credentials from edusentia_worker_runtime/i);assert.match(g,/grant select on authn\.users to edusentia_worker_runtime/i);assert.match(g,/authn\.lookup_login\(text,text\)/);assert.match(r,/0027_reference_core_part_01/);});
+test("Tenant release health requires runtime and certified compatibility identities",()=>{const x=read("worker/src/tenant-release.ts"),p=read("worker/src/provisioning.ts"),r=read("worker/src/platform-routes.ts");assert.match(x,/TENANT_RUNTIME_SCHEMA_VERSION="0020"/);assert.match(x,/CERTIFIED_COMPAT_SCHEMA_VERSION="0044"/);assert.match(x,/get_bootstrap_data/);assert.match(p,/inspectTenantRelease/);assert.match(p,/tenant_release_invalid/);assert.match(r,/certifiedCoreReady/);});
 test("Production school onboarding is limited to Basic JHS and Senior High",()=>{const r=read("worker/src/platform-routes.ts"),h=read("frontend/register.html"),m=read("docs/MODULE_CATALOG.md");assert.match(r,/new Set\(\["basic_jhs","senior_high"\]\)/);assert.doesNotMatch(h,/combined_pretertiary|tertiary/);assert.match(m,/Basic\/JHS and Senior High School/);});
 
 test("Certified RPC bridge uses a fixed server-side allowlist and trusted tenant context",()=>{const b=read("worker/src/certified-rpc.ts"),r=read("worker/src/routes.ts"),g=read("database/tenant-template/runtime-role.sql"),a=read("frontend/api-client.js");assert.match(b,/CERTIFIED_RPC_OPERATIONS/);assert.match(b,/get_bootstrap_data/);assert.match(b,/get_academic_configuration/);assert.match(b,/get_academic_calendar_context/);assert.match(b,/get_my_emergency_academic_delegations/);assert.match(b,/academic_configuration_readiness/);assert.match(b,/set_active_period/);assert.match(b,/search_students/);assert.match(b,/search_students_v5/);assert.match(b,/generate_school_identifier/);assert.match(b,/validate_student_import/);assert.match(b,/save_promotion_cutoff/);assert.match(b,/save_academic_entity/);assert.match(b,/archive_academic_entity/);assert.match(b,/save_grading_scale/);assert.match(b,/archive_grading_scale/);assert.match(b,/save_assessment_scheme/);assert.match(b,/save_class_subject_assignments_batch/);assert.match(b,/get_class_timetable_console/);assert.match(b,/save_class_timetable_entry/);assert.match(b,/list_audit_events_v2/);assert.match(b,/list_audit_archives_v1/);assert.match(b,/list_audit_archive_entries_v1/);assert.match(b,/save_student/);assert.match(b,/transition_report_status/);assert.match(b,/list_notifications/);assert.match(b,/certified_rpc_not_allowed/);assert.match(b,/tenantTx/);assert.doesNotMatch(b,/select\s+public\.\$\{/i);assert.match(r,/invokeCertifiedRpc\(sql,ctx/);assert.match(g,/public\.get_bootstrap_data\(\)/);assert.match(a,/certifiedRpc/);});
@@ -156,4 +156,25 @@ test("Certified report governance prerequisites are table-protected and narrowly
   assert.match(b,/"get_my_emergency_academic_delegations"/);
   assert.doesNotMatch(b,/"term_control_snapshot"/);
   assert.doesNotMatch(b,/"mark_report_correction_applied"/);
+});
+
+
+test("Certified report workflow privacy layer exposes only stable frontend report operations",()=>{
+  const m=read("database/reference-compat/0044_certified_report_workflow_privacy_integrity.sql");
+  const i=read("database/tenant-template/install.sh");
+  const g=read("database/tenant-template/runtime-role.sql");
+  const b=read("worker/src/certified-rpc.ts");
+  assert.match(i,/0044_certified_report_workflow_privacy_integrity\.sql/);
+  for(const fn of ["can_view_report_internal","get_report_revisions","get_report_headteacher_signature","get_report_editor","can_delete_report","delete_report_card_permanently","transition_report_status"]){
+    assert.match(m,new RegExp(fn));
+  }
+  assert.match(m,/report_transition_deadline_allowed/);
+  assert.match(m,/mark_report_correction_applied/);
+  assert.match(m,/REPORT_DRAFT_PERMANENTLY_DELETED/);
+  assert.match(g,/public\.get_report_headteacher_signature\(uuid\)/);
+  assert.match(g,/public\.delete_report_card_permanently\(uuid,text\)/);
+  assert.match(b,/"get_report_headteacher_signature"/);
+  assert.match(b,/"delete_report_card_permanently"/);
+  assert.doesNotMatch(b,/"can_view_report_internal"/);
+  assert.doesNotMatch(b,/"can_delete_report"/);
 });
