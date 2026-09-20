@@ -1,11 +1,37 @@
-// MFA-enabled authentication UI.
+// Worker-backed certified shell parity for the Neon Edition.
 (() => {
   "use strict";
+
   const byId = id => document.getElementById(id);
-  const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
   const api = () => window.EdusentiaApi;
   const turnstileSiteKey = String(window.EDS_MASTER_CONFIG?.turnstileSiteKey || "").trim();
+  const state = {session:null, boot:null, view:"dashboard"};
   let turnstileToken = "", turnstileWidgetId = null, mfaChallenge = "", pendingSession = null;
+
+  const NAV = [
+    {id:"dashboard",label:"Dashboard",icon:"⌂",subtitle:"Academic performance overview",render:renderDashboard},
+    {id:"students",label:"Students",icon:"◎",subtitle:"Student directory and admission records",render:renderStudents},
+    {id:"staff",label:"Staff",icon:"♙",subtitle:"Staff and teacher directory",render:renderStaff},
+    {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees and collections overview",roles:["system_admin","principal","accountant"],render:renderFinance}
+  ];
+
+  function role(){return String(state.session?.membership?.role || state.boot?.capabilities?.role || "").toLowerCase();}
+  function can(item){return !item.roles || item.roles.includes(role());}
+  function canCreateStudent(){return ["system_admin","principal","academic_admin","records_officer"].includes(role());}
+  function friendly(error){return error?.message || "The requested operation could not be completed.";}
+  function show(view){for(const id of ["loader","authView","appShell","fatalView"])byId(id)?.classList.add("hidden");byId(view)?.classList.remove("hidden");}
+  function showAuthStep(step){for(const id of ["loginForm","mfaPanel","recoveryPanel"])byId(id)?.classList.add("hidden");byId(step)?.classList.remove("hidden");}
+  function message(text,kind=""){const el=byId("authMessage");if(!el)return;el.textContent=text||"";el.dataset.kind=kind;el.classList.toggle("hidden",!text);}
+  function setSync(kind,label){const el=byId("syncIndicator");if(!el)return;el.className=`sync-pill ${kind}`;byId("syncLabel").textContent=label;}
+  function setBusy(busy){const content=byId("content");if(content)content.setAttribute("aria-busy",busy?"true":"false");setSync(busy?"pending":"online",busy?"Loading":"Connected");}
+  function status(value){const v=String(value||"unknown").toLowerCase().replace(/[^a-z0-9_]+/g,"_");return `<span class="status ${escapeHtml(v)}">${escapeHtml(String(value||"Unknown").replaceAll("_"," "))}</span>`;}
+  function fullName(row){return [row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ");}
+  function formatDate(value){if(!value)return "—";const d=new Date(value);return Number.isNaN(d.valueOf())?escapeHtml(value):escapeHtml(new Intl.DateTimeFormat(undefined,{year:"numeric",month:"short",day:"2-digit"}).format(d));}
+  function formatAmount(value){const n=Number(value||0);return Number.isFinite(n)?new Intl.NumberFormat(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}).format(n):"0.00";}
+  function empty(messageText){return `<div class="panel pad"><p class="muted">${escapeHtml(messageText)}</p></div>`;}
+  function loading(label="Loading records"){return `<div class="panel pad"><div class="generator-progress"><span class="spinner small"></span><span>${escapeHtml(label)}</span></div></div>`;}
+  function pageError(error){return `<div class="panel pad"><div class="verify-state invalid">${escapeHtml(friendly(error))}</div><p class="muted">Use Refresh to retry. If the problem continues, contact the platform administrator.</p></div>`; }
 
   function resetTurnstile(){turnstileToken="";if(window.turnstile&&turnstileWidgetId!=null){try{window.turnstile.reset(turnstileWidgetId);}catch{}}}
   function renderTurnstile(){
@@ -13,23 +39,133 @@
     turnstileWidgetId=window.turnstile.render("#turnstileWidget",{sitekey:turnstileSiteKey,action:"login",theme:"auto",size:"flexible",callback:token=>{turnstileToken=String(token||"");message("");},"expired-callback":()=>{turnstileToken="";message("Verification expired. Please verify again.","error");},"error-callback":()=>{turnstileToken="";message("Human verification could not be completed. Please try again.","error");}});
   }
   window.onTurnstileLoad=renderTurnstile;
-  function show(view){for(const id of ["loader","authView","appShell","fatalView"])byId(id)?.classList.add("hidden");byId(view)?.classList.remove("hidden");}
-  function showAuthStep(step){for(const id of ["loginForm","mfaPanel","recoveryPanel"])byId(id)?.classList.add("hidden");byId(step)?.classList.remove("hidden");}
-  function message(text,kind=""){const el=byId("authMessage");if(!el)return;el.textContent=text||"";el.dataset.kind=kind;}
+
   async function boot(){
     show("loader");
-    try{const session=await api().session();if(!session?.authenticated){show("authView");showAuthStep("loginForm");renderTurnstile();return;}await enter(session);}
-    catch(error){show("authView");showAuthStep("loginForm");renderTurnstile();if(error?.code!=="unauthenticated")message("The secure API is not reachable yet. Check the Worker configuration.","error");}
+    try{
+      const session=await api().session();
+      if(!session?.authenticated){show("authView");showAuthStep("loginForm");renderTurnstile();return;}
+      await enter(session);
+    }catch(error){
+      show("authView");showAuthStep("loginForm");renderTurnstile();
+      if(error?.code!=="unauthenticated")message("The secure API is not reachable yet. Check the Worker configuration.","error");
+    }
   }
+
   async function enter(session){
-    const data=await api().bootstrap();
-    byId("userName").textContent=session.user?.displayName||session.user?.email||"User";
-    byId("userRole").textContent=session.membership?.roleLabel||session.membership?.role||"Member";
-    byId("tenantName").textContent=data.tenant?.name||"Edusentia Enterprise";
-    const cards=[["Students",data.metrics?.students??0],["Staff",data.metrics?.staff??0],["Classes",data.metrics?.classes??0],["Subjects",data.metrics?.subjects??0],["Attendance",data.metrics?.attendanceToday??0],["Pending reports",data.metrics?.pendingReports??0]];
-    byId("dashboardCards").innerHTML=cards.map(([k,v])=>`<article class="metric-card"><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong></article>`).join("");
+    state.session=session;
+    state.boot=await api().bootstrap();
+    const userName=session.user?.displayName||session.user?.email||"User";
+    const roleLabel=session.membership?.roleLabel||session.membership?.role||"Member";
+    const tenantName=state.boot.tenant?.name||"Edusentia Enterprise";
+    byId("userName").textContent=userName;
+    byId("userRole").textContent=roleLabel;
+    byId("userAvatar").textContent=String(userName).trim().charAt(0).toUpperCase()||"E";
+    byId("brandName").textContent=tenantName;
+    byId("brandLogo").alt=tenantName;
+    renderNav();
     show("appShell");
+    setSync("online","Connected");
+    await navigate("dashboard");
   }
+
+  function renderNav(){
+    const nav=byId("mainNav");
+    const items=NAV.filter(can);
+    nav.innerHTML=items.map(item=>`<button class="nav-item" type="button" data-view="${item.id}"><span class="nav-icon" aria-hidden="true">${item.icon}</span><span class="nav-label">${escapeHtml(item.label)}</span><span class="nav-active-dot" aria-hidden="true"></span></button>`).join("");
+    nav.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>navigate(button.dataset.view)));
+  }
+
+  async function navigate(id){
+    const item=NAV.find(entry=>entry.id===id&&can(entry))||NAV[0];
+    state.view=item.id;
+    byId("pageTitle").textContent=item.label;
+    byId("pageSubtitle").textContent=item.subtitle;
+    byId("mainNav").querySelectorAll("[data-view]").forEach(button=>button.classList.toggle("active",button.dataset.view===item.id));
+    byId("sidebar")?.classList.remove("open");
+    setBusy(true);
+    let failed=false;
+    try{await item.render();}
+    catch(error){failed=true;byId("content").innerHTML=pageError(error);setSync("error","Service issue");}
+    finally{
+      byId("content")?.setAttribute("aria-busy","false");
+      if(!failed)setSync(navigator.onLine?"online":"offline",navigator.onLine?"Connected":"Offline");
+    }
+    byId("content")?.focus({preventScroll:true});
+  }
+
+  async function renderDashboard(){
+    state.boot=await api().bootstrap();
+    const data=state.boot, metrics=data.metrics||{};
+    const stats=[
+      ["Students",metrics.students??0,"◎","blue"],
+      ["Staff",metrics.staff??0,"♙","gold"],
+      ["Classes",metrics.classes??0,"▦","green"],
+      ["Subjects",metrics.subjects??0,"◇","purple"],
+      ["Attendance today",metrics.attendanceToday??0,"✓","green"],
+      ["Pending reports",metrics.pendingReports??0,"▤","gold"]
+    ];
+    const tenant=data.tenant||{};
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>Operational overview</h3><p>${escapeHtml(tenant.name||"School workspace")} • ${escapeHtml(String(tenant.code||"").toUpperCase())}</p></div></div>
+      <section class="stat-grid">${stats.map(([label,value,icon,tone])=>`<article class="stat-card"><span class="stat-icon ${tone}" aria-hidden="true">${icon}</span><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div></article>`).join("")}</section>
+      <section class="grid two">
+        <article class="panel pad"><div class="panel-header"><div><h3>School workspace</h3><p>Current institution context</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Institution model</span><strong>${escapeHtml(String(tenant.institution_type||"Not set").replaceAll("_"," "))}</strong></div><div><span>Tenant code</span><strong>${escapeHtml(tenant.code||"—")}</strong></div></div></div></article>
+        <article class="panel pad"><div class="panel-header"><div><h3>Secure session</h3><p>Worker-resolved identity and authorization</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Role</span><strong>${escapeHtml(state.session?.membership?.roleLabel||state.session?.membership?.role||"Member")}</strong></div><div><span>Assurance level</span><strong>${escapeHtml(data.capabilities?.assuranceLevel||"AAL1")}</strong></div></div></div></article>
+      </section>`;
+  }
+
+  async function renderStudents(){
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>Students</h3><p>Search the active student directory.</p></div><div class="page-actions">${canCreateStudent()?'<button id="addStudentButton" class="button primary" type="button">Add student</button>':""}</div></div>
+      <section class="panel"><form id="studentSearchForm" class="toolbar"><label class="search"><span class="sr-only">Search students</span><input id="studentSearch" name="q" type="search" placeholder="Search name or student number" autocomplete="off"></label><button class="button secondary" type="submit">Search</button></form><div id="studentResults">${loading("Loading students")}</div></section>`;
+    byId("studentSearchForm")?.addEventListener("submit",event=>{event.preventDefault();loadStudents(byId("studentSearch").value.trim());});
+    byId("addStudentButton")?.addEventListener("click",openStudentDialog);
+    await loadStudents("");
+  }
+
+  async function loadStudents(q){
+    const box=byId("studentResults");if(!box)return;box.innerHTML=loading("Loading students");
+    try{
+      const result=await api().listStudents({q,limit:50,offset:0});
+      const rows=Array.isArray(result.rows)?result.rows:[];
+      if(!rows.length){box.innerHTML=empty(q?"No students matched this search.":"No active student records are available yet.");return;}
+      box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Student</th><th>Student no.</th><th>Gender</th><th>Date of birth</th><th>Status</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${escapeHtml((row.first_name||row.last_name||"S").charAt(0).toUpperCase())}</span><span class="cell-copy"><strong>${escapeHtml(fullName(row)||"Unnamed student")}</strong><small>Created ${formatDate(row.created_at)}</small></span></div></td><td>${escapeHtml(row.student_no||"—")}</td><td>${escapeHtml(row.gender||"—")}</td><td>${formatDate(row.date_of_birth)}</td><td>${status(row.status)}</td></tr>`).join("")}</tbody></table></div>`;
+    }catch(error){box.innerHTML=pageError(error);}
+  }
+
+  function openStudentDialog(){
+    const dialog=byId("modal");
+    byId("modalTitle").textContent="Add student";
+    byId("modalSubtitle").textContent="Create a student record within the current school tenant.";
+    byId("modalBody").innerHTML=`<form id="studentCreateForm" class="form-stack"><div class="form-grid"><label class="field"><span>Student number</span><input name="studentNo" required maxlength="60"></label><label class="field"><span>First name</span><input name="firstName" required maxlength="120"></label><label class="field"><span>Middle name</span><input name="middleName" maxlength="120"></label><label class="field"><span>Last name</span><input name="lastName" required maxlength="120"></label><label class="field"><span>Gender</span><select name="gender"><option value="unspecified">Unspecified</option><option value="male">Male</option><option value="female">Female</option></select></label><label class="field"><span>Date of birth</span><input name="dateOfBirth" type="date"></label></div><p id="studentCreateMessage" class="form-message hidden" role="alert"></p></form>`;
+    byId("modalFooter").innerHTML='<button id="studentCancelButton" class="button ghost" type="button">Cancel</button><button id="studentSaveButton" class="button primary" type="submit" form="studentCreateForm">Save student</button>';
+    byId("studentCancelButton").onclick=()=>dialog.close();
+    byId("studentCreateForm").onsubmit=async event=>{
+      event.preventDefault();const form=event.currentTarget,button=byId("studentSaveButton"),msg=byId("studentCreateMessage");button.disabled=true;msg.classList.add("hidden");
+      try{const fd=new FormData(form);await api().createStudent(Object.fromEntries(fd.entries()));dialog.close();await renderStudents();}
+      catch(error){msg.textContent=friendly(error);msg.classList.remove("hidden");}
+      finally{button.disabled=false;}
+    };
+    if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
+  }
+
+  async function renderStaff(){
+    byId("content").innerHTML='<div class="page-head"><div><h3>Staff</h3><p>Current staff and teacher directory.</p></div></div><section id="staffResults">'+loading("Loading staff")+"</section>";
+    const box=byId("staffResults");
+    try{
+      const result=await api().listStaff();const rows=Array.isArray(result.rows)?result.rows:[];
+      if(!rows.length){box.innerHTML=empty("No active staff records are available yet.");return;}
+      box.innerHTML=`<section class="panel"><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Staff no.</th><th>Role / title</th><th>Type</th><th>Phone</th><th>Status</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${escapeHtml(String(row.full_name||"S").charAt(0).toUpperCase())}</span><span class="cell-copy"><strong>${escapeHtml(row.full_name||"Unnamed staff")}</strong><small>${escapeHtml(row.email||"No email")}</small></span></div></td><td>${escapeHtml(row.staff_no||"—")}</td><td>${escapeHtml(row.job_title||"—")}</td><td>${escapeHtml(String(row.staff_type||"—").replaceAll("_"," "))}</td><td>${escapeHtml(row.phone||"—")}</td><td>${status(row.active===false?"inactive":"active")}</td></tr>`).join("")}</tbody></table></div></section>`;
+    }catch(error){box.innerHTML=pageError(error);}
+  }
+
+  async function renderFinance(){
+    byId("content").innerHTML='<div class="page-head"><div><h3>Finance</h3><p>Current fee and collection position.</p></div></div>'+loading("Loading finance summary");
+    const summary=await api().listFinanceSummary();
+    byId("content").innerHTML=`<div class="page-head"><div><h3>Finance</h3><p>Current fee and collection position.</p></div></div><section class="stat-grid"><article class="stat-card"><span class="stat-icon gold" aria-hidden="true">¤</span><div><span>Outstanding balance</span><strong>${formatAmount(summary.outstanding)}</strong></div></article><article class="stat-card"><span class="stat-icon green" aria-hidden="true">+</span><div><span>Received today</span><strong>${formatAmount(summary.received_today)}</strong></div></article><article class="stat-card"><span class="stat-icon purple" aria-hidden="true">!</span><div><span>Overdue invoices</span><strong>${escapeHtml(summary.overdue_invoices??0)}</strong></div></article></section><section class="panel pad"><h3>Finance workspace</h3><p class="muted">Detailed fee schedules, invoices, payments, receipts, holds, and guardian follow-up continue through the certified Worker RPC compatibility layer as their UI slices are ported.</p></section>`;
+  }
+
   function beginMfa(result){
     mfaChallenge=String(result.challengeToken||"");showAuthStep("mfaPanel");
     const enrolling=result.mode==="enroll";
@@ -38,23 +174,31 @@
     byId("mfaSetup").classList.toggle("hidden",!enrolling);byId("mfaSecret").textContent=enrolling?String(result.setup?.secret||""):"";
     byId("mfaCode").value="";byId("mfaCode").focus();
   }
+
   byId("loginForm")?.addEventListener("submit",async event=>{
     event.preventDefault();message("");const fd=new FormData(event.currentTarget),button=event.currentTarget.querySelector('button[type="submit"]');
     if(turnstileSiteKey&&!turnstileToken){message("Complete the human verification before signing in.","error");renderTurnstile();return;}
     button.disabled=true;
     try{const result=await api().login(fd.get("email"),fd.get("password"),fd.get("tenantCode"),turnstileToken);turnstileToken="";if(result?.mfaRequired){beginMfa(result);return;}await enter(result);}
-    catch(error){message(error.message||"Sign-in failed","error");resetTurnstile();}
+    catch(error){message(friendly(error),"error");resetTurnstile();}
     finally{button.disabled=false;}
   });
   byId("mfaForm")?.addEventListener("submit",async event=>{
     event.preventDefault();message("");const button=event.currentTarget.querySelector('button[type="submit"]'),code=String(byId("mfaCode").value||"").trim();button.disabled=true;
     try{const result=await api().completeMfa(mfaChallenge,code);mfaChallenge="";if(Array.isArray(result.recoveryCodes)&&result.recoveryCodes.length){pendingSession=result;byId("recoveryCodes").textContent=result.recoveryCodes.join("\n");showAuthStep("recoveryPanel");}else await enter(result);}
-    catch(error){message(error.message||"Verification failed","error");byId("mfaCode").select();}
+    catch(error){message(friendly(error),"error");byId("mfaCode").select();}
     finally{button.disabled=false;}
   });
   byId("mfaBack")?.addEventListener("click",()=>{mfaChallenge="";showAuthStep("loginForm");resetTurnstile();renderTurnstile();message("");});
   byId("recoveryContinue")?.addEventListener("click",async()=>{if(!pendingSession)return;const s=pendingSession;pendingSession=null;byId("recoveryCodes").textContent="";await enter(s);});
   byId("logoutButton")?.addEventListener("click",async()=>{try{await api().logout();}finally{location.reload();}});
-  if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(()=>{}),{once:true});
+  byId("menuButton")?.addEventListener("click",()=>byId("sidebar")?.classList.toggle("open"));
+  byId("refreshButton")?.addEventListener("click",()=>navigate(state.view));
+  byId("modalClose")?.addEventListener("click",()=>byId("modal")?.close());
+  byId("modal")?.addEventListener("click",event=>{if(event.target===event.currentTarget)event.currentTarget.close();});
+  window.addEventListener("online",()=>setSync("online","Connected"));
+  window.addEventListener("offline",()=>setSync("offline","Offline"));
+
+  if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}),{once:true});
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
 })();
