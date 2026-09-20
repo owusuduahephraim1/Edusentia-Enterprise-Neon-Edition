@@ -212,7 +212,8 @@ test("R2-native report PDF integrity preserves certified authorization and remov
   assert.match(g,/public\.get_report_pdf_descriptor\(uuid\)/);
   assert.match(b,/"list_report_pdf_paths"/);
   assert.match(b,/"register_report_pdf"/);
-  assert.match(r,/\/api\/reports\/\(\[0-9a-f-\]\{36\}\)\/pdf\/upload-url/);
+  assert.match(r,/pdf\\\/upload-url/);
+  assert.match(r,/can_manage_report_pdf/);
   assert.match(r,/guarded report PDF download endpoint/);
   assert.match(r,/can_delete_report_pdf_object/);
   assert.match(api,/uploadReportPdf/);
