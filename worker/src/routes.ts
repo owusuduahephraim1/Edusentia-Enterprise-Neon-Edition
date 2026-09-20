@@ -3,6 +3,7 @@ import { db, tenantTx } from "./db";
 import { readJson, json, error } from "./http";
 import { authenticate, login, completeMfa, logout, setCookie, clearCookie } from "./auth";
 import { verifyTurnstile } from "./turnstile";
+import { platformRoute } from "./platform-routes";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -10,6 +11,7 @@ async function authed(request:Request,env:Env){const ctx=await authenticate(requ
 
 export async function route(request:Request,env:Env,requestId:string):Promise<Response>{
   const url=new URL(request.url), p=url.pathname, method=request.method.toUpperCase();
+  const platformResponse=await platformRoute(request,env,requestId);if(platformResponse)return platformResponse;
   if(method==="GET"&&p==="/api/health"){
     const sql=db(env);let database=false;try{const r=await sql`select 1 as ok`;database=Number((r[0] as any)?.ok)===1;}catch{}
     return json({ok:database,service:"edusentia-neon-api",version:env.PRODUCT_VERSION||"dev",database,storage:Boolean(env.OBJECTS),requestId},database?200:503);

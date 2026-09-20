@@ -7,7 +7,7 @@ export default { async fetch(request:Request,env:Env):Promise<Response>{
   const unsafe=!['GET','HEAD','OPTIONS'].includes(request.method.toUpperCase());
   const origin=request.headers.get('origin')||'';
   const pathname=new URL(request.url).pathname;
-  const bootstrapCli=pathname==='/api/bootstrap/initialize' && !origin && Boolean(request.headers.get('x-bootstrap-secret'));
+  const bootstrapCli=(pathname==='/api/bootstrap/initialize'||pathname==='/api/platform/bootstrap/initialize') && !origin && Boolean(request.headers.get('x-bootstrap-secret'));
   if(unsafe && !bootstrapCli && origin!==env.APP_ORIGIN) return withHeaders(error('origin_denied','Request origin is not allowed',403,requestId),request,env);
   try{return withHeaders(await route(request,env,requestId),request,env);}catch(e:any){
     const status=Number(e?.status||500),code=String(e?.code||(status===500?"internal_error":"request_failed"));
