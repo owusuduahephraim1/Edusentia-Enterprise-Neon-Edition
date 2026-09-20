@@ -138,6 +138,10 @@ grant execute on function public.set_headteacher_photo(uuid,text,timestamp with 
   to edusentia_worker_runtime;
 grant execute on function public.set_my_headteacher_signature(text,timestamp with time zone)
   to edusentia_worker_runtime;
+grant execute on function public.get_class_timetable_console(uuid,uuid)
+  to edusentia_worker_runtime;
+grant execute on function public.save_class_timetable_entry(jsonb)
+  to edusentia_worker_runtime;
 grant execute on function public.list_teachers(text,text,text,integer,integer)
   to edusentia_worker_runtime;
 grant execute on function public.get_teacher_record(uuid)
