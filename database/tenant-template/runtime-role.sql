@@ -60,6 +60,8 @@ grant execute on function public.get_bootstrap_data()
   to edusentia_worker_runtime;
 grant execute on function public.get_academic_configuration()
   to edusentia_worker_runtime;
+grant execute on function public.get_academic_calendar_context()
+  to edusentia_worker_runtime;
 grant execute on function public.academic_configuration_readiness()
   to edusentia_worker_runtime;
 grant execute on function public.set_active_period(uuid,uuid)
