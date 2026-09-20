@@ -86,6 +86,28 @@ begin
   values(p_tenant_id,trim(p_school_name),trim(p_school_name),lower(trim(p_admin_email)))
   on conflict(tenant_id) do update set legal_name=excluded.legal_name,short_name=excluded.short_name,email=excluded.email,updated_at=now();
 
+  -- Keep the certified compatibility identity synchronized with the Neon-native
+  -- school settings. The full compatibility layer is installed before this
+  -- initializer is invoked for a newly provisioned isolated school database.
+  update public.school_settings
+     set school_name=trim(p_school_name),
+         email=lower(trim(p_admin_email)),
+         tenant_code=upper(trim(p_tenant_code)),
+         identifier_root=replace(upper(trim(p_tenant_code)),'-',''),
+         institution_type=trim(p_institution_type),
+         updated_at=now();
+  if not found then
+    insert into public.school_settings(
+      school_name,email,tenant_code,identifier_root,institution_type
+    ) values(
+      trim(p_school_name),
+      lower(trim(p_admin_email)),
+      upper(trim(p_tenant_code)),
+      replace(upper(trim(p_tenant_code)),'-',''),
+      trim(p_institution_type)
+    );
+  end if;
+
   select id into v_user_id from authn.users where lower(email)=lower(trim(p_admin_email)) limit 1;
   if v_user_id is null then
     insert into authn.users(email,display_name) values(lower(trim(p_admin_email)),coalesce(nullif(trim(p_admin_display_name),''),'System Administrator')) returning id into v_user_id;
