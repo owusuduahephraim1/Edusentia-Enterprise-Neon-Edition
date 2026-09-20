@@ -83,8 +83,15 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   if(method==="PUT"&&p==="/api/files/upload"){
     const key=url.searchParams.get("key")||"";if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);
     const [meta]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select id,content_type,size_bytes,status from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='pending' limit 1`]);if(!meta[0])return error("not_found","Upload authorization was not found",404,requestId);
-    const len=Number(request.headers.get("content-length")||0);if(len && len>Number((meta[0] as any).size_bytes))return error("invalid_file_size","Upload exceeds authorized size",413,requestId);
-    await env.OBJECTS.put(key,request.body,{httpMetadata:{contentType:String((meta[0] as any).content_type)}});await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='active',stored_at=now() where id=${(meta[0] as any).id}::uuid`]);return json({ok:true,objectKey:key});
+    const expectedSize=Number((meta[0] as any).size_bytes);
+    const expectedType=String((meta[0] as any).content_type).toLowerCase();
+    const receivedType=String(request.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+    if(receivedType!==expectedType)return error("invalid_content_type","Upload content type does not match authorization",415,requestId);
+    const bytes=await request.arrayBuffer();
+    if(bytes.byteLength!==expectedSize)return error("invalid_file_size","Upload size does not match authorization",413,requestId);
+    await env.OBJECTS.put(key,bytes,{httpMetadata:{contentType:expectedType}});
+    await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='active',stored_at=now() where id=${(meta[0] as any).id}::uuid`]);
+    return json({ok:true,objectKey:key,size:bytes.byteLength});
   }
   if(method==="GET"&&p==="/api/files/download"){
     const key=url.searchParams.get("key")||"";if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);const [meta]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select content_type,original_name from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);if(!meta[0])return error("not_found","File not found",404,requestId);const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","File not found",404,requestId);const h=new Headers();obj.writeHttpMetadata(h);h.set("content-type",String((meta[0] as any).content_type));h.set("content-disposition",`attachment; filename*=UTF-8''${encodeURIComponent(String((meta[0] as any).original_name))}`);h.set("cache-control","private, no-store");return new Response(obj.body,{headers:h});
