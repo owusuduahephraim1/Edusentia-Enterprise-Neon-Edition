@@ -22,7 +22,13 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "transition_report_status",
   "generate_school_identifier",
   "validate_student_import",
-  "save_promotion_cutoff"
+  "save_promotion_cutoff",
+  "save_academic_entity",
+  "archive_academic_entity",
+  "save_grading_scale",
+  "archive_grading_scale",
+  "save_assessment_scheme",
+  "save_class_subject_assignments_batch"
 ] as const);
 
 export type CertifiedRpcOperation=(typeof CERTIFIED_RPC_OPERATIONS)[number];
@@ -186,6 +192,34 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
     case "save_promotion_cutoff":{
       const score=intArg(args,"target_score",{min:40,max:60});
       return singleResult(sql,ctx,txn=>txn`select public.save_promotion_cutoff(${score}::integer) result`);
+    }
+    case "save_academic_entity":{
+      const entityType=textArg(args,"entity_type",{required:true,max:64});
+      const payload=jsonArg(args,"payload");
+      return singleResult(sql,ctx,txn=>txn`select public.save_academic_entity(${entityType},${payload}::jsonb) result`);
+    }
+    case "archive_academic_entity":{
+      const entityType=textArg(args,"entity_type",{required:true,max:64});
+      const targetId=uuidArg(args,"target_id",true);
+      const reason=textArg(args,"reason_text",{max:1000});
+      return singleResult(sql,ctx,txn=>txn`select public.archive_academic_entity(${entityType},${targetId}::uuid,${reason}) result`);
+    }
+    case "save_grading_scale":{
+      const payload=jsonArg(args,"payload");
+      return singleResult(sql,ctx,txn=>txn`select public.save_grading_scale(${payload}::jsonb) result`);
+    }
+    case "archive_grading_scale":{
+      const gradeId=uuidArg(args,"target_grade_id",true);
+      const reason=textArg(args,"reason_text",{max:1000});
+      return singleResult(sql,ctx,txn=>txn`select public.archive_grading_scale(${gradeId}::uuid,${reason}) result`);
+    }
+    case "save_assessment_scheme":{
+      const payload=jsonArg(args,"payload");
+      return singleResult(sql,ctx,txn=>txn`select public.save_assessment_scheme(${payload}::jsonb) result`);
+    }
+    case "save_class_subject_assignments_batch":{
+      const payload=jsonArg(args,"payload");
+      return singleResult(sql,ctx,txn=>txn`select public.save_class_subject_assignments_batch(${payload}::jsonb) result`);
     }
   }
 }
