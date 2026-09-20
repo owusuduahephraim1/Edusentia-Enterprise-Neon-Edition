@@ -23,6 +23,34 @@ begin
 end
 $student_settings_constraints$;
 
+alter table public.enrollments
+  add column if not exists enrollment_origin text not null default 'manual',
+  add column if not exists promotion_source_report_id uuid,
+  add column if not exists promotion_applied_at timestamptz;
+
+alter table public.student_reports
+  add column if not exists promoted_to_class_id uuid;
+
+do $promotion_lineage_constraints$
+begin
+  if not exists(select 1 from pg_constraint where conname='enrollments_origin_chk' and conrelid='public.enrollments'::regclass) then
+    alter table public.enrollments
+      add constraint enrollments_origin_chk
+      check(enrollment_origin in('manual','automatic_promotion'));
+  end if;
+  if not exists(select 1 from pg_constraint where conname='enrollments_promotion_source_report_fk' and conrelid='public.enrollments'::regclass) then
+    alter table public.enrollments
+      add constraint enrollments_promotion_source_report_fk
+      foreign key(promotion_source_report_id) references public.student_reports(id) on delete set null;
+  end if;
+  if not exists(select 1 from pg_constraint where conname='student_reports_promoted_to_class_id_fkey' and conrelid='public.student_reports'::regclass) then
+    alter table public.student_reports
+      add constraint student_reports_promoted_to_class_id_fkey
+      foreign key(promoted_to_class_id) references public.classes(id) on delete set null;
+  end if;
+end
+$promotion_lineage_constraints$;
+
 create sequence if not exists public.student_identifier_seq
   as bigint start with 1 increment by 1 minvalue 1 no maxvalue no cycle cache 1;
 create sequence if not exists public.staff_identifier_seq
