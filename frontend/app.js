@@ -14,6 +14,8 @@
     {id:"academics",label:"Academics",icon:"▦",subtitle:"Academic calendar, classes, subjects and readiness",roles:["system_admin"],render:renderAcademics},
     {id:"students",label:"Students",icon:"◎",subtitle:"Student directory and admission records",render:renderStudents},
     {id:"staff",label:"Staff",icon:"♙",subtitle:"Staff and teacher directory",render:renderStaff},
+    {id:"teachers",label:"Teachers",icon:"♜",subtitle:"Certified teacher records and account links",roles:["system_admin"],render:renderTeachers},
+    {id:"principal",label:"Principal",icon:"★",subtitle:"Certified Principal appointment record",roles:["system_admin"],render:renderPrincipal},
     {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees and collections overview",roles:["system_admin","principal","accountant"],render:renderFinance}
   ];
 
@@ -232,6 +234,71 @@
       if(!rows.length){box.innerHTML=empty("No active staff records are available yet.");return;}
       box.innerHTML=`<section class="panel"><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Staff no.</th><th>Role / title</th><th>Type</th><th>Phone</th><th>Status</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${escapeHtml(String(row.full_name||"S").charAt(0).toUpperCase())}</span><span class="cell-copy"><strong>${escapeHtml(row.full_name||"Unnamed staff")}</strong><small>${escapeHtml(row.email||"No email")}</small></span></div></td><td>${escapeHtml(row.staff_no||"—")}</td><td>${escapeHtml(row.job_title||"—")}</td><td>${escapeHtml(String(row.staff_type||"—").replaceAll("_"," "))}</td><td>${escapeHtml(row.phone||"—")}</td><td>${status(row.active===false?"inactive":"active")}</td></tr>`).join("")}</tbody></table></div></section>`;
     }catch(error){box.innerHTML=pageError(error);}
+  }
+
+  async function renderTeachers(){
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>Teachers</h3><p>Certified teacher records, roles, and assignment visibility.</p></div><div class="page-actions"><button id="addTeacherButton" class="button primary" type="button">Add teacher</button></div></div>
+      <section class="panel"><form id="teacherSearchForm" class="toolbar"><label class="search"><span class="sr-only">Search teachers</span><input id="teacherSearch" name="q" type="search" placeholder="Search name, staff number, email or phone"></label><select id="teacherStatus" aria-label="Employment status"><option value="">All statuses</option><option value="active">Active</option><option value="leave">Leave</option><option value="suspended">Suspended</option><option value="resigned">Resigned</option><option value="retired">Retired</option></select><button class="button secondary" type="submit">Search</button></form><div id="teacherResults">${loading("Loading teachers")}</div></section>`;
+    byId("teacherSearchForm")?.addEventListener("submit",event=>{event.preventDefault();loadTeachers();});
+    byId("addTeacherButton")?.addEventListener("click",()=>openTeacherDialog());
+    await loadTeachers();
+  }
+
+  async function loadTeachers(){
+    const box=byId("teacherResults");if(!box)return;box.innerHTML=loading("Loading teachers");
+    try{
+      const result=await certified("list_teachers",{search_text:byId("teacherSearch")?.value?.trim()||"",status_filter:byId("teacherStatus")?.value||"",archive_filter:"active",page_number:1,page_size:100});
+      const rows=Array.isArray(result?.rows)?result.rows:[];
+      if(!rows.length){box.innerHTML=empty("No active teacher records matched the current filters.");return;}
+      box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Staff no.</th><th>Qualification</th><th>Specialization</th><th>Assignments</th><th>Status</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${escapeHtml(String(row.full_name||"T").charAt(0).toUpperCase())}</span><span class="cell-copy"><strong>${escapeHtml(row.full_name||"Unnamed teacher")}</strong><small>${escapeHtml(row.email||row.profile_email||"No email")}</small></span></div></td><td>${escapeHtml(row.staff_no||"—")}</td><td>${escapeHtml(row.qualification||"—")}</td><td>${escapeHtml(row.specialization||"—")}</td><td>${escapeHtml((Array.isArray(row.class_assignments)?row.class_assignments.length:0)+(Array.isArray(row.subject_assignments)?row.subject_assignments.length:0))}</td><td>${status(row.employment_status|| (row.active===false?"inactive":"active"))}</td></tr>`).join("")}</tbody></table></div>`;
+    }catch(error){box.innerHTML=pageError(error);}
+  }
+
+  function openTeacherDialog(){
+    const dialog=byId("modal");
+    byId("modalTitle").textContent="Add teacher";
+    byId("modalSubtitle").textContent="Create a certified teacher record. A staff number is generated when left blank.";
+    byId("modalBody").innerHTML=`<form id="teacherCreateForm" class="form-stack"><div class="form-grid"><label class="field"><span>Staff number (optional)</span><input name="staff_no" maxlength="60"></label><label class="field"><span>First name</span><input name="first_name" required maxlength="120"></label><label class="field"><span>Middle name</span><input name="middle_name" maxlength="120"></label><label class="field"><span>Last name</span><input name="last_name" required maxlength="120"></label><label class="field"><span>Gender</span><select name="gender"><option value="Other">Other</option><option value="Male">Male</option><option value="Female">Female</option></select></label><label class="field"><span>Email</span><input name="email" type="email" maxlength="254"></label><label class="field"><span>Phone</span><input name="phone" type="tel" maxlength="60"></label><label class="field"><span>Qualification</span><select name="qualification"><option value="">Select</option><option>PhD</option><option>MSc Degree</option><option>Bachelor Degree</option><option>HND</option><option>Diploma</option><option>SHS</option></select></label><label class="field"><span>Specialization</span><input name="specialization" maxlength="180"></label><label class="field"><span>Date joined</span><input name="date_joined" type="date"></label></div><p id="teacherCreateMessage" class="form-message hidden" role="alert"></p></form>`;
+    byId("modalFooter").innerHTML='<button id="teacherCancelButton" class="button ghost" type="button">Cancel</button><button id="teacherSaveButton" class="button primary" type="submit" form="teacherCreateForm">Save teacher</button>';
+    byId("teacherCancelButton").onclick=()=>dialog.close();
+    byId("teacherCreateForm").onsubmit=async event=>{
+      event.preventDefault();const button=byId("teacherSaveButton"),msg=byId("teacherCreateMessage");button.disabled=true;msg.classList.add("hidden");
+      try{const payload=Object.fromEntries(new FormData(event.currentTarget).entries());payload.active=true;payload.employment_status="active";payload.reason="Teacher created from Neon certified UI";await certified("save_teacher",{payload});dialog.close();await renderTeachers();}
+      catch(error){msg.textContent=friendly(error);msg.classList.remove("hidden");}
+      finally{button.disabled=false;}
+    };
+    if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
+  }
+
+  async function renderPrincipal(){
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>Principal</h3><p>Certified Principal appointment and school leadership record.</p></div><div class="page-actions"><button id="addPrincipalButton" class="button primary" type="button">Add Principal record</button></div></div>
+      <section class="panel"><div id="principalResults">${loading("Loading Principal record")}</div></section>`;
+    byId("addPrincipalButton")?.addEventListener("click",openPrincipalDialog);
+    const box=byId("principalResults");
+    try{
+      const result=await certified("list_headteachers",{search_text:"",status_filter:"",archive_filter:"active",page_number:1,page_size:50});
+      const rows=Array.isArray(result?.rows)?result.rows:[];
+      if(!rows.length){box.innerHTML=empty("No active Principal appointment is configured yet.");return;}
+      box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Principal</th><th>Staff no.</th><th>Contact</th><th>Qualification</th><th>Appointed</th><th>Status</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${escapeHtml(String(row.full_name||"P").charAt(0).toUpperCase())}</span><span class="cell-copy"><strong>${escapeHtml(row.full_name||"Unnamed Principal")}</strong><small>${escapeHtml(row.email||row.profile_email||"No linked email")}</small></span></div></td><td>${escapeHtml(row.staff_no||"—")}</td><td>${escapeHtml(row.phone||"—")}</td><td>${escapeHtml(row.qualification||"—")}</td><td>${formatDate(row.date_appointed)}</td><td>${status(row.employment_status|| (row.active===false?"inactive":"active"))}</td></tr>`).join("")}</tbody></table></div>`;
+    }catch(error){box.innerHTML=pageError(error);}
+  }
+
+  function openPrincipalDialog(){
+    const dialog=byId("modal");
+    byId("modalTitle").textContent="Add Principal record";
+    byId("modalSubtitle").textContent="Create the certified school leadership record. The single-current-Principal rule is enforced by the database.";
+    byId("modalBody").innerHTML=`<form id="principalCreateForm" class="form-stack"><div class="form-grid"><label class="field"><span>Staff number (optional)</span><input name="staff_no" maxlength="60"></label><label class="field"><span>Full name</span><input name="full_name" required maxlength="180"></label><label class="field"><span>Contact phone</span><input name="contact" type="tel" required maxlength="60"></label></div><p id="principalCreateMessage" class="form-message hidden" role="alert"></p></form>`;
+    byId("modalFooter").innerHTML='<button id="principalCancelButton" class="button ghost" type="button">Cancel</button><button id="principalSaveButton" class="button primary" type="submit" form="principalCreateForm">Save Principal</button>';
+    byId("principalCancelButton").onclick=()=>dialog.close();
+    byId("principalCreateForm").onsubmit=async event=>{
+      event.preventDefault();const button=byId("principalSaveButton"),msg=byId("principalCreateMessage");button.disabled=true;msg.classList.add("hidden");
+      try{const payload=Object.fromEntries(new FormData(event.currentTarget).entries());payload.reason="Principal record created from Neon certified UI";await certified("save_headteacher",{payload});dialog.close();await renderPrincipal();}
+      catch(error){msg.textContent=friendly(error);msg.classList.remove("hidden");}
+      finally{button.disabled=false;}
+    };
+    if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
   }
 
   async function renderFinance(){
