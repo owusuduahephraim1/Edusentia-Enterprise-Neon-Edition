@@ -6,6 +6,7 @@ import { verifyTurnstile } from "./turnstile";
 import { platformRoute } from "./platform-routes";
 import { tenantDb } from "./tenant-db";
 import { sha256Hex } from "./crypto";
+import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -51,6 +52,34 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({authenticated:true,user:{id:ctx.userId,email:ctx.email,displayName:ctx.displayName},membership:{tenantId:ctx.tenantId,tenantCode:ctx.tenantCode,tenantName:ctx.tenantName,role:ctx.role,roleLabel:ctx.role.replaceAll('_',' ')},session:{id:ctx.sessionId,assuranceLevel:ctx.assuranceLevel}});
   }
   const ctx=await authed(request,env),sql=tenantDb(env,ctx.databaseName),master=db(env);
+  if(method==="GET"&&p==="/api/security/mfa/factors"){
+    requireRole(ctx,["system_admin"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required",403,requestId);
+    return json({ok:true,factors:await listMfaFactors(sql,ctx.userId)});
+  }
+  if(method==="POST"&&p==="/api/security/mfa/enroll"){
+    requireRole(ctx,["system_admin"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required",403,requestId);
+    const b=await readJson<any>(request);
+    const enrollment=await beginMfaEnrollment(env,sql,ctx.userId,ctx.email,ctx.tenantName,String(b.friendlyName||""));
+    await sql`select audit.record_auth_event(${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.mfa.enrollment_started',${JSON.stringify({scope:"tenant"})}::jsonb)`;
+    return json({ok:true,enrollment},201);
+  }
+  const tenantMfaFactor=p.match(/^\/api\/security\/mfa\/factors\/([0-9a-f-]{36})\/(verify|remove)$/i);
+  if(method==="POST"&&tenantMfaFactor){
+    requireRole(ctx,["system_admin"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required",403,requestId);
+    const [,factorId,action]=tenantMfaFactor,b=await readJson<any>(request);
+    if(action==="verify"){
+      const result=await verifyMfaEnrollment(env,sql,ctx.userId,factorId,String(b.code||""));
+      await sql`select audit.record_auth_event(${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.mfa.factor_verified',${JSON.stringify({scope:"tenant"})}::jsonb)`;
+      return json(result);
+    }
+    const result=await removeMfaFactor(sql,ctx.userId,factorId);
+    await sql`select audit.record_auth_event(${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.mfa.factor_removed',${JSON.stringify({scope:"tenant"})}::jsonb)`;
+    return json(result);
+  }
+
   if(method==="POST"&&p==="/api/license/activate"){
     requireRole(ctx,["system_admin"]);
     if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required to activate a licence",403,requestId);
