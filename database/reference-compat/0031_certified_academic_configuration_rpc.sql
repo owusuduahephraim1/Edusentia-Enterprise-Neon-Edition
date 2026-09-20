@@ -46,7 +46,7 @@ begin
       from public.teachers t
       where t.deleted_at is null and t.active and t.employment_status='active'),'[]'::jsonb)
   );
-end $function$
+end $function$;
 
 
 revoke all on function public.get_academic_configuration() from public;
