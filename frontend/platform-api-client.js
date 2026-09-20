@@ -24,6 +24,7 @@
     refreshCapacity:id=>request("/api/platform/tenants/"+id+"/capacity/refresh",{method:"POST",body:{}}),
     setCapacity:(id,limit,reason)=>request("/api/platform/tenants/"+id+"/capacity",{method:"POST",body:{limit,reason}}),
     setLicense:(id,payload)=>request("/api/platform/tenants/"+id+"/license",{method:"POST",body:payload}),
+    adminSetupLink:id=>request("/api/platform/tenants/"+id+"/admin-setup-link",{method:"POST",body:{}}),
     health:id=>request("/api/platform/tenants/"+id+"/health",{method:"POST",body:{}})
   });
 })();
