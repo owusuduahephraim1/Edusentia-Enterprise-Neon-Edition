@@ -7,6 +7,7 @@ import { platformRoute } from "./platform-routes";
 import { tenantDb } from "./tenant-db";
 import { sha256Hex } from "./crypto";
 import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
+import { invokeCertifiedRpc } from "./certified-rpc";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -78,6 +79,13 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const result=await removeMfaFactor(sql,ctx.userId,factorId);
     await sql`select audit.record_auth_event(${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.mfa.factor_removed',${JSON.stringify({scope:"tenant"})}::jsonb)`;
     return json(result);
+  }
+
+  const certifiedRpcMatch=p.match(/^\/api\/compat\/rpc\/([a-z0-9_]+)$/);
+  if(method==="POST"&&certifiedRpcMatch){
+    const body=await readJson<any>(request);
+    const result=await invokeCertifiedRpc(sql,ctx,certifiedRpcMatch[1],body?.args??{});
+    return json({ok:true,operation:certifiedRpcMatch[1],result});
   }
 
   if(method==="POST"&&p==="/api/license/activate"){
