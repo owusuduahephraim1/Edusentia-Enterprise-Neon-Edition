@@ -1,3 +1,4 @@
+# refresh after SQL quoting repair
 name: Reference Tenant Compatibility Smoke
 
 on:
