@@ -1,7 +1,7 @@
 import type { Env, PlatformSessionContext } from "./types";
 import { db } from "./db";
 import { readJson, json, error } from "./http";
-import { passwordHash } from "./crypto";
+import { passwordHash, randomToken, sha256Hex } from "./crypto";
 import { authenticatePlatform, platformLogin, completePlatformMfa, logoutPlatform, setPlatformCookie, clearPlatformCookie } from "./platform-auth";
 import { verifyTurnstile } from "./turnstile";
 
@@ -13,6 +13,7 @@ async function authed(request:Request,env:Env){
 }
 function uuidPath(path:string,pattern:RegExp){const m=path.match(pattern);return m?.[1]||"";}
 function asIso(value:any){const d=new Date(String(value||""));if(Number.isNaN(d.getTime()))throw Object.assign(new Error("A valid date/time is required"),{code:"validation_error",status:422});return d.toISOString();}
+async function adminSetupHash(env:Env,token:string){return sha256Hex(`edusentia:tenant-admin-setup:v1:${token}:${env.SESSION_PEPPER}`);}
 
 export async function platformRoute(request:Request,env:Env,requestId:string):Promise<Response|null>{
   const url=new URL(request.url),p=url.pathname,method=request.method.toUpperCase(),sql=db(env);
@@ -31,6 +32,26 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
       if(String(e?.code||"")==="23505")return error("registration_already_open","A registration is already open for this contact email",409,requestId);
       throw e;
     }
+  }
+
+  if(method==="POST"&&p==="/api/public/admin-setup/inspect"){
+    const b=await readJson<any>(request),token=String(b.token||"").trim();
+    if(!token||token.length>1024)return error("invalid_setup_token","The administrator setup link is invalid",400,requestId);
+    const hash=await adminSetupHash(env,token);
+    const rows=await sql`select * from platform.inspect_admin_setup_token(${hash})`;
+    const row=rows[0] as any;
+    if(!row)return error("setup_token_invalid_or_expired","This administrator setup link is invalid or has expired",410,requestId);
+    return json({ok:true,setup:{tenantCode:row.tenant_code,schoolName:row.school_name,adminEmail:row.admin_email,displayName:row.display_name,expiresAt:row.expires_at}});
+  }
+
+  if(method==="POST"&&p==="/api/public/admin-setup/complete"){
+    const b=await readJson<any>(request),token=String(b.token||"").trim(),password=String(b.password||"");
+    await verifyTurnstile(env,String(b.turnstileToken||""),request,"admin_setup");
+    if(!token||token.length>1024)return error("invalid_setup_token","The administrator setup link is invalid",400,requestId);
+    if(password.length<12)return error("weak_password","Administrator password must contain at least 12 characters",422,requestId);
+    const credential=await passwordHash(password),hash=await adminSetupHash(env,token);
+    const rows=await sql`select platform.complete_admin_setup(${hash},${credential.hash},${credential.salt}) result`;
+    return json((rows[0] as any)?.result||{ok:true});
   }
 
   if(method==="POST"&&p==="/api/platform/bootstrap/initialize"){
@@ -128,6 +149,16 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
     const rows=await sql`select platform.set_tenant_license(${id}::uuid,${ctx.userId}::uuid,${String(b.planCode||"")},${String(b.periodType||"")},${String(b.periodLabel||"")},${asIso(b.startsAt)}::timestamptz,${asIso(b.expiresAt)}::timestamptz,${Number(b.graceDays??14)}::integer) result`;
     return json((rows[0] as any)?.result||{ok:true});
   }
+  id=uuidPath(p,/^\/api\/platform\/tenants\/([0-9a-f-]{36})\/admin-setup-link$/i);
+  if(method==="POST"&&id){
+    const token=randomToken(32),hash=await adminSetupHash(env,token),expiresAt=new Date(Date.now()+30*60*1000).toISOString();
+    const rows=await sql`select platform.issue_admin_setup_token(${id}::uuid,${ctx.userId}::uuid,${hash},${expiresAt}::timestamptz) result`;
+    const result=(rows[0] as any)?.result||{};
+    const basePath=String(env.APP_BASE_PATH||"").replace(/\/+$/,"");
+    const setupLink=`${String(env.APP_ORIGIN||"").replace(/\/+$/,"")}${basePath}/admin-setup.html?token=${encodeURIComponent(token)}`;
+    return json({...result,setupLink});
+  }
+
   id=uuidPath(p,/^\/api\/platform\/tenants\/([0-9a-f-]{36})\/health$/i);
   if(method==="POST"&&id){
     const capacity=await sql`select platform.refresh_tenant_capacity(${id}::uuid,${ctx.userId}::uuid) result`;
