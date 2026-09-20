@@ -5,6 +5,7 @@ import { readJson, json, error } from "./http";
 import { passwordHash, randomToken, sha256Hex } from "./crypto";
 import { authenticatePlatform, platformLogin, completePlatformMfa, logoutPlatform, setPlatformCookie, clearPlatformCookie } from "./platform-auth";
 import { verifyTurnstile } from "./turnstile";
+import { provisionIsolatedTenant } from "./provisioning";
 
 async function authed(request:Request,env:Env){
   const ctx=await authenticatePlatform(request,env);
@@ -126,10 +127,8 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
   id=uuidPath(p,/^\/api\/platform\/tenants\/([0-9a-f-]{36})\/provision$/i);
   if(method==="POST"&&id){
     const b=await readJson<any>(request),action=String(b.action||"complete");
-    const rows=action==="resume"
-      ?await sql`select platform.resume_provisioning(${id}::uuid,${ctx.userId}::uuid) result`
-      :await sql`select platform.complete_provisioning(${id}::uuid,${ctx.userId}::uuid) result`;
-    return json((rows[0] as any)?.result||{ok:true});
+    if(action==="resume")await sql`select platform.resume_provisioning(${id}::uuid,${ctx.userId}::uuid)`;
+    return json(await provisionIsolatedTenant(env,id,ctx.userId));
   }
   id=uuidPath(p,/^\/api\/platform\/tenants\/([0-9a-f-]{36})\/status$/i);
   if(method==="POST"&&id){
