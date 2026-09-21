@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: neon-schema-smoke-${{ github.ref }}
-  cancel-in-progress: true
+  group: edusentia-database-smoke-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   fresh-install:
@@ -88,6 +88,8 @@ jobs:
 
           cleanup
           if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
+            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$CI_TEMPLATE_DATABASE' and usename=current_user and pid<>pg_backend_pid();" >/dev/null
+
             psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
           set role edusentia_provisioner;
           create database "$PROBE_DB" owner edusentia_provisioner template "$CI_TEMPLATE_DATABASE";
