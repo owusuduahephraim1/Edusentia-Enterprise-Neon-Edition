@@ -101,6 +101,19 @@
     byId("content")?.focus({preventScroll:true});
   }
 
+  function registerView(item){
+    if(!item||!item.id||typeof item.render!=="function")throw new Error("A valid workspace view is required");
+    const existing=NAV.find(entry=>entry.id===item.id);
+    if(existing)Object.assign(existing,item);else NAV.push(item);
+    if(state.session)renderNav();
+    return item;
+  }
+
+  window.EdusentiaShell=Object.freeze({
+    registerView,navigate,api,certified,role,state,escapeHtml,status,formatDate,formatDateTime,formatAmount,
+    loading,empty,pageError,fullName,friendly,byId
+  });
+
   async function renderDashboard(){
     state.boot=await api().bootstrap();
     const data=state.boot, metrics=data.metrics||{};
