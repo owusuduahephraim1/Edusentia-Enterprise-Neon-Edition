@@ -1,3 +1,4 @@
+# parity revalidation after canonical ownership hardening
 name: Parity Tenant Template Install
 
 on:
