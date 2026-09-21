@@ -197,3 +197,11 @@ jobs:
           curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/" | grep -q "Edusentia Enterprise"
           curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" | grep -q "parity-testing"
           echo "Parity browser test environment is live at $PARITY_ORIGIN"
+
+      - name: Run authenticated parity end-to-end gate
+        if: steps.config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/parity-authenticated-e2e.mjs | tee /tmp/parity-authenticated-e2e.json
+          node -e 'const fs=require("node:fs");const lines=fs.readFileSync("/tmp/parity-authenticated-e2e.json","utf8").trim().split(/\n/);const r=JSON.parse(lines.at(-1));if(!r.ok||r.assuranceLevel!==2||!r.r2RoundTrip)process.exit(1);console.log("Authenticated parity E2E passed across "+r.modules.length+" module surfaces.")'
