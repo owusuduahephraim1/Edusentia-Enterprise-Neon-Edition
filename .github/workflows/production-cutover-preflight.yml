@@ -131,6 +131,9 @@ jobs:
 
           WRAPPER_STATE="$(psql "$ADMIN_DATABASE_URL" -Atc "select case when count(*)=0 then 'bootstrap' when count(*)=2 and bool_and(rolcanlogin and not rolsuper and not rolcreaterole and not rolbypassrls) then 'ready' else 'unsafe' end from pg_roles where rolname in('edusentia_worker_login','edusentia_provisioner_login')")"
           test "$WRAPPER_STATE" != "unsafe"
+          if [ "$VERSION" = "0025" ]; then
+            test "$WRAPPER_STATE" = "ready"
+          fi
 
           STALE_TEST_DATABASES="$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*) from pg_database where datname like 'edusentia_lifecycle_%'")"
           echo "Primary Neon preflight passed at control schema $VERSION; service wrappers: $WRAPPER_STATE; legacy lifecycle test databases present: $STALE_TEST_DATABASES."

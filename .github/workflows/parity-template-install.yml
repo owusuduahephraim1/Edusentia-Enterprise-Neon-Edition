@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: parity-tenant-infrastructure-verify
+  group: edusentia-parity-template-${{ github.ref }}
   cancel-in-progress: false
 
 env:

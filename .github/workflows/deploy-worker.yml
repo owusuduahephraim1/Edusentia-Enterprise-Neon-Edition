@@ -65,6 +65,33 @@ jobs:
             exit 1
           fi
 
+      - name: Require completed production owner bootstrap
+        if: steps.deployment_config.outputs.ready == 'true'
+        env:
+          BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+          ADMIN_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$ADMIN_DATABASE_URL"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select current_database()")" = "edusentia"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select current_user")" = "edusentia_runtime"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025" || {
+            echo "::error::Production owner bootstrap is incomplete. Run database/production-owner-bootstrap.sh with edusentia_owner before deployment."
+            exit 1
+          }
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*)=2 from pg_roles where rolname in('edusentia_worker_login','edusentia_provisioner_login') and rolcanlogin and not rolsuper and not rolcreaterole and not rolbypassrls")" = "t"
+          echo "Production owner bootstrap readiness verified before code deployment."
+
       - name: Ensure private R2 bucket
         if: steps.deployment_config.outputs.ready == 'true'
         working-directory: worker

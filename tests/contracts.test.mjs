@@ -881,3 +881,21 @@ test("final parity database gate isolates fresh schema reference and school life
   assert.match(s,/CI_TEMPLATE_DATABASE=""/);
   assert.doesNotMatch(w,/edusentia_ci_base_v2/);
 });
+
+
+test("parity template promotion and browser cloning are serialized",()=>{
+  for(const file of [".github/workflows/deploy-parity-test.yml",".github/workflows/parity-template-install.yml"]){
+    const w=read(file);
+    assert.match(w,/group: edusentia-parity-template-\$\{\{ github\.ref \}\}/);
+    assert.match(w,/cancel-in-progress: false/);
+  }
+});
+
+test("production Worker refuses deployment before owner bootstrap completion",()=>{
+  const w=read(".github/workflows/deploy-worker.yml");
+  assert.match(w,/Require completed production owner bootstrap/);
+  assert.match(w,/schema_version.*0025/s);
+  assert.match(w,/production-owner-bootstrap\.sh/);
+  assert.match(w,/owner bootstrap readiness verified before code deployment/i);
+  assert.ok(w.indexOf("Require completed production owner bootstrap")<w.indexOf("Ensure private R2 bucket"));
+});
