@@ -63,15 +63,16 @@ jobs:
         run: |
           set -euo pipefail
           test_ready=true
-          deploy_ready=true
+          code_deploy_ready=true
+          secret_refresh_ready=true
 
-          [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::Missing NEON_DATABASE_URL or DATABASE_URL"; test_ready=false; deploy_ready=false; }
-          [ -n "$CLOUDFLARE_API_TOKEN" ] || deploy_ready=false
-          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || deploy_ready=false
-          [ -n "$PARITY_WORKER_DATABASE_URL" ] || deploy_ready=false
-          [ -n "$PARITY_PROVISIONER_DATABASE_URL" ] || deploy_ready=false
-          [ -n "$SESSION_PEPPER_VALUE" ] || deploy_ready=false
-          [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || deploy_ready=false
+          [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::Missing NEON_DATABASE_URL or DATABASE_URL"; test_ready=false; }
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { code_deploy_ready=false; secret_refresh_ready=false; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { code_deploy_ready=false; secret_refresh_ready=false; }
+          [ -n "$PARITY_WORKER_DATABASE_URL" ] || secret_refresh_ready=false
+          [ -n "$PARITY_PROVISIONER_DATABASE_URL" ] || secret_refresh_ready=false
+          [ -n "$SESSION_PEPPER_VALUE" ] || secret_refresh_ready=false
+          [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || secret_refresh_ready=false
 
           if [ "$test_ready" = true ]; then
             PARITY_BOOTSTRAP_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" node --input-type=module -e '
@@ -85,12 +86,15 @@ jobs:
           fi
 
           echo "test_ready=$test_ready" >> "$GITHUB_OUTPUT"
-          echo "deploy_ready=$deploy_ready" >> "$GITHUB_OUTPUT"
+          echo "code_deploy_ready=$code_deploy_ready" >> "$GITHUB_OUTPUT"
+          echo "secret_refresh_ready=$secret_refresh_ready" >> "$GITHUB_OUTPUT"
           if [ "$test_ready" != true ]; then
             exit 1
           fi
-          if [ "$deploy_ready" != true ]; then
-            echo "Dedicated parity deployment credentials are incomplete; reusing the already deployed isolated parity Worker for authenticated release testing."
+          if [ "$code_deploy_ready" = true ] && [ "$secret_refresh_ready" != true ]; then
+            echo "Deploying current parity code while preserving the Worker's existing encrypted secrets."
+          elif [ "$code_deploy_ready" != true ]; then
+            echo "Cloudflare deployment credentials are unavailable; verifying the existing isolated parity Worker instead."
           fi
 
       - name: Verify isolated parity bootstrap route
@@ -110,7 +114,7 @@ jobs:
           echo "Parity bootstrap endpoint verified; deployment role is $PARITY_DB_ROLE."
 
       - name: Verify isolated parity Worker and provisioner credentials
-        if: steps.config.outputs.deploy_ready == 'true'
+        if: steps.config.outputs.secret_refresh_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -122,7 +126,7 @@ jobs:
           echo "Deployment runtime retains SET-only access; service-role credentials are managed outside CI."
 
       - name: Verify dedicated parity database URL
-        if: steps.config.outputs.deploy_ready == 'true'
+        if: steps.config.outputs.secret_refresh_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -156,7 +160,7 @@ jobs:
           )
 
       - name: Stage parity frontend configuration
-        if: steps.config.outputs.deploy_ready == 'true'
+        if: steps.config.outputs.code_deploy_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -174,7 +178,7 @@ jobs:
           echo "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1  frontend/assets/edusentia-auth-learning.webp" | sha256sum --check --status
 
       - name: Ensure isolated parity R2 bucket
-        if: steps.config.outputs.deploy_ready == 'true'
+        if: steps.config.outputs.code_deploy_ready == 'true'
         working-directory: worker
         run: |
           if npx wrangler r2 bucket info edusentia-enterprise-neon-parity-test --json >/dev/null 2>&1; then
@@ -184,12 +188,12 @@ jobs:
           fi
 
       - name: Create parity Worker deployment shell
-        if: steps.config.outputs.deploy_ready == 'true'
+        if: steps.config.outputs.code_deploy_ready == 'true'
         working-directory: worker
         run: npx wrangler deploy --config wrangler.parity.jsonc
 
       - name: Install parity Worker secrets
-        if: steps.config.outputs.deploy_ready == 'true'
+        if: steps.config.outputs.secret_refresh_ready == 'true'
         working-directory: worker
         shell: bash
         run: |
@@ -200,7 +204,7 @@ jobs:
           printf '%s' "$BOOTSTRAP_ADMIN_SECRET_VALUE" | npx wrangler secret put BOOTSTRAP_ADMIN_SECRET --config wrangler.parity.jsonc
 
       - name: Final deploy and parity smoke
-        if: steps.config.outputs.deploy_ready == 'true'
+        if: steps.config.outputs.code_deploy_ready == 'true'
         working-directory: worker
         shell: bash
         run: |
@@ -213,7 +217,7 @@ jobs:
           echo "Parity browser test environment is live at $PARITY_ORIGIN"
 
       - name: Verify existing isolated parity deployment
-        if: steps.config.outputs.test_ready == 'true' && steps.config.outputs.deploy_ready != 'true'
+        if: steps.config.outputs.test_ready == 'true' && steps.config.outputs.code_deploy_ready != 'true'
         shell: bash
         run: |
           set -euo pipefail
