@@ -26,7 +26,7 @@ for migration in "${migrations[@]}"; do
   psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
 done
 
-EXPECTED="$(basename "${migrations[-1]}" .sql | sed -E 's/^([0-9]+).*/\\1/')"
+EXPECTED="$(basename "${migrations[-1]}" .sql | grep -oE '^[0-9]+')"
 ACTUAL="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")"
 if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "Master schema verification failed. Expected $EXPECTED, received $ACTUAL." >&2
