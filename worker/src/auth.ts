@@ -127,16 +127,27 @@ export async function authenticate(request:Request,env:Env):Promise<SessionConte
   if(!token||!tenantCode)return null;
   let route:any;try{route=await routeForCode(env,tenantCode);}catch{return null;}
   const hash=await sha256Hex(`${token}.${env.SESSION_PEPPER}`),sql=tenantDb(env,String(route.database_name));
-  const rows=await sql`
-    select s.id session_id,s.user_id,s.tenant_id,s.role,s.assurance_level,u.email,u.display_name,t.code tenant_code,t.name tenant_name
+  const sessionRows=await sql`
+    select s.id session_id,s.user_id,s.tenant_id,s.role,s.assurance_level,u.email,u.display_name
       from authn.sessions s
       join authn.users u on u.id=s.user_id
-      join app.tenant_memberships m on m.user_id=s.user_id and m.tenant_id=s.tenant_id
-      join app.tenants t on t.id=s.tenant_id
-     where s.token_hash=${hash} and s.revoked_at is null and s.expires_at>now() and u.disabled_at is null and m.status='active'
-       and (not m.mfa_required or s.assurance_level>=2) limit 1`;
-  const r=rows[0] as any;if(!r)return null;
-  return {sessionId:r.session_id,userId:r.user_id,tenantId:r.tenant_id,tenantCode:r.tenant_code,tenantName:r.tenant_name,databaseName:String(route.database_name),role:r.role,assuranceLevel:Number(r.assurance_level),email:r.email,displayName:r.display_name};
+     where s.token_hash=${hash} and s.revoked_at is null and s.expires_at>now() and u.disabled_at is null
+     limit 1`;
+  const session=sessionRows[0] as any;
+  if(!session||String(session.tenant_id)!==String(route.tenant_id))return null;
+
+  const [,contextRows]=await sql.transaction([
+    sql`select app.set_request_context(${session.tenant_id}::uuid,${session.user_id}::uuid,${String(session.role)}::text,${Number(session.assurance_level)}::smallint)`,
+    sql`
+      select t.code tenant_code,t.name tenant_name,m.role,m.status,m.mfa_required
+        from app.tenants t
+        join app.tenant_memberships m on m.tenant_id=t.id and m.user_id=${session.user_id}::uuid
+       where t.id=${session.tenant_id}::uuid
+       limit 1`
+  ]);
+  const context=contextRows[0] as any;
+  if(!context||context.status!=="active"||(context.mfa_required&&Number(session.assurance_level)<2))return null;
+  return {sessionId:session.session_id,userId:session.user_id,tenantId:session.tenant_id,tenantCode:context.tenant_code,tenantName:context.tenant_name,databaseName:String(route.database_name),role:context.role,assuranceLevel:Number(session.assurance_level),email:session.email,displayName:session.display_name};
 }
 export async function logout(request:Request,env:Env){
   const token=cookieValue(request,sessionCookieName(env)),tenantCode=tokenTenantCode(token||"");if(!token||!tenantCode)return;
