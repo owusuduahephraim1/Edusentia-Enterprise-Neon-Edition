@@ -12,7 +12,12 @@ create unique index if not exists platform_access_recovery_one_open_idx
   where status in('pending','processing');
 
 insert into app.schema_migrations(version) values ('0025_access_recovery_processing_state') on conflict do nothing;
-update app.release_identity set schema_version='0025'
+update app.release_identity
+   set schema_version='0025',
+       version='neon-v1.0.0-r42',
+       api_version='v1',
+       frontend_version='neon-v1.0.0-r42',
+       worker_version='neon-v1.0.0-r42'
  where edition='Edusentia Enterprise Neon Edition';
 
 commit;

@@ -821,3 +821,23 @@ test("production tenant release identity contains no parity release markers",()=
   assert.match(control,/values\('neon-v1\.0\.0-r42','main','active','0025','0020'/);
   assert.match(control,/Verified production Neon isolated tenant release/);
 });
+
+
+test("control schema 0025 finalizes production release identity",()=>{
+  const m=read("database/migrations/0025_access_recovery_processing_state.sql");
+  for(const expected of [
+    "schema_version='0025'",
+    "version='neon-v1.0.0-r42'",
+    "api_version='v1'",
+    "frontend_version='neon-v1.0.0-r42'",
+    "worker_version='neon-v1.0.0-r42'"
+  ]) assert.ok(m.includes(expected),expected+" missing from final control release identity");
+});
+
+test("production cutover preflight tracks master upgrade code and validates finalized identity",()=>{
+  const p=read(".github/workflows/production-cutover-preflight.yml");
+  assert.match(p,/database\/install-master\.sh/);
+  assert.match(p,/database\/migrations\/\*\*/);
+  assert.match(p,/RELEASE_VERSION/);
+  assert.match(p,/neon-v1\.0\.0-r42/);
+});

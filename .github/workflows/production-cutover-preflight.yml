@@ -10,6 +10,8 @@ on:
       - "frontend/config.js"
       - "release/manifest.json"
       - "database/service-login-roles.sql"
+      - "database/install-master.sh"
+      - "database/migrations/**"
       - "database/runtime-role.sql"
       - "database/provisioner-role.sql"
       - "database/tenant-template/**"
@@ -116,6 +118,10 @@ jobs:
             0019|0020|0021|0022|0023|0024|0025) ;;
             *) echo "::error::Unexpected primary control schema version $VERSION"; exit 1 ;;
           esac
+          if [ "$VERSION" = "0025" ]; then
+            RELEASE_VERSION="$(psql "$ADMIN_DATABASE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")"
+            test "$RELEASE_VERSION" = "neon-v1.0.0-r42"
+          fi
 
           test "$(psql "$ADMIN_DATABASE_URL" -Atc "select rolcreatedb and rolcreaterole and rolbypassrls from pg_roles where rolname=current_user")" = "t"
           test "$(psql "$ADMIN_DATABASE_URL" -Atc "select not rolsuper and not rolcreatedb and not rolcreaterole and not rolbypassrls from pg_roles where rolname='edusentia_worker_runtime'")" = "t"
