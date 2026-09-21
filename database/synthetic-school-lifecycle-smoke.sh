@@ -43,6 +43,9 @@ SQL
   local db_url
   db_url="$(url_for "$db_name")"
   echo "::add-mask::$db_url"
+  if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
+    psql "$db_url" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner; grant usage,create on schema public to edusentia_runtime; reset role;"
+  fi
 
   for migration in \
     database/migrations/0001_platform_and_context.sql \
