@@ -86,6 +86,8 @@ create table if not exists platform.package_reconciliation(
 create index if not exists platform_package_reconciliation_open_idx
   on platform.package_reconciliation(status,updated_at desc)
   where status in('pending','failed');
+create unique index if not exists platform_package_reconciliation_object_uq
+  on platform.package_reconciliation(object_kind,object_key);
 
 grant select,insert,update,delete on
   platform.package_signing_keys,
