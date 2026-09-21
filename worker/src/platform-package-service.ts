@@ -304,7 +304,7 @@ async function status(sql:Sql,env:Env){
     sql`select * from platform.package_reconciliation where status in('pending','failed') order by updated_at desc limit 100`,
     sql`select key_id,public_fingerprint,active,first_seen_at,last_seen_at from platform.package_signing_keys order by last_seen_at desc limit 20`
   ]);
-  return {ok:true,release:PACKAGE_VERSION,storage_provider:"cloudflare-r2",signing_configured:Boolean(env.RCE_PACKAGE_SIGNING_PRIVATE_JWK),templates,artifacts,reconciliation,signing_keys:keys};
+  return {ok:true,release:PACKAGE_VERSION,storage_provider:"cloudflare-r2",signing_configured:keys.some((k:any)=>k.active===true),signing_bootstrap_available:Boolean(env.RCE_PACKAGE_SIGNING_PRIVATE_JWK||env.BACKUP_SIGNING_SECRET||env.SESSION_PEPPER),templates,artifacts,reconciliation,signing_keys:keys};
 }
 
 export async function handlePlatformPackageTransfer(request:Request,env:Env):Promise<Response|null>{
