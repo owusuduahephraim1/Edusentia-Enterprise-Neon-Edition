@@ -1,8 +1,9 @@
 import type { SessionContext } from "./types";
 import type { Sql } from "./db";
 import { tenantTx } from "./db";
+import { CERTIFIED_RPC_REGISTRY_NAMES, invokeRegistryCertifiedRpc } from "./certified-rpc-registry";
 
-export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
+const EXPLICIT_CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_bootstrap_data",
   "get_academic_configuration",
   "get_academic_calendar_context",
@@ -57,7 +58,10 @@ export const CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "save_class_timetable_entry"
 ] as const);
 
-export type CertifiedRpcOperation=(typeof CERTIFIED_RPC_OPERATIONS)[number];
+export const CERTIFIED_RPC_OPERATIONS=Object.freeze(
+  Array.from(new Set<string>([...EXPLICIT_CERTIFIED_RPC_OPERATIONS,...CERTIFIED_RPC_REGISTRY_NAMES])).sort()
+);
+export type CertifiedRpcOperation=string;
 type Args=Record<string,unknown>;
 
 function objectArgs(args:unknown):Args{
@@ -404,4 +408,5 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       return singleResult(sql,ctx,txn=>txn`select public.save_class_timetable_entry(${payload}::jsonb) result`);
     }
   }
+  return invokeRegistryCertifiedRpc(sql,ctx,operation,args);
 }
