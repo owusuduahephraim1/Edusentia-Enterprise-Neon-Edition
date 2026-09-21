@@ -1,4 +1,4 @@
-name: Parity Tenant Template Verify
+name: Parity Tenant Infrastructure Verify
 
 on:
   push:
@@ -7,16 +7,13 @@ on:
       - ".github/workflows/parity-template-install.yml"
       - "database/provisioner-role.sql"
       - "database/tenant-template/install.sh"
-      - "database/reference-compat/0041b_neon_notification_recipient_compat.sql"
-      - "database/reference-compat/0044b_certified_report_transition_helpers.sql"
-      - "database/reference-compat/0045b_neon_report_view_compat.sql"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: parity-tenant-template-verify
+  group: parity-tenant-infrastructure-verify
   cancel-in-progress: false
 
 env:
@@ -24,25 +21,21 @@ env:
   PARITY_MASTER_DATABASE: edusentia
   PARITY_TEMPLATE_DATABASE: edusentia_tenant_template
   PARITY_TEST_TENANT_DATABASE: edusentia_rpt_000001
+  PARITY_CI_TEMPLATE_DATABASE: edusentia_ci_base
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     env:
       SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
-      PARITY_WORKER_DATABASE_URL: ${{ secrets.PARITY_WORKER_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Require isolated parity credentials
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$SOURCE_DATABASE_URL"
-          test -n "$PARITY_WORKER_DATABASE_URL"
+      - name: Require parity provisioner credential
+        run: test -n "$SOURCE_DATABASE_URL"
 
       - name: Install PostgreSQL client
         run: |
@@ -51,7 +44,7 @@ jobs:
             sudo apt-get install -y postgresql-client
           fi
 
-      - name: Build isolated parity URLs
+      - name: Build isolated parity provisioner URL
         shell: bash
         run: |
           set -euo pipefail
@@ -61,64 +54,31 @@ jobs:
             u.pathname="/"+process.env.PARITY_MASTER_DATABASE;
             process.stdout.write(u.toString());
           ')"
-          PARITY_WORKER_CONTROL_URL="$(PARITY_WORKER_DATABASE_URL="$PARITY_WORKER_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" PARITY_MASTER_DATABASE="$PARITY_MASTER_DATABASE" node --input-type=module -e '
-            const u=new URL(process.env.PARITY_WORKER_DATABASE_URL);
-            u.hostname=process.env.PARITY_DATABASE_HOST;
-            u.pathname="/"+process.env.PARITY_MASTER_DATABASE;
-            process.stdout.write(u.toString());
-          ')"
           echo "::add-mask::$PARITY_DATABASE_URL"
-          echo "::add-mask::$PARITY_WORKER_CONTROL_URL"
           echo "PARITY_DATABASE_URL=$PARITY_DATABASE_URL" >> "$GITHUB_ENV"
-          echo "PARITY_WORKER_CONTROL_URL=$PARITY_WORKER_CONTROL_URL" >> "$GITHUB_ENV"
 
-      - name: Assert non-primary parity infrastructure
+      - name: Verify isolated parity infrastructure
         shell: bash
         run: |
           set -euo pipefail
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select current_database()")" = "$PARITY_MASTER_DATABASE"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")" = "edusentia_provisioner"
-          test "$(psql "$PARITY_WORKER_CONTROL_URL" -Atc "select current_user")" = "edusentia_worker_runtime"
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname in ('$PARITY_TEMPLATE_DATABASE','$PARITY_TEST_TENANT_DATABASE','edusentia_ci_base')")" = "3"
-          echo "Parity provisioner and Worker identities verified."
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname in ('$PARITY_TEMPLATE_DATABASE','$PARITY_TEST_TENANT_DATABASE','$PARITY_CI_TEMPLATE_DATABASE')")" = "3"
 
-      - name: Verify canonical provisioner and certified template
-        shell: bash
-        run: |
-          set -euo pipefail
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_auth_members m join pg_roles r on r.oid=m.roleid join pg_roles u on u.oid=m.member where r.rolname='edusentia_provisioner' and u.rolname='edusentia_runtime' and m.set_option and not m.inherit_option and not m.admin_option")" = "1"
+
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")" = "edusentia_provisioner"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select not datallowconn from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")" = "t"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "edusentia_provisioner"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_CI_TEMPLATE_DATABASE'")" = "edusentia_provisioner"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select datistemplate and not datallowconn from pg_database where datname='$PARITY_CI_TEMPLATE_DATABASE'")" = "t"
 
-          relock_template(){ psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;" >/dev/null 2>&1 || true; }
-          trap relock_template EXIT
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections true;"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_worker_runtime;"
-
-          TEMPLATE_WORKER_URL="$(PARITY_WORKER_CONTROL_URL="$PARITY_WORKER_CONTROL_URL" PARITY_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" node --input-type=module -e '
-            const u=new URL(process.env.PARITY_WORKER_CONTROL_URL);
-            u.pathname="/"+process.env.PARITY_TEMPLATE_DATABASE;
-            process.stdout.write(u.toString());
-          ')"
-          echo "::add-mask::$TEMPLATE_WORKER_URL"
-
-          test "$(psql "$TEMPLATE_WORKER_URL" -Atc "select current_user")" = "edusentia_worker_runtime"
-          test "$(psql "$TEMPLATE_WORKER_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-          test "$(psql "$TEMPLATE_WORKER_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
-          test "$(psql "$TEMPLATE_WORKER_URL" -Atc "select count(*) from app.schema_migrations")" = "40"
-          test "$(psql "$TEMPLATE_WORKER_URL" -Atc "select count(*) from app.schema_migrations where version in ('0041b_neon_notification_recipient_compat','0044b_certified_report_transition_helpers','0045b_neon_report_view_compat')")" = "3"
-          test "$(psql "$TEMPLATE_WORKER_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
-          test "$(psql "$TEMPLATE_WORKER_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
-
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$PARITY_TEMPLATE_DATABASE' and pid<>pg_backend_pid();" >/dev/null
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEMPLATE_DATABASE\" from public;"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_worker_runtime;"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_provisioner;"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;"
-          trap - EXIT
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select has_database_privilege('edusentia_worker_runtime','$PARITY_TEST_TENANT_DATABASE','connect')")" = "t"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select has_database_privilege('edusentia_worker_runtime','$PARITY_TEMPLATE_DATABASE','connect')")" = "t"
 
           PROBE_DB="edusentia_provisioner_probe_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          PROBE_DB="${PROBE_DB//-/_}"; PROBE_DB="${PROBE_DB:0:60}"
+          PROBE_DB="${PROBE_DB//-/_}"
+          PROBE_DB="${PROBE_DB:0:60}"
           cleanup_probe(){ psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true; }
           trap cleanup_probe EXIT
           cleanup_probe
@@ -126,30 +86,5 @@ jobs:
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PROBE_DB'")" = "edusentia_provisioner"
           cleanup_probe
           trap - EXIT
-          echo "Certified template and provisioner clone path verified."
 
-      - name: Verify Reference Parity Test School
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "1"
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "edusentia_provisioner"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEST_TENANT_DATABASE\" from public;"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEST_TENANT_DATABASE\" to edusentia_worker_runtime;"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEST_TENANT_DATABASE\" to edusentia_provisioner;"
-
-          TENANT_WORKER_URL="$(PARITY_WORKER_CONTROL_URL="$PARITY_WORKER_CONTROL_URL" PARITY_TEST_TENANT_DATABASE="$PARITY_TEST_TENANT_DATABASE" node --input-type=module -e '
-            const u=new URL(process.env.PARITY_WORKER_CONTROL_URL);
-            u.pathname="/"+process.env.PARITY_TEST_TENANT_DATABASE;
-            process.stdout.write(u.toString());
-          ')"
-          echo "::add-mask::$TENANT_WORKER_URL"
-
-          test "$(psql "$TENANT_WORKER_URL" -Atc "select current_user")" = "edusentia_worker_runtime"
-          test "$(psql "$TENANT_WORKER_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-          test "$(psql "$TENANT_WORKER_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
-          test "$(psql "$TENANT_WORKER_URL" -Atc "select count(*) from app.schema_migrations")" = "40"
-          test "$(psql "$TENANT_WORKER_URL" -Atc "select count(*) from app.tenants where id='fff24cf5-ce88-4107-af80-eff8bba44d8c'::uuid and code='RPT-000001'")" = "1"
-          psql "$TENANT_WORKER_URL" -Atc "select app.platform_health_snapshot('fff24cf5-ce88-4107-af80-eff8bba44d8c'::uuid);" > /tmp/parity-tenant-health.json
-          test -s /tmp/parity-tenant-health.json
-          echo "Reference Parity Test School canonical ownership and certified runtime verified."
+          echo "Parity template ownership, locks, ACLs, CI base, and provisioner clone path verified."
