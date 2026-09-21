@@ -1,4 +1,5 @@
 // Worker-backed certified shell parity for the Neon Edition.
+// Unified blueprint authentication routes platform and tenant identities through the shared public sign-in.
 (() => {
   "use strict";
 
