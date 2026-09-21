@@ -8,7 +8,9 @@ type SiteverifyResult = {
 };
 
 export async function verifyTurnstile(env: Env, token: string, request: Request, expectedAction = "login"): Promise<void> {
-  if (!env.TURNSTILE_SECRET) {
+  const testMode=env.TURNSTILE_TEST_MODE==="true";
+  const secret=testMode?"1x0000000000000000000000000000000AA":env.TURNSTILE_SECRET;
+  if (!secret) {
     throw Object.assign(new Error("Human verification is not configured"), { code: "turnstile_not_configured", status: 503 });
   }
   if (!token || token.length > 2048) {
@@ -16,7 +18,7 @@ export async function verifyTurnstile(env: Env, token: string, request: Request,
   }
 
   const form = new FormData();
-  form.set("secret", env.TURNSTILE_SECRET);
+  form.set("secret", secret);
   form.set("response", token);
   const remoteIp = request.headers.get("cf-connecting-ip");
   if (remoteIp) form.set("remoteip", remoteIp);
@@ -38,7 +40,8 @@ export async function verifyTurnstile(env: Env, token: string, request: Request,
 
   const result = await response.json<SiteverifyResult>();
   const expectedHostname = new URL(env.APP_ORIGIN).hostname;
-  if (!result.success || result.hostname !== expectedHostname || result.action !== expectedAction) {
+  const metadataValid=testMode || (result.hostname === expectedHostname && result.action === expectedAction);
+  if (!result.success || !metadataValid) {
     console.warn(JSON.stringify({
       level: "warn",
       event: "turnstile.rejected",
