@@ -1,3 +1,4 @@
+# final production candidate gate: r42-20260921-v3
 # final production candidate gate: r42-20260921-v2
 # final production candidate gate: r42-20260921
 # refresh after tagged SQL delimiter repair
@@ -20,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: edusentia-schema-smoke-${{ github.ref }}
+  group: edusentia-database-smoke-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
