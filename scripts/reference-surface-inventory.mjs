@@ -15,14 +15,15 @@ for(const re of [
 }
 for(const match of source.matchAll(/\bcacheableRpc\(\s*["'][^"']+["']\s*,\s*["']([^"']+)["']/g))rpcNames.add(match[1]);
 const expected=[...rpcNames].sort();
-const base=String(process.env.PARITY_WORKER_DATABASE_URL||"");
-if(!base)throw new Error("PARITY_WORKER_DATABASE_URL is required");
+const explicit=String(process.env.TARGET_DATABASE_URL||"");
+const base=explicit||String(process.env.PARITY_WORKER_DATABASE_URL||"");
+if(!base)throw new Error("TARGET_DATABASE_URL or PARITY_WORKER_DATABASE_URL is required");
 const url=new URL(base);
-url.pathname="/edusentia_rpt_000001";
+if(!explicit)url.pathname="/edusentia_rpt_000001";
 const sql=neon(url.toString());
 const rows=await sql`
   select distinct p.proname,
-         bool_or(has_function_privilege(current_user,p.oid,'EXECUTE')) can_execute
+         bool_or(has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')) can_execute
     from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public'
