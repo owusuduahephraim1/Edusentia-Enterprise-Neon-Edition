@@ -841,3 +841,30 @@ test("production cutover preflight tracks master upgrade code and validates fina
   assert.match(p,/RELEASE_VERSION/);
   assert.match(p,/neon-v1\.0\.0-r42/);
 });
+
+
+test("tenant template exports the certified target URL through the 0048 compatibility tail",()=>{
+  const s=read("database/tenant-template/install.sh");
+  assert.match(s,/TARGET_DATABASE_URL="\$TEMPLATE_URL"/);
+  assert.match(s,/export TARGET_DATABASE_URL/);
+  assert.match(s,/0048g_certified_operational_rls_enforcement\.sql/);
+});
+
+test("service login membership revalidation is owner-bootstrap safe",()=>{
+  const s=read("database/service-login-roles.sql");
+  assert.match(s,/service_login_memberships/);
+  assert.match(s,/worker login wrapper membership requires owner bootstrap/);
+  assert.match(s,/provisioner login wrapper membership requires owner bootstrap/);
+  assert.match(s,/production-owner-bootstrap\.sh/);
+});
+
+test("one-time production owner bootstrap finalizes schema and least-privilege wrapper roles",()=>{
+  const s=read("database/production-owner-bootstrap.sh");
+  assert.match(s,/edusentia_owner/);
+  assert.match(s,/database\/install-master\.sh/);
+  assert.match(s,/database\/runtime-role\.sql/);
+  assert.match(s,/database\/provisioner-role\.sql/);
+  assert.match(s,/database\/service-login-roles\.sql/);
+  assert.match(s,/schema_version.*0025/s);
+  assert.match(s,/neon-v1\.0\.0-r42/);
+});

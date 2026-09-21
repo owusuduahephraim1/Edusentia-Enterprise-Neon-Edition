@@ -12,6 +12,8 @@ esac
 MASTER_URL="$BOOTSTRAP_DATABASE_URL"
 TEMPLATE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" TEMPLATE_DB="$TEMPLATE_DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.TEMPLATE_DB;process.stdout.write(u.toString())')"
 echo "::add-mask::$TEMPLATE_URL"
+TARGET_DATABASE_URL="$TEMPLATE_URL"
+export TARGET_DATABASE_URL
 
 template_exists() {
   psql "$MASTER_URL" -Atc "select 1 from pg_database where datname='$TEMPLATE_DB'" | grep -qx 1
@@ -50,7 +52,7 @@ if ! template_exists; then
 fi
 
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/0020_tenant_runtime_parity.sql
-TARGET_DATABASE_URL="$TEMPLATE_URL" bash database/reference-compat/install-core.sh
+bash database/reference-compat/install-core.sh
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0028_certified_compat_foundation.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0029_certified_users_access_identity.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0030_certified_academic_configuration.sql

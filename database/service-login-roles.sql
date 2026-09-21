@@ -19,15 +19,67 @@ begin
 end
 $service_login_roles$;
 
-grant edusentia_worker_runtime to edusentia_worker_login
-  with admin false, inherit true, set true;
-grant edusentia_provisioner to edusentia_provisioner_login
-  with admin false, inherit true, set true;
+do $service_login_memberships$
+begin
+  if not exists(
+    select 1 from pg_auth_members m
+    join pg_roles granted on granted.oid=m.roleid
+    join pg_roles member_role on member_role.oid=m.member
+    where granted.rolname='edusentia_worker_runtime'
+      and member_role.rolname='edusentia_worker_login'
+      and not m.admin_option and m.inherit_option and m.set_option
+  ) then
+    begin
+      execute 'grant edusentia_worker_runtime to edusentia_worker_login with admin false, inherit true, set true';
+    exception when insufficient_privilege then
+      raise exception 'worker login wrapper membership requires owner bootstrap'
+        using errcode='42501',
+              hint='Run database/production-owner-bootstrap.sh with the Neon database owner once, then rerun deployment.';
+    end;
+  end if;
 
-grant edusentia_worker_login to edusentia_runtime
-  with admin true, inherit false, set false;
-grant edusentia_provisioner_login to edusentia_runtime
-  with admin true, inherit false, set false;
+  if not exists(
+    select 1 from pg_auth_members m
+    join pg_roles granted on granted.oid=m.roleid
+    join pg_roles member_role on member_role.oid=m.member
+    where granted.rolname='edusentia_provisioner'
+      and member_role.rolname='edusentia_provisioner_login'
+      and not m.admin_option and m.inherit_option and m.set_option
+  ) then
+    begin
+      execute 'grant edusentia_provisioner to edusentia_provisioner_login with admin false, inherit true, set true';
+    exception when insufficient_privilege then
+      raise exception 'provisioner login wrapper membership requires owner bootstrap'
+        using errcode='42501',
+              hint='Run database/production-owner-bootstrap.sh with the Neon database owner once, then rerun deployment.';
+    end;
+  end if;
+
+  if not exists(
+    select 1 from pg_auth_members m
+    join pg_roles granted on granted.oid=m.roleid
+    join pg_roles member_role on member_role.oid=m.member
+    where granted.rolname='edusentia_worker_login'
+      and member_role.rolname='edusentia_runtime'
+      and m.admin_option and not m.inherit_option and not m.set_option
+  ) then
+    grant edusentia_worker_login to edusentia_runtime
+      with admin true, inherit false, set false;
+  end if;
+
+  if not exists(
+    select 1 from pg_auth_members m
+    join pg_roles granted on granted.oid=m.roleid
+    join pg_roles member_role on member_role.oid=m.member
+    where granted.rolname='edusentia_provisioner_login'
+      and member_role.rolname='edusentia_runtime'
+      and m.admin_option and not m.inherit_option and not m.set_option
+  ) then
+    grant edusentia_provisioner_login to edusentia_runtime
+      with admin true, inherit false, set false;
+  end if;
+end
+$service_login_memberships$;
 
 do $verify_service_login_roles$
 declare
