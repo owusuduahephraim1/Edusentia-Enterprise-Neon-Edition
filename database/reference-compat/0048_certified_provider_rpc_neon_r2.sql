@@ -673,7 +673,7 @@ begin
   end if;
 
   old_json:=to_jsonb(cur);
-  update app.tenant_licenses
+  update app.tenant_licenses as licensed
      set plan_id=p.id,
          status=target_status,
          starts_at=coalesce(effective_activation,issue_date::timestamptz),
@@ -687,8 +687,8 @@ begin
            'compliance_reason',coalesce(compliance_reason_text,'')
          ),
          updated_at=now()
-   where tenant_id=tenant
-   returning to_jsonb(app.tenant_licenses) into new_json;
+   where licensed.tenant_id=tenant
+   returning to_jsonb(licensed) into new_json;
 
   insert into app.license_events(tenant_id,event_type,actor_id,metadata)
   values(tenant,'license_updated',auth.uid(),jsonb_build_object(
