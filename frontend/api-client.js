@@ -76,7 +76,7 @@
     listStudents:(query={})=>request(`/api/students?${new URLSearchParams(query)}`),
     createStudent:(payload)=>post("/api/students",payload),
     listStaff:(query={})=>request(`/api/staff?${new URLSearchParams(query)}`),
-    listFinanceSummary:()=>request("/api/finance/summary"),
+    listFinanceSummary:()=>request("/api/finance/summary"),\n    listFinanceInvoices:(query={})=>request(`/api/finance/invoices?${new URLSearchParams(query)}`),\n    listFinancePayments:(query={})=>request(`/api/finance/payments?${new URLSearchParams(query)}`),
     prepareUpload:(payload)=>post("/api/files/upload-url",payload),
     uploadFile,
     uploadReportPdf,
