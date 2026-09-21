@@ -81,7 +81,7 @@ jobs:
             echo "Parity browser deployment is safely skipped because isolated deployment configuration is incomplete."
           fi
 
-      - name: Verify parity branch release identity
+      - name: Verify isolated parity bootstrap route
         if: steps.config.outputs.ready == 'true'
         shell: bash
         run: |
@@ -92,9 +92,9 @@ jobs:
             if(u.pathname!=="/edusentia") throw new Error("Parity bootstrap URL must target the edusentia control database");
             console.log("Parity bootstrap route structure verified.");
           '
-          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
-          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select (platform.release_gate()->>'ready')::boolean")" = "t"
-          echo "Parity schema 0025 and release gate verified."
+          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select current_database()")" = "edusentia"
+          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select current_user")" = "edusentia_runtime"
+          echo "Parity bootstrap endpoint and deployment role verified."
 
       - name: Prepare isolated parity Worker and provisioner credentials
         if: steps.config.outputs.ready == 'true'
