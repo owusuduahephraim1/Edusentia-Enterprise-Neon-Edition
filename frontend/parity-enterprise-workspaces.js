@@ -2,7 +2,7 @@
   "use strict";
   const P=window.EdusentiaParity;
   if(!P)return;
-  const {registerView,certified,role,esc,status,formatDate,formatDateTime,loading,empty,pageError,byId,academicConfig}=P;
+  const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,loading,empty,pageError,byId,academicConfig}=P;
   const local={attendance:{},history:{},insights:{},prospectus:{},delegations:{},certificates:{},idCards:{},users:{},compliance:{},backup:{},license:{}};
   const arr=value=>Array.isArray(value)?value:[];
   const obj=value=>value&&typeof value==="object"&&!Array.isArray(value)?value:{};
@@ -170,8 +170,90 @@
     catch(e){byId("content").innerHTML=sectionHead("Licence Capacity","Current school entitlement, capacity usage, and storage position")+pageError(e);}
   }
 
-  registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class registers and term attendance",roles:["system_admin","principal","class_teacher"],render:renderAttendance});
-  registerView({id:"history",label:"Academic History",icon:"◷",subtitle:"Published results, lifecycle, and transcripts",roles:["system_admin","principal"],render:renderHistory});
+
+  async function renderTeacherProfile(){
+    byId("content").innerHTML=sectionHead("My Teacher Profile","Official staff details, qualifications, and current teaching assignments")+loading("Loading teacher profile");
+    try{
+      const data=await certified("get_my_teacher_profile",{});
+      if(!data?.linked){byId("content").innerHTML=sectionHead("My Teacher Profile","Official staff details, qualifications, and current teaching assignments")+empty("No linked teacher record. Ask the System Administrator to link your account to a teacher record.");return;}
+      const teacher=obj(data.teacher),classes=arr(data.classes),subjects=arr(data.subjects);
+      byId("content").innerHTML=sectionHead("My Teacher Profile","Official staff details, qualifications, and current teaching assignments")+
+        '<section class="panel pad"><div class="detail-grid">'+Object.entries(teacher).filter(([,v])=>simple(v)).slice(0,18).map(([k,v])=>'<div><span>'+esc(title(k))+'</span><strong>'+esc(text(v))+'</strong></div>').join("")+'</div></section>'+
+        '<div class="section-title"><h4>Assigned classes</h4></div>'+recordTable(classes,["class_name","student_count","subject_count"])+
+        '<div class="section-title"><h4>Subject assignments</h4></div>'+recordTable(subjects,["class_name","subject_name","subject_code"]);
+    }catch(e){byId("content").innerHTML=sectionHead("My Teacher Profile","Official staff details, qualifications, and current teaching assignments")+pageError(e);}
+  }
+
+  async function renderMyClass(){
+    byId("content").innerHTML=sectionHead("My Class","Assigned learners, subjects, and report completion")+loading("Loading class workspace");
+    try{
+      const data=await certified("get_role_workspace",{}),rows=arr(data?.classes);
+      byId("content").innerHTML=sectionHead("My Class","Assigned learners, subjects, and report completion")+
+        recordTable(rows,["class_name","student_count","subject_count","open_reports","review_reports","published_reports","completed_reports","expected_reports"]);
+    }catch(e){byId("content").innerHTML=sectionHead("My Class","Assigned learners, subjects, and report completion")+pageError(e);}
+  }
+
+  async function renderMySubjects(){
+    byId("content").innerHTML=sectionHead("My Subjects","Assigned classes and assessment workload")+loading("Loading subject workspace");
+    try{
+      const data=await certified("get_role_workspace",{}),rows=arr(data?.subjects);
+      byId("content").innerHTML=sectionHead("My Subjects","Assigned classes and assessment workload")+
+        recordTable(rows,["class_name","subject_name","subject_code","student_count","open_reports","scored_reports","expected_reports"]);
+    }catch(e){byId("content").innerHTML=sectionHead("My Subjects","Assigned classes and assessment workload")+pageError(e);}
+  }
+
+  async function renderPlanUpgrade(){
+    byId("content").innerHTML=sectionHead("Upgrade Plan","Renew or activate an authorized Edusentia plan")+loading("Loading licence status");
+    try{
+      const [capacity,licence]=await Promise.all([certified("get_school_license_capacity_console",{}),api().licenseStatus().catch(()=>null)]);
+      const plan=obj(capacity?.plan),snapshot=obj(capacity?.snapshot);
+      byId("content").innerHTML=sectionHead("Upgrade Plan","Renew or activate an authorized Edusentia plan")+
+        metrics({plan:plan.name||plan.code||"Current plan",status:snapshot.computed_status||snapshot.status||licence?.status||"active",expires_at:snapshot.expires_at||licence?.expiresAt||"—"})+
+        '<section class="panel pad"><form id="planUpgradeForm" class="form-stack"><label class="field"><span>Activation code</span><input name="code" autocomplete="off" maxlength="512" required></label><p class="muted">Use only a one-time code issued for this school workspace.</p><p id="planUpgradeMessage" class="form-message hidden" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Verify and activate</button></div></form></section>';
+      byId("planUpgradeForm")?.addEventListener("submit",async event=>{
+        event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),msg=byId("planUpgradeMessage"),code=String(new FormData(form).get("code")||"").trim();
+        button.disabled=true;msg.classList.add("hidden");
+        try{await api().activateLicense(code);msg.textContent="Licence activation completed successfully.";msg.dataset.kind="success";msg.classList.remove("hidden");form.reset();setTimeout(()=>renderPlanUpgrade(),500);}
+        catch(e){msg.textContent=e?.message||"Licence activation failed.";msg.dataset.kind="error";msg.classList.remove("hidden");}
+        finally{button.disabled=false;}
+      });
+    }catch(e){byId("content").innerHTML=sectionHead("Upgrade Plan","Renew or activate an authorized Edusentia plan")+pageError(e);}
+  }
+
+  async function renderSettings(){
+    byId("content").innerHTML=sectionHead("Settings","School identity, security, health, and resilience")+loading("Loading system settings");
+    try{
+      const [boot,health,backup,readiness]=await Promise.all([
+        api().bootstrap(),
+        certified("system_health",{}).catch(()=>null),
+        certified("backup_dashboard",{}).catch(()=>null),
+        certified("validate_operational_readiness",{}).catch(()=>null)
+      ]);
+      const school=obj(boot?.school||boot?.tenant);
+      byId("content").innerHTML=sectionHead("Settings","School identity, security, health, and resilience")+
+        '<section class="panel pad"><div class="section-title"><h4>School identity</h4></div><div class="detail-grid">'+Object.entries(school).filter(([,v])=>simple(v)).slice(0,16).map(([k,v])=>'<div><span>'+esc(title(k))+'</span><strong>'+esc(text(v))+'</strong></div>').join("")+'</div><div class="hr"></div><form id="schoolLogoForm" class="form-stack"><label class="field"><span>Official school logo (PNG)</span><input name="logo" type="file" accept="image/png" required></label><p id="schoolLogoMessage" class="form-message hidden" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Upload and use logo</button></div></form></section>'+
+        '<div class="section-title"><h4>System health</h4></div>'+objectPanels(health||{})+
+        '<div class="section-title"><h4>Operational readiness</h4></div>'+objectPanels(readiness||{})+
+        '<div class="section-title"><h4>Backup position</h4></div>'+objectPanels(backup||{});
+      byId("schoolLogoForm")?.addEventListener("submit",async event=>{
+        event.preventDefault();const form=event.currentTarget,file=form.elements.logo.files?.[0],button=form.querySelector('button[type="submit"]'),msg=byId("schoolLogoMessage");
+        if(!file)return;if(file.type!=="image/png"){msg.textContent="The official logo must be a PNG file.";msg.dataset.kind="error";msg.classList.remove("hidden");return;}
+        button.disabled=true;msg.classList.add("hidden");
+        try{
+          const uploaded=await api().uploadFile(file,"school-branding");
+          await certified("set_school_logo_reference",{target_logo_url:uploaded.objectKey});
+          msg.textContent="Official school logo updated successfully.";msg.dataset.kind="success";msg.classList.remove("hidden");form.reset();
+        }catch(e){msg.textContent=e?.message||"School logo could not be updated.";msg.dataset.kind="error";msg.classList.remove("hidden");}
+        finally{button.disabled=false;}
+      });
+    }catch(e){byId("content").innerHTML=sectionHead("Settings","School identity, security, health, and resilience")+pageError(e);}
+  }
+
+  registerView({id:"teacher_profile",label:"My Profile",icon:"♙",subtitle:"Teacher profile, qualifications, and assignments",roles:["class_teacher","subject_teacher"],render:renderTeacherProfile});
+  registerView({id:"my_class",label:"My Class",icon:"▣",subtitle:"Assigned class, learners, and report progress",roles:["class_teacher"],render:renderMyClass});
+  registerView({id:"my_subjects",label:"My Subjects",icon:"⌘",subtitle:"Assigned subjects, classes, and assessment progress",roles:["class_teacher","subject_teacher"],render:renderMySubjects});
+  registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class registers and term attendance",roles:["class_teacher"],render:renderAttendance});
+  registerView({id:"history",label:"Academic History",icon:"◷",subtitle:"Published results, lifecycle, and transcripts",roles:["system_admin","principal","class_teacher","subject_teacher"],render:renderHistory});
   registerView({id:"prospectus",label:"School Prospectus",icon:"▤",subtitle:"Fees, requirements, transport, policies, and revisions",roles:["system_admin"],render:renderProspectus});
   registerView({id:"delegations",label:"Emergency Delegation",icon:"⚑",subtitle:"Temporary academic access and continuity",roles:["system_admin","principal"],render:renderDelegations});
   registerView({id:"certificates",label:"Certificates",icon:"✦",subtitle:"Promotion, completion, and recognition awards",roles:["system_admin","principal"],render:renderCertificates});
@@ -179,7 +261,9 @@
   registerView({id:"insights",label:"Insights",icon:"◩",subtitle:"Performance, attendance, and completion trends",roles:["system_admin","principal","class_teacher","subject_teacher"],render:renderInsights});
   registerView({id:"children",label:"My Children",icon:"♥",subtitle:"Published academic records",roles:["parent_guardian"],render:renderChildren});
   registerView({id:"users",label:"Users and Access",icon:"♟",subtitle:"Accounts and delegated access",roles:["system_admin"],render:renderUsers});
-  registerView({id:"compliance",label:"Compliance",icon:"⚿",subtitle:"Privacy, retention, and security evidence",roles:["system_admin"],render:renderCompliance});
+  registerView({id:"compliance",label:"Compliance",icon:"⚿",subtitle:"Privacy, retention, and security evidence",roles:["system_admin","principal"],render:renderCompliance});
   registerView({id:"backup_restore",label:"Backup & Recovery",icon:"↻",subtitle:"Backup history and recovery readiness",roles:["system_admin"],render:renderBackup});
+  registerView({id:"plan_upgrade",label:"Upgrade Plan",icon:"◇",subtitle:"Verify and activate an authorized plan upgrade",roles:["system_admin"],render:renderPlanUpgrade});
+  registerView({id:"settings",label:"Settings",icon:"⚙",subtitle:"School identity, security, and resilience",roles:["system_admin"],render:renderSettings});
   registerView({id:"license_capacity",label:"Licence Capacity",icon:"◇",subtitle:"Entitlement and capacity usage",roles:["system_admin"],render:renderLicenseCapacity});
 })();
