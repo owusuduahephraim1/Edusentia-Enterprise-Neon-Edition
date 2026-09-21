@@ -158,7 +158,7 @@ jobs:
           });
           EOF
           test -f frontend/assets/edusentia-auth-learning.webp
-          test "$(sha256sum frontend/assets/edusentia-auth-learning.webp | awk '{print test "$(sha256sum frontend/assets/edusentia-auth-learning.webp | awk '{print $1}')" = "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1"}')" = "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1"
+          echo "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1  frontend/assets/edusentia-auth-learning.webp" | sha256sum --check --status
 
       - name: Ensure isolated parity R2 bucket
         if: steps.config.outputs.ready == 'true'
