@@ -88,20 +88,84 @@ function publicJwkOf(privateJwk:JsonWebKey):JsonWebKey{
   const {d, ...publicJwk}=privateJwk as JsonWebKey & {d?:string};
   return publicJwk;
 }
-async function signingContext(env:Env,sql:Sql):Promise<SigningContext>{
+function validatePrivateSigningJwk(jwk:JsonWebKey){
+  if(jwk.kty!=="EC"||jwk.crv!=="P-256"||!jwk.d||!jwk.x||!jwk.y)fail("Package signing JWK must be a private P-256 EC key","package_signing_invalid",503);
+  return jwk;
+}
+async function packageSigningEncryptionKey(env:Env){
+  const secret=String(env.PACKAGE_SIGNING_ENCRYPTION_SECRET||env.BACKUP_SIGNING_SECRET||env.SESSION_PEPPER||"");
+  if(secret.length<32)fail("Package signing encryption secret is unavailable","package_signing_unavailable",503);
+  const digest=await crypto.subtle.digest("SHA-256",enc.encode("edusentia:platform-package-signing:v1:"+secret));
+  return crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+}
+async function encryptPrivateJwk(env:Env,jwk:JsonWebKey){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv:owned(iv)},await packageSigningEncryptionKey(env),enc.encode(canonicalJson(jwk))));
+  return `v1.${b64url(iv)}.${b64url(ciphertext)}`;
+}
+async function decryptPrivateJwk(env:Env,value:string){
+  const [version,ivText,cipherText]=String(value||"").split(".");
+  if(version!=="v1"||!ivText||!cipherText)fail("Stored package signing key is unreadable","package_signing_recovery_required",503);
+  try{
+    const clear=await crypto.subtle.decrypt({name:"AES-GCM",iv:owned(unb64url(ivText))},await packageSigningEncryptionKey(env),owned(unb64url(cipherText)));
+    return validatePrivateSigningJwk(JSON.parse(dec.decode(clear)) as JsonWebKey);
+  }catch{
+    fail("Stored package signing key cannot be decrypted with the configured continuity secret","package_signing_recovery_required",503);
+  }
+}
+async function environmentSigningCandidate(env:Env){
   const raw=String(env.RCE_PACKAGE_SIGNING_PRIVATE_JWK||"").trim();
-  if(!raw)fail("RCE_PACKAGE_SIGNING_PRIVATE_JWK is required for package generation","package_signing_unavailable",503);
+  if(!raw)return null;
   let privateJwk:JsonWebKey;
-  try{privateJwk=JSON.parse(raw) as JsonWebKey;}catch{fail("Package signing JWK is invalid JSON","package_signing_invalid",503);}
-  if(privateJwk.kty!=="EC"||privateJwk.crv!=="P-256"||!privateJwk.d||!privateJwk.x||!privateJwk.y)fail("Package signing JWK must be a private P-256 EC key","package_signing_invalid",503);
+  try{privateJwk=validatePrivateSigningJwk(JSON.parse(raw) as JsonWebKey);}catch(e){if((e as any)?.code)throw e;fail("Package signing JWK is invalid JSON","package_signing_invalid",503);}
   const publicJwk=publicJwkOf(privateJwk),fingerprint=await sha256(enc.encode(canonicalJson(publicJwk)));
   const keyId=clean(env.RCE_PACKAGE_SIGNING_KEY_ID,120)||`eds-p256-${fingerprint.slice(0,20)}`;
   if(!/^[A-Za-z0-9._:-]{6,120}$/.test(keyId))fail("Package signing key ID is invalid","package_signing_invalid",503);
-  const existing=await sql`select key_id,public_fingerprint from platform.package_signing_keys where key_id=${keyId} limit 1`;
-  if(existing[0]&&String((existing[0] as any).public_fingerprint)!==fingerprint)fail("Package signing key ID conflicts with the registered signing identity","package_signing_conflict",409);
-  await sql`insert into platform.package_signing_keys(key_id,public_jwk,public_fingerprint,active,last_seen_at)
-    values(${keyId},${JSON.stringify(publicJwk)}::jsonb,${fingerprint},true,now())
-    on conflict(key_id) do update set active=true,last_seen_at=now()`;
+  return {privateJwk,publicJwk,fingerprint,keyId};
+}
+async function signingContext(env:Env,sql:Sql):Promise<SigningContext>{
+  const candidate=await environmentSigningCandidate(env);
+  const storedRows=await sql`select key_id,public_jwk,public_fingerprint,private_jwk_ciphertext
+    from platform.package_signing_keys where active=true order by last_seen_at desc,first_seen_at desc limit 1`;
+  const stored=storedRows[0] as any;
+
+  let privateJwk:JsonWebKey,publicJwk:JsonWebKey,fingerprint:string,keyId:string,ciphertext:string;
+  if(stored){
+    keyId=String(stored.key_id);fingerprint=String(stored.public_fingerprint);publicJwk=stored.public_jwk as JsonWebKey;
+    const persisted=String(stored.private_jwk_ciphertext||"");
+    if(persisted){
+      privateJwk=await decryptPrivateJwk(env,persisted);
+      const derivedPublic=publicJwkOf(privateJwk),derivedFingerprint=await sha256(enc.encode(canonicalJson(derivedPublic)));
+      if(derivedFingerprint!==fingerprint)fail("Stored package signing identity failed continuity verification","package_signing_recovery_required",503);
+      publicJwk=derivedPublic;ciphertext=persisted;
+      if(candidate&&candidate.fingerprint!==fingerprint)console.warn("Ignoring conflicting package signing environment key because persisted signing identity is authoritative.");
+    }else{
+      if(!candidate||candidate.fingerprint!==fingerprint)fail("Package signing identity exists without recoverable private material. Restore the matching RCE_PACKAGE_SIGNING_PRIVATE_JWK once to repair continuity.","package_signing_recovery_required",503);
+      privateJwk=candidate.privateJwk;publicJwk=candidate.publicJwk;ciphertext=await encryptPrivateJwk(env,privateJwk);
+      await sql`update platform.package_signing_keys set private_jwk_ciphertext=${ciphertext},public_jwk=${JSON.stringify(publicJwk)}::jsonb,last_seen_at=now() where key_id=${keyId}`;
+    }
+  }else{
+    if(candidate){
+      ({privateJwk,publicJwk,fingerprint,keyId}=candidate);
+    }else{
+      const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
+      privateJwk=validatePrivateSigningJwk(await crypto.subtle.exportKey("jwk",pair.privateKey));
+      publicJwk=await crypto.subtle.exportKey("jwk",pair.publicKey);
+      fingerprint=await sha256(enc.encode(canonicalJson(publicJwk)));
+      keyId=clean(env.RCE_PACKAGE_SIGNING_KEY_ID,120)||`eds-p256-${fingerprint.slice(0,20)}`;
+      if(!/^[A-Za-z0-9._:-]{6,120}$/.test(keyId))fail("Package signing key ID is invalid","package_signing_invalid",503);
+    }
+    ciphertext=await encryptPrivateJwk(env,privateJwk);
+    await sql.transaction([
+      sql`update platform.package_signing_keys set active=false where active=true`,
+      sql`insert into platform.package_signing_keys(key_id,public_jwk,public_fingerprint,private_jwk_ciphertext,active,last_seen_at)
+        values(${keyId},${JSON.stringify(publicJwk)}::jsonb,${fingerprint},${ciphertext},true,now())
+        on conflict(key_id) do update set public_jwk=excluded.public_jwk,public_fingerprint=excluded.public_fingerprint,
+          private_jwk_ciphertext=excluded.private_jwk_ciphertext,active=true,last_seen_at=now()`
+    ]);
+  }
+
+  await sql`update platform.package_signing_keys set last_seen_at=now() where key_id=${keyId}`;
   const privateKey=await crypto.subtle.importKey("jwk",privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
   return {keyId,publicJwk,fingerprint,privateKey};
 }
