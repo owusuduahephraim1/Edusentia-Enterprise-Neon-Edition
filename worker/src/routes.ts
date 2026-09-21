@@ -110,10 +110,10 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   }
   if(method==="GET"&&p==="/api/license/status"){
     requireRole(ctx,["system_admin","principal","accountant"]);
-    const rows=await sql`
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
       select lp.code plan_code,lp.name plan_name,tl.status,tl.starts_at,tl.expires_at,tl.feature_overrides,tl.limits_override,lp.feature_flags,lp.limits
       from app.tenant_licenses tl left join platform.license_plans lp on lp.id=tl.plan_id
-      where tl.tenant_id=${ctx.tenantId}::uuid limit 1`;
+      where tl.tenant_id=${ctx.tenantId}::uuid limit 1`]);
     return json({license:rows[0]||null});
   }
   if(method==="GET"&&p==="/api/bootstrap"){
