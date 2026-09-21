@@ -694,7 +694,7 @@ test("backup settings compatibility hotfix completes the certified backup consol
   assert.match(sql,/backup_retention_days integer not null default 30/i);
   assert.match(sql,/backup_minimum_copies integer not null default 7/i);
   assert.match(sql,/0048c_certified_backup_settings_compat/i);
-  assert.match(lifecycle,/psql "\\$db_url"[\\s\\S]*0048c_certified_backup_settings_compat\\.sql/,"0048c lifecycle installer uses db_url");
+  assert.match(lifecycle,/psql "\$db_url"[\s\S]*0048c_certified_backup_settings_compat\.sql/,"0048c lifecycle installer uses db_url");
   for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
     assert.match(source,/0048c_certified_backup_settings_compat\.sql/);
   }
