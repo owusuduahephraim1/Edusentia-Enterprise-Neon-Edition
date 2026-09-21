@@ -90,18 +90,9 @@ jobs:
             if(u.pathname!=="/edusentia") throw new Error("Parity bootstrap URL must target the edusentia control database");
             console.log("Parity bootstrap route structure verified.");
           '
-          (
-            cd worker
-            node --input-type=module -e '
-              import { neon } from "@neondatabase/serverless";
-              const sql=neon(process.env.PARITY_BOOTSTRAP_URL);
-              const release=await sql`select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1`;
-              if(release[0]?.schema_version!=="0025")throw new Error("Parity master schema is not 0025");
-              const rows=await sql`select platform.release_gate() gate`;
-              if(rows[0]?.gate?.ready!==true)throw new Error("Parity release gate is not ready");
-              console.log("Parity schema 0025 and release gate verified.");
-            '
-          )
+          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
+          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select (platform.release_gate()->>'ready')::boolean")" = "t"
+          echo "Parity schema 0025 and release gate verified."
 
       - name: Prepare least-privilege parity Worker credential
         if: steps.config.outputs.ready == 'true'
