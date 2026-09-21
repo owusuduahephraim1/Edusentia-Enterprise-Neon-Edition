@@ -66,7 +66,7 @@ async function rpc(cookie,operation,args={}){
 function assert(condition,message){if(!condition)throw new Error(message);}
 
 const fixtureRows=await sql`
-  select r.id report_id,e.id enrollment_id,e.class_id,e.academic_year_id,r.term_id
+  select r.id report_id,e.id enrollment_id,e.student_id,e.class_id,e.academic_year_id,r.term_id
   from public.student_reports r
   join public.enrollments e on e.id=r.enrollment_id
   where r.status='published' and r.deleted_at is null
@@ -127,6 +127,11 @@ try{
 
   const license=(await http("/api/license/status",{cookie})).payload;
   assert(license?.license,"Tenant license status is unavailable");
+  const planFlags=license.license.feature_flags&&typeof license.license.feature_flags==="object"?license.license.feature_flags:{};
+  const featureOverrides=license.license.feature_overrides&&typeof license.license.feature_overrides==="object"?license.license.feature_overrides:{};
+  const featureEnabled=code=>Object.prototype.hasOwnProperty.call(featureOverrides,code)
+    ?featureOverrides[code]===true
+    :planFlags[code]===true;
 
   const students=(await http("/api/students?limit=25",{cookie})).payload;
   assert(Array.isArray(students?.rows),"Student API did not return rows");
@@ -164,6 +169,77 @@ try{
   const notifications=await rpc(cookie,"list_notifications",{page_number:1,page_size:30});
   assert(notifications&&typeof notifications==="object","Notification center failed");
 
+  const modules=new Set(["session","bootstrap","students","staff","academics","timetable","reports","audit","notifications","finance","operations","r2-report-pdf"]);
+
+  const history=await rpc(cookie,"get_student_academic_history",{target_student_id:String(fixture.student_id)});
+  assert(history&&typeof history==="object"&&!Array.isArray(history),"Academic history console failed");
+  modules.add("academic-history");
+
+  const delegation=await rpc(cookie,"get_emergency_delegation_console",{});
+  assert(delegation&&typeof delegation==="object"&&!Array.isArray(delegation),"Emergency delegation console failed");
+  modules.add("emergency-delegation");
+
+  const certificates=await rpc(cookie,"get_certificate_console",{target_academic_year_id:String(fixture.academic_year_id)});
+  assert(certificates&&typeof certificates==="object"&&!Array.isArray(certificates),"Certificate console failed");
+  modules.add("certificates");
+
+  const compliance=await rpc(cookie,"get_compliance_console",{});
+  assert(compliance&&typeof compliance==="object"&&!Array.isArray(compliance),"Compliance console failed");
+  modules.add("compliance");
+
+  const backups=await rpc(cookie,"backup_dashboard",{});
+  assert(backups&&Array.isArray(backups.backups),"Backup dashboard failed");
+  modules.add("backup");
+
+  const recovery=await rpc(cookie,"get_recovery_console",{});
+  assert(recovery&&Array.isArray(recovery.tests),"Recovery console failed");
+  modules.add("recovery");
+
+  const capacity=await rpc(cookie,"get_school_license_capacity_console",{});
+  assert(capacity&&capacity.usage&&typeof capacity.usage==="object","Licence capacity console failed");
+  modules.add("license-capacity");
+
+  const roleDashboard=await rpc(cookie,"get_role_dashboard",{target_term_id:String(fixture.term_id)});
+  assert(roleDashboard&&typeof roleDashboard==="object"&&!Array.isArray(roleDashboard),"Role dashboard failed");
+  modules.add("role-dashboard");
+
+  const workspace=await rpc(cookie,"get_role_workspace",{});
+  assert(workspace&&Array.isArray(workspace.classes)&&Array.isArray(workspace.subjects),"Role workspace failed");
+  modules.add("role-workspace");
+
+  const systemHealth=await rpc(cookie,"system_health",{});
+  assert(systemHealth&&typeof systemHealth==="object"&&!Array.isArray(systemHealth),"System health RPC failed");
+  modules.add("system-health");
+
+  const readiness=await rpc(cookie,"validate_operational_readiness",{});
+  assert(readiness?.ready===true,"Operational readiness is not fully green");
+  modules.add("operational-readiness");
+
+  const guardians=await rpc(cookie,"list_guardian_portal_accounts",{search_text:""});
+  assert(Array.isArray(guardians),"Guardian portal account console failed");
+  modules.add("guardian-accounts");
+
+  if(featureEnabled("analytics")){
+    const analytics=await rpc(cookie,"academic_analytics",{target_term_id:String(fixture.term_id),target_class_id:String(fixture.class_id)});
+    assert(analytics&&typeof analytics==="object"&&!Array.isArray(analytics),"Academic analytics failed");
+    modules.add("analytics");
+  }
+  if(featureEnabled("school_prospectus")){
+    const prospectus=await rpc(cookie,"get_school_prospectus_console",{target_academic_year_id:String(fixture.academic_year_id)});
+    assert(prospectus&&typeof prospectus==="object"&&!Array.isArray(prospectus),"School prospectus console failed");
+    modules.add("prospectus");
+  }
+  if(featureEnabled("id_cards")){
+    const idCards=await rpc(cookie,"get_id_card_console",{target_academic_year_id:String(fixture.academic_year_id),target_class_id:String(fixture.class_id)});
+    assert(idCards&&typeof idCards==="object"&&!Array.isArray(idCards),"Student ID card console failed");
+    modules.add("student-id-cards");
+  }
+  if(featureEnabled("staff_id_cards")){
+    const staffIdCards=await rpc(cookie,"get_staff_id_card_console",{});
+    assert(staffIdCards&&typeof staffIdCards==="object"&&!Array.isArray(staffIdCards),"Staff ID card console failed");
+    modules.add("staff-id-cards");
+  }
+
   const pdf=Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n");
   const checksum=crypto.createHash("sha256").update(pdf).digest("hex");
   const oldPublication=await sql`
@@ -199,7 +275,7 @@ try{
     ok:true,
     tenant:TENANT_CODE,
     assuranceLevel:2,
-    modules:["session","bootstrap","students","staff","academics","timetable","reports","audit","notifications","finance","operations","r2-report-pdf"],
+    modules:Array.from(modules),
     reportStatus:"published",
     r2RoundTrip:true
   }));
