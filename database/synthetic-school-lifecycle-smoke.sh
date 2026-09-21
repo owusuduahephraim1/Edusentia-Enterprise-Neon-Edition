@@ -92,6 +92,11 @@ SQL
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0044b_certified_report_transition_helpers.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0045_certified_report_pdf_integrity_r2.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0045b_neon_report_view_compat.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0045c_certified_operational_schema.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0045d_certified_rpc_helper_closure.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0046_certified_reference_rpc_bulk.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0047_certified_identity_rpc_neon.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048_certified_provider_rpc_neon_r2.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -109,7 +114,7 @@ select app.platform_initialize_tenant(
 SQL
 
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
+  test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0037_certified_academic_configuration_mutations'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0038_certified_teacher_principal_crud'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0039_certified_timetable_academic_alignment'")" = "1"
