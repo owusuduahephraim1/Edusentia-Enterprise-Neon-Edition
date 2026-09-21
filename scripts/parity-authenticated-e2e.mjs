@@ -212,7 +212,7 @@ try{
   modules.add("system-health");
 
   const readiness=await rpc(cookie,"validate_operational_readiness",{});
-  assert(readiness?.ready===true,"Operational readiness is not fully green");
+  assert(readiness?.ready===true,"Operational readiness is not fully green: "+JSON.stringify(readiness));
   modules.add("operational-readiness");
 
   const guardians=await rpc(cookie,"list_guardian_portal_accounts",{search_text:""});
