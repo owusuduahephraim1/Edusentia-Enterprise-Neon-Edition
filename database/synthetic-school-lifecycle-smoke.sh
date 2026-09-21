@@ -10,8 +10,16 @@ BASIC_DB="${BASIC_DB:0:60}"
 SHS_DB="${SHS_DB:0:60}"
 
 cleanup() {
-  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$BASIC_DB\" with (force);" >/dev/null 2>&1 || true
-  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$SHS_DB\" with (force);" >/dev/null 2>&1 || true
+  if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
+    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
+set role edusentia_provisioner;
+drop database if exists "$BASIC_DB" with (force);
+drop database if exists "$SHS_DB" with (force);
+SQL
+  else
+    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$BASIC_DB\" with (force);" >/dev/null 2>&1 || true
+    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$SHS_DB\" with (force);" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 cleanup
@@ -23,7 +31,11 @@ url_for() {
 install_tenant() {
   local db_name="$1" tenant_id="$2" tenant_code="$3" school_name="$4" institution_type="$5" admin_email="$6"
   if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
-    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$db_name\" owner edusentia_provisioner template \"$CI_TEMPLATE_DATABASE\";"
+    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
+set role edusentia_provisioner;
+create database "$db_name" owner edusentia_provisioner template "$CI_TEMPLATE_DATABASE";
+grant connect,create,temp on database "$db_name" to edusentia_runtime;
+SQL
   else
     psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$db_name\";"
   fi
