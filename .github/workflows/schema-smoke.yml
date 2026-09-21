@@ -63,7 +63,10 @@ jobs:
           test "$PARITY_DB_NAME" = "edusentia"
           test "$PARITY_DB_ROLE" = "edusentia_runtime|edusentia_runtime|none"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_provisioner','set')")" = "t"
-          echo "Parity direct endpoint and deployment runtime identity verified."
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='edusentia_ci_base_v2' and pid<>pg_backend_pid();" >/dev/null
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database edusentia_ci_base_v2 with allow_connections false;"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select datistemplate and not datallowconn from pg_database where datname='edusentia_ci_base_v2'")" = "t"
+          echo "Parity direct endpoint, deployment runtime identity, and locked CI seed verified."
 
       - name: Fresh database migration smoke test
         shell: bash
