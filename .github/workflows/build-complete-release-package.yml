@@ -1,0 +1,72 @@
+name: Build Complete Release Package
+
+on:
+  push:
+    branches: [reference-parity-r42]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edusentia-complete-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify source quality
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts
+          npm run check
+          npm test
+
+      - name: Build deterministic complete package
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA:0:12}"
+          ROOT="Edusentia-Enterprise-Neon-Edition-r42-${SHORT_SHA}"
+          OUT="${ROOT}-COMPLETE.zip"
+          mkdir -p "/tmp/${ROOT}"
+          git archive --format=tar HEAD | tar -xf - -C "/tmp/${ROOT}"
+          cat > "/tmp/${ROOT}/RELEASE_SOURCE_COMMIT.txt" <<EOF
+          Repository: ${GITHUB_REPOSITORY}
+          Branch: ${GITHUB_REF_NAME}
+          Commit: ${GITHUB_SHA}
+          Build: ${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}
+          Backend: Neon PostgreSQL
+          Runtime: Cloudflare Worker
+          Object storage: Cloudflare R2
+          Certified control schema: 0025
+          Certified tenant runtime schema: 0020
+          Certified reference compatibility schema: 0048
+          EOF
+          (
+            cd /tmp
+            zip -q -X -r "${GITHUB_WORKSPACE}/${OUT}" "${ROOT}"
+          )
+          sha256sum "${OUT}" | tee "${OUT}.sha256"
+          unzip -t "${OUT}" >/dev/null
+          echo "RELEASE_ZIP=${OUT}" >> "$GITHUB_ENV"
+          echo "Complete release package: ${OUT}"
+
+      - name: Upload complete release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Edusentia-Enterprise-Neon-Edition-r42-COMPLETE
+          path: |
+            ${{ env.RELEASE_ZIP }}
+            ${{ env.RELEASE_ZIP }}.sha256
+          if-no-files-found: error
+          retention-days: 30
