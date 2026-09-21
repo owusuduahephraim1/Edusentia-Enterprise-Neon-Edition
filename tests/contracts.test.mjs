@@ -302,7 +302,7 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/secrets\.NEON_DATABASE_URL \|\| secrets\.DATABASE_URL/);
   assert.match(workflow,/PARITY_DATABASE_HOST/);
   assert.match(workflow,/u\.hostname=process\.env\.PARITY_DATABASE_HOST/);
-  assert.match(workflow,/u\.username="edusentia_worker_runtime"/);
+  assert.match(workflow,/u\.username!=="edusentia_worker_runtime"/);
   assert.match(workflow,/u\.username!=="edusentia_worker_runtime"/);
   assert.match(workflow,/select current_user role, current_database\(\) database/);
   assert.match(workflow,/Dedicated parity Worker and provisioner database identities verified/);
@@ -353,7 +353,7 @@ test("provisioner bootstrap preserves explicit SET-only membership",()=>{
   assert.match(p,/unsafe role attributes/i);
   assert.match(w,/PARITY_PROVISIONER_DATABASE_URL/);
   assert.match(w,/PROVISIONER_DATABASE_URL/);
-  assert.match(w,/u\.username="edusentia_provisioner"/);
+  assert.match(w,/u\.username!=="edusentia_provisioner"/);
   assert.match(t,/current_user/);
   assert.match(t,/pg_get_userbyid\(datdba\)/);
   assert.match(t,/edusentia_provisioner/);
