@@ -87,7 +87,7 @@ async function gzip(bytes:Uint8Array){
   return new Uint8Array(await new Response(new Blob([ownedBuffer(bytes)]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
 }
 async function gunzip(bytes:Uint8Array){
-  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+  return new Uint8Array(await new Response(new Blob([ownedBuffer(bytes)]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
 }
 
 async function licence(sql:TenantSql,ctx:SessionContext,feature:string,write:boolean){
