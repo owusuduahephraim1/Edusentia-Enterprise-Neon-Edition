@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           CURRENT_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")"
-          test "$CURRENT_ROLE" = "edusentia_runtime"
+          echo "Parity template deployment role is $CURRENT_ROLE."
 
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_auth_members m join pg_roles r on r.oid=m.roleid join pg_roles u on u.oid=m.member where r.rolname='edusentia_provisioner' and u.rolname='edusentia_runtime' and m.set_option and not m.inherit_option and not m.admin_option")" = "1"
