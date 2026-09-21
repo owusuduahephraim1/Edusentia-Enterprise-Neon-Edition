@@ -82,16 +82,16 @@ jobs:
           PROBE_DB="${PROBE_DB:0:60}"
           cleanup_probe(){
             psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
-set role edusentia_provisioner;
-drop database if exists "$PROBE_DB" with (force);
-SQL
+          set role edusentia_provisioner;
+          drop database if exists "$PROBE_DB" with (force);
+          SQL
           }
           trap cleanup_probe EXIT
           cleanup_probe
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-set role edusentia_provisioner;
-create database "$PROBE_DB" owner edusentia_provisioner template "$PARITY_TEMPLATE_DATABASE";
-SQL
+          set role edusentia_provisioner;
+          create database "$PROBE_DB" owner edusentia_provisioner template "$PARITY_TEMPLATE_DATABASE";
+          SQL
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PROBE_DB'")" = "edusentia_provisioner"
           cleanup_probe
           trap - EXIT
