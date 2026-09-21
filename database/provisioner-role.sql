@@ -13,7 +13,21 @@ begin
   end if;
 end$$;
 
-alter role edusentia_provisioner nosuperuser createdb nocreaterole noinherit nobypassrls;
+do $provisioner_attributes$
+declare r record;
+begin
+  select rolsuper,rolcreatedb,rolcreaterole,rolinherit,rolbypassrls
+    into r
+  from pg_roles
+  where rolname='edusentia_provisioner';
+
+  if r.rolsuper or not r.rolcreatedb or r.rolcreaterole or r.rolinherit or r.rolbypassrls then
+    raise exception 'edusentia_provisioner has unsafe role attributes'
+      using errcode='42501',
+            hint='Provisioner must be NOSUPERUSER CREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS.';
+  end if;
+end
+$provisioner_attributes$;
 
 do $provisioner_membership$
 begin
