@@ -2703,7 +2703,7 @@ function scalarText(value:unknown,name:string,max=20000){
   if(typeof value!=="string"||value.length>max)invalid(name+" is invalid");
   return value;
 }
-function normalizeValue(value:unknown,type:string,name:string){
+function normalizeValue(value:unknown,type:string,name:string):unknown{
   if(value===null)return null;
   switch(type){
     case "uuid":{
@@ -2730,7 +2730,7 @@ function normalizeValue(value:unknown,type:string,name:string){
     }
     case "uuid[]":{
       if(!Array.isArray(value)||value.length>1000)invalid(name+" is invalid");
-      const vals=value.map((x,i)=>normalizeValue(x,"uuid",name+"["+i+"]"));return "{"+vals.join(",")+"}";
+      const vals:unknown[]=value.map((x,i):unknown=>normalizeValue(x,"uuid",name+"["+i+"]"));return "{"+vals.join(",")+"}";
     }
     case "text[]":{
       if(!Array.isArray(value)||value.length>1000)invalid(name+" is invalid");
@@ -2738,7 +2738,7 @@ function normalizeValue(value:unknown,type:string,name:string){
     }
     case "bigint[]":{
       if(!Array.isArray(value)||value.length>1000)invalid(name+" is invalid");
-      return "{"+value.map((x,i)=>normalizeValue(x,"bigint",name+"["+i+"]")).join(",")+"}";
+      return "{"+value.map((x,i):unknown=>normalizeValue(x,"bigint",name+"["+i+"]")).join(",")+"}";
     }
     case "text": return scalarText(value,name);
     default:{
