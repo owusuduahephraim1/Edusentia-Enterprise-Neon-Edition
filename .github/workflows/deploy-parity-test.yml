@@ -89,15 +89,16 @@ jobs:
             if(u.username!=="edusentia_worker_runtime") throw new Error("Parity database URL must use the least-privilege Worker role");
             console.log("Dedicated parity Worker database route structure verified.");
           '
-          node --input-type=module -e '
-            import postgres from "postgres";
-            const sql=postgres(process.env.PARITY_WORKER_DATABASE_URL,{max:1,prepare:false});
-            try{
+          (
+            cd worker
+            node --input-type=module -e '
+              import { neon } from "@neondatabase/serverless";
+              const sql=neon(process.env.PARITY_WORKER_DATABASE_URL);
               const rows=await sql`select current_user role, current_database() database`;
               if(rows[0]?.role!=="edusentia_worker_runtime"||rows[0]?.database!=="edusentia")throw new Error("Parity least-privilege database identity verification failed");
               console.log("Dedicated parity Worker database identity verified.");
-            }finally{await sql.end({timeout:2});}
-          '
+            '
+          )
 
       - name: Stage parity frontend configuration
         if: steps.config.outputs.ready == 'true'
