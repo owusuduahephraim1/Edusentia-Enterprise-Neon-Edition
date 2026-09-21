@@ -65,7 +65,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          CURRENT_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")"
+          test "$CURRENT_ROLE" = "edusentia_owner"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant edusentia_provisioner to edusentia_owner;"
+          cleanup_role() {
+            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke edusentia_provisioner from edusentia_owner;" >/dev/null 2>&1 || true
+          }
+          trap cleanup_role EXIT
           BOOTSTRAP_DATABASE_URL="$PARITY_DATABASE_URL" TENANT_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" bash database/tenant-template/install.sh
+          cleanup_role
+          trap - EXIT
 
       - name: Verify certified tenant template
         shell: bash
