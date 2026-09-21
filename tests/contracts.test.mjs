@@ -763,7 +763,9 @@ test("operational readiness RLS compatibility forces the certified public surfac
   for(const table of ["terms","classes","profiles","students","subjects","enrollments","academic_years","class_subjects","grading_scales","guardian_links","student_reports","subject_results","student_guardians","user_class_access","assessment_schemes","assessment_components","assessment_score_entries"]){
     assert.ok(sql.includes("'"+table+"'"),table+" missing from certified RLS enforcement set");
   }
-  assert.match(sql,/pg_policies/);
+  assert.match(sql,/policyname='neon_certified_runtime_owner'/);
+  assert.match(sql,/to edusentia_runtime using \(true\) with check \(true\)/i);
+  assert.doesNotMatch(sql,/to public using \(true\)/i);
   assert.match(sql,/force row level security/i);
   for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
     assert.match(source,/0048g_certified_operational_rls_enforcement\.sql/);
