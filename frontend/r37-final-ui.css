@@ -126,7 +126,7 @@
   letter-spacing:-.025em;
   text-align:center;
 }
-#authView #loginForm .field:first-of-type::before{
+#authView #loginForm .email-field::before{
   content:"Sign in to continue to your account";
   display:block;
   margin:-2px 0 10px;
@@ -311,3 +311,85 @@
 }
 @media(prefers-reduced-motion:reduce){.auth-view .button,.auth-view .icon-button{transition:none}}
 
+
+
+/* Reference-blueprint authentication controls */
+#authView #tenantCodeField{margin-top:-4px}
+#authView .password-wrap{
+  min-height:50px;
+  display:flex;
+  align-items:center;
+  overflow:hidden;
+  border-radius:10px;
+}
+#authView .password-wrap input{
+  min-width:0;
+  min-height:48px;
+  flex:1;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+}
+#authView .password-toggle{
+  width:45px;
+  height:44px;
+  flex:0 0 45px;
+  margin-right:3px;
+  border-radius:9px;
+  color:#0b3c80;
+  background:#f1f5fa;
+  font-size:16px;
+}
+#authView .auth-link-button{
+  justify-self:center;
+  margin:-2px auto 1px;
+  padding:4px 8px;
+  border:0;
+  background:transparent;
+  color:#082d70;
+  font-size:13px;
+  font-weight:800;
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+#authView .auth-register-button{
+  min-height:42px;
+  margin-top:0;
+  color:#253858;
+  background:#eef2f7;
+  box-shadow:none;
+}
+#authView .auth-footer-links{
+  display:flex;
+  justify-content:center;
+  gap:18px;
+  margin-top:1px;
+  color:#65728a;
+  font-size:11px;
+}
+#authView .auth-footer-links a{
+  color:inherit;
+  text-decoration:none;
+}
+#authView .auth-footer-links a:hover{text-decoration:underline}
+#authView .brand-lockup h1{
+  max-width:360px;
+  margin-left:auto;
+  margin-right:auto;
+}
+body.tenant-login #authView .brand-lockup h1{
+  max-width:365px;
+  font-size:clamp(28px,2vw,36px);
+  line-height:1.02;
+}
+body.tenant-login #authView .brand-lockup p{letter-spacing:.14em}
+body.tenant-login #registerSchoolButton{display:none!important}
+#registrationMessage[data-kind="success"],
+#accessRecoveryMessage[data-kind="success"]{color:#08714c}
+#registrationMessage[data-kind="error"],
+#accessRecoveryMessage[data-kind="error"]{color:#b42318}
+
+@media(max-width:680px){
+  #authView .auth-footer-links{gap:12px;flex-wrap:wrap}
+  #authView .auth-link-button{font-size:12px}
+}
