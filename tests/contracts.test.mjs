@@ -654,3 +654,16 @@ test("provider compatibility migration remains structurally intact",()=>{
   assert.doesNotMatch(sql,/\{2,39\}\s*\nrevoke all on function/);
   assert.ok(sql.indexOf("insert into app.schema_migrations(version)")>sql.lastIndexOf("$upsert_plan$;"));
 });
+
+test("academic certified browser ACL reconciliation stays explicit",()=>{
+  const sql=read("database/reference-compat/0046_certified_reference_rpc_bulk.sql");
+  for(const signature of [
+    "save_academic_entity(text,jsonb)",
+    "archive_academic_entity(text,uuid,text)",
+    "save_grading_scale(jsonb)",
+    "archive_grading_scale(uuid,text)",
+    "save_assessment_scheme(jsonb)",
+    "save_class_subject_assignments_batch(jsonb)",
+    "generate_subject_code(text,uuid)"
+  ]) assert.ok(sql.includes("grant execute on function public."+signature+" to edusentia_worker_runtime;"),signature+" Worker grant missing");
+});
