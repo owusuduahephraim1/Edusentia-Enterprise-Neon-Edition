@@ -127,10 +127,13 @@ jobs:
 
           WORKER_LOGIN_PASSWORD="$(openssl rand -hex 32)"
           PROVISIONER_LOGIN_PASSWORD="$(openssl rand -hex 32)"
+          MIGRATOR_LOGIN_PASSWORD="$(openssl rand -hex 32)"
           echo "::add-mask::$WORKER_LOGIN_PASSWORD"
           echo "::add-mask::$PROVISIONER_LOGIN_PASSWORD"
+          echo "::add-mask::$MIGRATOR_LOGIN_PASSWORD"
 
-          psql "$PARITY_BOOTSTRAP_URL" -v ON_ERROR_STOP=1 -c "alter role edusentia_worker_login login password '$WORKER_LOGIN_PASSWORD'; alter role edusentia_provisioner_login login password '$PROVISIONER_LOGIN_PASSWORD';"
+          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_migrator_login','member') and not pg_has_role('edusentia_runtime','edusentia_owner','set')")" = "t"
+          psql "$PARITY_BOOTSTRAP_URL" -v ON_ERROR_STOP=1 -c "alter role edusentia_worker_login login password '$WORKER_LOGIN_PASSWORD'; alter role edusentia_provisioner_login login password '$PROVISIONER_LOGIN_PASSWORD'; alter role edusentia_migrator_login login password '$MIGRATOR_LOGIN_PASSWORD';"
 
           PARITY_WORKER_DATABASE_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" PARITY_POOLER_DATABASE_HOST="$PARITY_POOLER_DATABASE_HOST" WORKER_LOGIN_PASSWORD="$WORKER_LOGIN_PASSWORD" node --input-type=module -e '
             const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
@@ -145,11 +148,19 @@ jobs:
             u.password=process.env.PROVISIONER_LOGIN_PASSWORD;
             process.stdout.write(u.toString());
           ')"
+          PARITY_MIGRATOR_DATABASE_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" MIGRATOR_LOGIN_PASSWORD="$MIGRATOR_LOGIN_PASSWORD" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
+            u.username="edusentia_migrator_login";
+            u.password=process.env.MIGRATOR_LOGIN_PASSWORD;
+            process.stdout.write(u.toString());
+          ')"
 
           echo "::add-mask::$PARITY_WORKER_DATABASE_URL"
           echo "::add-mask::$PARITY_PROVISIONER_DATABASE_URL"
+          echo "::add-mask::$PARITY_MIGRATOR_DATABASE_URL"
           echo "PARITY_WORKER_DATABASE_URL=$PARITY_WORKER_DATABASE_URL" >> "$GITHUB_ENV"
           echo "PARITY_PROVISIONER_DATABASE_URL=$PARITY_PROVISIONER_DATABASE_URL" >> "$GITHUB_ENV"
+          echo "PARITY_MIGRATOR_DATABASE_URL=$PARITY_MIGRATOR_DATABASE_URL" >> "$GITHUB_ENV"
 
       - name: Verify isolated parity Worker and provisioner credentials
         if: steps.config.outputs.secret_refresh_ready == 'true'
@@ -237,16 +248,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PARITY_TENANT_URL="$(PARITY_PROVISIONER_DATABASE_URL="$PARITY_PROVISIONER_DATABASE_URL" node --input-type=module -e '
-            const u=new URL(process.env.PARITY_PROVISIONER_DATABASE_URL);
+          PARITY_TENANT_URL="$(PARITY_MIGRATOR_DATABASE_URL="$PARITY_MIGRATOR_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_MIGRATOR_DATABASE_URL);
             u.pathname="/edusentia_rpt_000001";
             process.stdout.write(u.toString());
           ')"
           echo "::add-mask::$PARITY_TENANT_URL"
-          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048k_mfa_recovery_compat.sql
-          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql
-          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql
-          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql
+          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          set role edusentia_owner;
+          \i database/reference-compat/0048k_mfa_recovery_compat.sql
+          \i database/reference-compat/0048l_backup_worker_api.sql
+          \i database/reference-compat/0048m_restore_worker_helpers.sql
+          \i database/reference-compat/0048n_backup_maintenance_helpers.sql
+          SQL
           test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from app.schema_migrations where version in('0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "4"
           test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from information_schema.columns where table_schema='authn' and table_name='mfa_recovery_codes' and column_name in('generation_id','expires_at')")" = "2"
           echo "Persistent parity tenant is schema-compatible with the Worker candidate."
