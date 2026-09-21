@@ -298,7 +298,7 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(turnstile,/result\.action\s*!==\s*expectedAction/);
   assert.match(turnstile,/!result\.success \|\| metadataInvalid/);
   assert.match(workflow,/secrets\.PARITY_WORKER_DATABASE_URL/);
-  assert.match(workflow,/secrets\.DATABASE_URL \|\| secrets\.NEON_DATABASE_URL/);
+  assert.match(workflow,/secrets\.NEON_DATABASE_URL \|\| secrets\.DATABASE_URL/);
   assert.match(workflow,/PARITY_DATABASE_HOST/);
   assert.match(workflow,/u\.hostname=process\.env\.PARITY_DATABASE_HOST/);
   assert.match(workflow,/u\.username="edusentia_worker_runtime"/);
@@ -389,4 +389,19 @@ test("parity smoke guards avoid application-schema privilege coupling",()=>{
     assert.match(guardStep,/select current_user/);
     assert.doesNotMatch(guardStep,/app\.release_identity|platform\.release_gate/);
   }
+});
+
+
+test("parity smoke databases clone the minimal pgcrypto CI base",()=>{
+  const schema=read(".github/workflows/schema-smoke.yml");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const lifecycle=read(".github/workflows/synthetic-school-lifecycle.yml");
+  const script=read("database/synthetic-school-lifecycle-smoke.sh");
+  for(const w of [schema,compat,lifecycle]){
+    assert.match(w,/CI_TEMPLATE_DATABASE=edusentia_ci_base/);
+    assert.match(w,/secrets\.NEON_DATABASE_URL \|\| secrets\.DATABASE_URL/);
+  }
+  assert.match(schema,/owner edusentia_provisioner template/);
+  assert.match(compat,/owner edusentia_provisioner template/);
+  assert.match(script,/owner edusentia_provisioner template/);
 });
