@@ -57,6 +57,11 @@ jobs:
           echo "::add-mask::$PARITY_DATABASE_URL"
           echo "PARITY_DATABASE_URL=$PARITY_DATABASE_URL" >> "$GITHUB_ENV"
 
+      - name: Promote certified parity tenant runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          BOOTSTRAP_DATABASE_URL="$PARITY_DATABASE_URL" bash scripts/promote-parity-tenant-runtime.sh
       - name: Verify isolated parity infrastructure
         shell: bash
         run: |
