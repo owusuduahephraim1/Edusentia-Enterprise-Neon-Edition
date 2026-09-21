@@ -7,11 +7,13 @@ for(const re of [
   /\.rpc\(\s*["']([^"']+)["']/g,
   /\brpc\(\s*["']([^"']+)["']/g,
   /\bcallRpc\(\s*["']([^"']+)["']/g,
-  /\bcallRPC\(\s*["']([^"']+)["']/g
+  /\bcallRPC\(\s*["']([^"']+)["']/g,
+  /\brpcAllRows\(\s*["']([^"']+)["']/g
 ]){
   let match;
   while((match=re.exec(source)))rpcNames.add(match[1]);
 }
+for(const match of source.matchAll(/\bcacheableRpc\(\s*["'][^"']+["']\s*,\s*["']([^"']+)["']/g))rpcNames.add(match[1]);
 const expected=[...rpcNames].sort();
 const base=String(process.env.PARITY_WORKER_DATABASE_URL||"");
 if(!base)throw new Error("PARITY_WORKER_DATABASE_URL is required");
@@ -84,7 +86,9 @@ const helperFunctions=[
   "resolve_report_grading_guide","safe_boolean","safe_date","safe_numeric","safe_timestamptz","safe_uuid",
   "save_academic_entity","save_assessment_scheme","save_class_subject_assignment","save_grading_scale","save_headteacher",
   "save_report_card","save_student","save_teacher","staff_id_card_photo_reference_count","sync_attendance_reports",
-  "term_control_snapshot","term_phase_writable","transition_report_status"
+  "term_control_snapshot","term_phase_writable","transition_report_status",
+  "can_create_report_scope","canonical_school_identity_prefix","current_id_card_principal_snapshot",
+  "has_any_active_emergency_delegation","prospectus_class_range_label"
 ];
 
 const result={
