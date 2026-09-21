@@ -56,8 +56,9 @@ jobs:
           ')"
           echo "::add-mask::$PARITY_DATABASE_URL"
           echo "BOOTSTRAP_DATABASE_URL=$PARITY_DATABASE_URL" >> "$GITHUB_ENV"
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
-          echo "Parity Neon branch verified for smoke execution."
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select current_database()")" = "edusentia"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")" = "edusentia_runtime"
+          echo "Parity Neon endpoint and deployment role verified for smoke execution."
 
       - name: Run synthetic Basic/JHS and Senior High lifecycle
         run: bash database/synthetic-school-lifecycle-smoke.sh
