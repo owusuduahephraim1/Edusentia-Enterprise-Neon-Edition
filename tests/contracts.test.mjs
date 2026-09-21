@@ -306,8 +306,10 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/select current_user role, current_database\(\) database/);
   assert.match(workflow,/Dedicated parity Worker and provisioner database identities verified/);
   assert.match(workflow,/PARITY_BOOTSTRAP_URL/);
-  assert.match(workflow,/schema_version from app\.release_identity/);
-  assert.match(workflow,/platform\.release_gate\(\)/);
+  assert.match(workflow,/select current_database\(\)/);
+  assert.match(workflow,/select current_user/);
+  assert.doesNotMatch(workflow,/schema_version from app\.release_identity/);
+  assert.doesNotMatch(workflow,/platform\.release_gate\(\)/);
   assert.match(workflow,/alter role edusentia_worker_runtime login password/i);
   assert.match(workflow,/WORKER_DB_PASSWORD/);
   assert.match(workflow,/alter role edusentia_provisioner login password/i);
@@ -368,4 +370,19 @@ test("provisioner-owned template retains deployment-only public schema migration
   assert.match(w,/grant usage,create on schema public to edusentia_runtime/i);
   assert.doesNotMatch(i,/grant .*schema public to edusentia_worker_runtime/i);
   assert.doesNotMatch(w,/grant usage,create on schema public to edusentia_worker_runtime/i);
+});
+
+
+test("parity smoke guards avoid application-schema privilege coupling",()=>{
+  for(const file of [
+    ".github/workflows/schema-smoke.yml",
+    ".github/workflows/reference-compat-smoke.yml",
+    ".github/workflows/synthetic-school-lifecycle.yml",
+    ".github/workflows/deploy-parity-test.yml"
+  ]){
+    const w=read(file);
+    assert.match(w,/select current_database\(\)/);
+    assert.match(w,/select current_user/);
+    assert.doesNotMatch(w,/select schema_version from app\.release_identity/);
+  }
 });
