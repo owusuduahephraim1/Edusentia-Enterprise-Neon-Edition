@@ -68,16 +68,28 @@ export async function completeMfa(env:Env,challengeTokenRaw:string,codeRaw:strin
   const challengeToken=String(challengeTokenRaw||"").trim(),code=String(codeRaw||"").trim(),tenantCode=tokenTenantCode(challengeToken);
   if(!challengeToken||!code||!tenantCode)throw Object.assign(new Error("MFA challenge and verification code are required"),{code:"mfa_invalid",status:400});
   const route=await routeForCode(env,tenantCode),sql=tenantDb(env,String(route.database_name)),hash=await challengeHash(challengeToken);
-  const rows=await sql`
-    select c.id,c.user_id,c.tenant_id,c.factor_id,c.purpose,c.attempts,u.email,u.display_name,t.code tenant_code,t.name tenant_name,m.role,m.status
-      from authn.login_challenges c
-      join authn.users u on u.id=c.user_id
-      join app.tenants t on t.id=c.tenant_id
-      join app.tenant_memberships m on m.user_id=c.user_id and m.tenant_id=c.tenant_id
-     where c.token_hash=${hash} and c.used_at is null and c.expires_at>now() and u.disabled_at is null limit 1`;
-  const row=rows[0] as any;
-  if(!row||row.status!=="active")throw Object.assign(new Error("The MFA challenge is invalid or has expired"),{code:"mfa_challenge_expired",status:401});
-  if(Number(row.attempts)>=5)throw Object.assign(new Error("Too many verification attempts. Sign in again."),{code:"mfa_attempts_exceeded",status:429});
+  const challengeRows=await sql`
+    select id,user_id,tenant_id,factor_id,purpose,attempts,used_at,expires_at,(used_at is null and expires_at>now()) active
+      from authn.login_challenges
+     where token_hash=${hash}
+     limit 1`;
+  const challenge=challengeRows[0] as any;
+  if(!challenge||!challenge.active)throw Object.assign(new Error("The MFA challenge is invalid or has expired"),{code:"mfa_challenge_expired",status:401});
+  if(Number(challenge.attempts)>=5)throw Object.assign(new Error("Too many verification attempts. Sign in again."),{code:"mfa_attempts_exceeded",status:429});
+
+  const [,contextRows]=await sql.transaction([
+    sql`select app.set_request_context(${challenge.tenant_id}::uuid,${challenge.user_id}::uuid,'mfa_pending',1)`,
+    sql`
+      select u.email,u.display_name,t.code tenant_code,t.name tenant_name,m.role,m.status
+        from authn.users u
+        join app.tenants t on t.id=${challenge.tenant_id}::uuid
+        join app.tenant_memberships m on m.user_id=u.id and m.tenant_id=${challenge.tenant_id}::uuid
+       where u.id=${challenge.user_id}::uuid and u.disabled_at is null
+       limit 1`
+  ]);
+  const context=contextRows[0] as any;
+  if(!context||context.status!=="active")throw Object.assign(new Error("The MFA challenge is invalid or has expired"),{code:"mfa_challenge_expired",status:401});
+  const row={...challenge,...context};
   const factors=await sql`select id,secret_ciphertext,disabled_at from authn.mfa_totp_factors where id=${row.factor_id}::uuid and user_id=${row.user_id}::uuid limit 1`;
   const factor=factors[0] as any;
   if(!factor||factor.disabled_at)throw Object.assign(new Error("The MFA factor is unavailable"),{code:"mfa_factor_unavailable",status:401});
