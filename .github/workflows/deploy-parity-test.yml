@@ -111,10 +111,10 @@ jobs:
             echo "::add-mask::$WORKER_DB_PASSWORD"
 
             psql "$PARITY_BOOTSTRAP_URL" -v ON_ERROR_STOP=1 <<SQL
-set role edusentia_worker_runtime;
-alter role edusentia_worker_runtime login password '$WORKER_DB_PASSWORD';
-reset role;
-SQL
+            set role edusentia_worker_runtime;
+            alter role edusentia_worker_runtime login password '$WORKER_DB_PASSWORD';
+            reset role;
+            SQL
 
             PARITY_WORKER_DATABASE_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" WORKER_DB_PASSWORD="$WORKER_DB_PASSWORD" node --input-type=module -e '
               const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
@@ -127,10 +127,10 @@ SQL
           PROVISIONER_DB_PASSWORD="$(openssl rand -hex 32)"
           echo "::add-mask::$PROVISIONER_DB_PASSWORD"
           psql "$PARITY_BOOTSTRAP_URL" -v ON_ERROR_STOP=1 <<SQL
-set role edusentia_provisioner;
-alter role edusentia_provisioner login password '$PROVISIONER_DB_PASSWORD';
-reset role;
-SQL
+          set role edusentia_provisioner;
+          alter role edusentia_provisioner login password '$PROVISIONER_DB_PASSWORD';
+          reset role;
+          SQL
           PARITY_PROVISIONER_DATABASE_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" PROVISIONER_DB_PASSWORD="$PROVISIONER_DB_PASSWORD" node --input-type=module -e '
             const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
             u.username="edusentia_provisioner";
