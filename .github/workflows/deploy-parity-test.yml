@@ -233,12 +233,12 @@ jobs:
           echo "Rotatable provisioner login wrapper can create and remove isolated tenant databases."
 
       - name: Apply parity compatibility migrations before Worker promotion
-        if: steps.config.outputs.test_ready == 'true'
+        if: steps.config.outputs.secret_refresh_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          PARITY_TENANT_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" node --input-type=module -e '
-            const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
+          PARITY_TENANT_URL="$(PARITY_PROVISIONER_DATABASE_URL="$PARITY_PROVISIONER_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_PROVISIONER_DATABASE_URL);
             u.pathname="/edusentia_rpt_000001";
             process.stdout.write(u.toString());
           ')"
