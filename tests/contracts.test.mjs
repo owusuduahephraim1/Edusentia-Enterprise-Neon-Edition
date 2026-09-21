@@ -381,8 +381,12 @@ test("parity smoke guards avoid application-schema privilege coupling",()=>{
     ".github/workflows/deploy-parity-test.yml"
   ]){
     const w=read(file);
-    assert.match(w,/select current_database\(\)/);
-    assert.match(w,/select current_user/);
-    assert.doesNotMatch(w,/select schema_version from app\.release_identity/);
+    const guard=w.split("- name: Route parity smoke to non-primary Neon branch")[1]
+      ?? w.split("- name: Verify isolated parity bootstrap route")[1]
+      ?? "";
+    const guardStep=guard.split("\n      - name:")[0];
+    assert.match(guardStep,/select current_database\(\)/);
+    assert.match(guardStep,/select current_user/);
+    assert.doesNotMatch(guardStep,/app\.release_identity|platform\.release_gate/);
   }
 });
