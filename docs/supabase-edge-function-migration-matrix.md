@@ -32,9 +32,9 @@ Live inventory was read from the certified Supabase SaaS master and tenant on 20
 | tenant | scheduled-backup | Worker R2 backup/restore service | port required |
 | tenant | license-verifier | tenant licence activation/status routes | covered |
 | tenant | saas-plan-upgrade | plan authorization activation route | covered |
-| tenant | tenant-auth-recovery | platform recovery flow + Neon authn reset | partial |
+| tenant | tenant-auth-recovery | Neon MFA recovery generations + break-glass reset + audit | covered |
 | tenant | r2-backup-migrator | no migration shim required once R2 is authoritative | superseded; live source is a stub |
 | tenant | directory-user-management | Neon identity administration service + directory linkage | covered |
 | tenant | backup-download-gateway | guarded R2 backup download route | port required |
 
-The remaining implementation concentration is therefore backup/restore, package signing/download, storage maintenance, and the protected recovery-reset compatibility flow.
+The remaining implementation concentration is therefore backup/restore, package signing/download, and storage maintenance.

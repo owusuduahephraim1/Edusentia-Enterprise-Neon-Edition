@@ -9,6 +9,7 @@ import { sha256Hex } from "./crypto";
 import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
 import { invokeCertifiedRpc } from "./certified-rpc";
 import { handleLegacyIdentityFunction } from "./identity-admin";
+import { handleTenantAuthRecovery } from "./recovery-compat";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -58,6 +59,10 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   if(method==="POST"&&legacyIdentity){
     const body=await readJson<any>(request);
     return json(await handleLegacyIdentityFunction(legacyIdentity[1],sql,ctx,body));
+  }
+  if(method==="POST"&&p==="/api/compat/functions/tenant-auth-recovery"){
+    const body=await readJson<Record<string,unknown>>(request);
+    return json(await handleTenantAuthRecovery(env,sql,ctx,body));
   }
   if(method==="GET"&&p==="/api/security/mfa/factors"){
     requireRole(ctx,["system_admin"]);

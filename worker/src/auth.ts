@@ -98,9 +98,12 @@ export async function completeMfa(env:Env,challengeTokenRaw:string,codeRaw:strin
   if(/^\d{6}$/.test(code)){valid=await verifyTotp(await decryptTotpSecret(env,String(factor.secret_ciphertext)),code);}
   else if(row.purpose==="mfa_verify"){
     const normalized=normalizeRecoveryCode(code);
-    if(normalized.length===12){
+    if([12,13].includes(normalized.length)){
       const recoveryHash=await recoveryCodeHash(env,normalized);
-      const recovery=await sql`select id from authn.mfa_recovery_codes where user_id=${row.user_id}::uuid and code_hash=${recoveryHash} and used_at is null limit 1`;
+      const recovery=await sql`select id from authn.mfa_recovery_codes
+        where user_id=${row.user_id}::uuid and code_hash=${recoveryHash}
+          and used_at is null and expires_at>now()
+        limit 1`;
       if(recovery[0]){valid=true;recoveryId=String((recovery[0] as any).id);}
     }
   }
@@ -111,12 +114,15 @@ export async function completeMfa(env:Env,challengeTokenRaw:string,codeRaw:strin
 
   const opaque=randomToken(32),sessionToken=routedToken(String(row.tenant_code),opaque),sessionHash=await sha256Hex(`${sessionToken}.${env.SESSION_PEPPER}`);
   const ttl=Math.max(300,Number(env.SESSION_TTL_SECONDS||28800)),sessionId=crypto.randomUUID(),recoveryCodes=row.purpose==="mfa_enroll"?generateRecoveryCodes(8):[];
-  const recoveryHashes=await Promise.all(recoveryCodes.map(c=>recoveryCodeHash(env,c))),queries:any[]=[sql`update authn.login_challenges set used_at=now() where id=${row.id}::uuid and used_at is null`];
+  const recoveryHashes=await Promise.all(recoveryCodes.map(c=>recoveryCodeHash(env,c))),generationId=crypto.randomUUID(),expiresAt=new Date(Date.now()+365*86400000).toISOString(),queries:any[]=[sql`update authn.login_challenges set used_at=now() where id=${row.id}::uuid and used_at is null`];
   if(row.purpose==="mfa_enroll"){
     queries.push(sql`update authn.mfa_totp_factors set verified_at=coalesce(verified_at,now()) where id=${row.factor_id}::uuid and disabled_at is null`);
     queries.push(sql`delete from authn.mfa_recovery_codes where user_id=${row.user_id}::uuid`);
-    for(const h of recoveryHashes)queries.push(sql`insert into authn.mfa_recovery_codes(user_id,code_hash) values(${row.user_id}::uuid,${h})`);
-  }else if(recoveryId)queries.push(sql`update authn.mfa_recovery_codes set used_at=now() where id=${recoveryId}::uuid and used_at is null`);
+    for(const h of recoveryHashes)queries.push(sql`insert into authn.mfa_recovery_codes(user_id,code_hash,generation_id,expires_at) values(${row.user_id}::uuid,${h},${generationId}::uuid,${expiresAt}::timestamptz)`);
+  }else if(recoveryId){
+    queries.push(sql`delete from authn.mfa_totp_factors where user_id=${row.user_id}::uuid`);
+    queries.push(sql`delete from authn.mfa_recovery_codes where user_id=${row.user_id}::uuid`);
+  }
   queries.push(sql`insert into authn.sessions(id,user_id,tenant_id,token_hash,role,assurance_level,expires_at) values(${sessionId}::uuid,${row.user_id}::uuid,${row.tenant_id}::uuid,${sessionHash},${row.role},2,now()+(${ttl}::text||' seconds')::interval)`);
   await sql.transaction(queries);
   return {token:sessionToken,recoveryCodes,session:{authenticated:true,user:{id:row.user_id,email:row.email,displayName:row.display_name},membership:{tenantId:row.tenant_id,tenantCode:row.tenant_code,tenantName:row.tenant_name,role:row.role,roleLabel:String(row.role).replaceAll('_',' ')},session:{id:sessionId,assuranceLevel:2}}};

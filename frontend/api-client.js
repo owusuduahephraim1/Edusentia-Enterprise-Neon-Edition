@@ -69,6 +69,7 @@
     certifiedRpc:(operation,args={})=>post(`/api/compat/rpc/${encodeURIComponent(String(operation||""))}`,{args}),
     adminUserManagement:(action,payload={})=>post("/api/compat/functions/admin-user-management",{action,payload}),
     directoryUserManagement:(action,payload={})=>post("/api/compat/functions/directory-user-management",{action,payload}),
+    tenantAuthRecovery:(action,payload={})=>post("/api/compat/functions/tenant-auth-recovery",{action,...payload}),
     licenseStatus:()=>request("/api/license/status"),
     activateLicense:(code)=>post("/api/license/activate",{code}),
     mfaFactors:()=>request("/api/security/mfa/factors"),
