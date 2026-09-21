@@ -7,10 +7,14 @@ create table if not exists platform.package_signing_keys(
   key_id text primary key,
   public_jwk jsonb not null,
   public_fingerprint text not null unique,
+  private_jwk_ciphertext text not null default '',
   active boolean not null default true,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now()
 );
+
+alter table platform.package_signing_keys
+  add column if not exists private_jwk_ciphertext text not null default '';
 
 create table if not exists platform.package_templates(
   id uuid primary key default gen_random_uuid(),
