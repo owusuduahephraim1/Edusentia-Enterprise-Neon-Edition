@@ -629,15 +629,18 @@ test("enterprise parity workspace bundle exposes the certified operational modul
   const ui=read("frontend/parity-enterprise-workspaces.js");
   assert.match(index,/parity-enterprise-workspaces\.js/);
   for(const view of [
-    "attendance","history","prospectus","delegations","certificates","id_cards",
-    "insights","children","users","compliance","backup_restore","license_capacity"
+    "teacher_profile","my_class","attendance","my_subjects","history","prospectus","delegations",
+    "certificates","id_cards","insights","children","users","compliance","backup_restore",
+    "plan_upgrade","license_capacity","settings"
   ]) assert.ok(ui.includes('id:"'+view+'"'),view+" workspace missing");
   for(const operation of [
     "get_class_attendance_register","get_student_academic_history","issue_student_transcript",
     "get_school_prospectus_console","get_emergency_delegation_console","get_certificate_console",
     "get_id_card_console","get_staff_id_card_console","academic_analytics","list_my_children_reports",
     "list_profiles_with_access","list_guardian_portal_accounts","get_compliance_console",
-    "backup_dashboard","get_recovery_console","get_school_license_capacity_console"
+    "backup_dashboard","get_recovery_console","get_school_license_capacity_console",
+    "get_my_teacher_profile","get_role_workspace","system_health","validate_operational_readiness",
+    "set_school_logo_reference"
   ]) assert.ok(ui.includes('"'+operation+'"'),operation+" RPC missing");
   assert.doesNotMatch(ui,/supabase|storage\.objects|postgresql:\/\//i);
 });
