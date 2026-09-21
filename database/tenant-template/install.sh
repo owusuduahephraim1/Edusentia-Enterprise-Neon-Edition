@@ -45,6 +45,7 @@ psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0042_certif
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0043_certified_report_governance_prerequisites.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0043b_certified_report_assignment_scope.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044_certified_report_workflow_privacy_integrity.sql
+psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044b_certified_report_transition_helpers.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0045_certified_report_pdf_integrity_r2.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
 
