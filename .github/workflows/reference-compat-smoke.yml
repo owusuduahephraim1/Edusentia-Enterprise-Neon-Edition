@@ -50,6 +50,24 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y postgresql-client
           fi
+
+      - name: Route parity smoke to non-primary Neon branch
+        if: github.ref == 'refs/heads/reference-parity-r42'
+        shell: bash
+        env:
+          PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4-pooler.c-7.us-east-2.aws.neon.tech
+        run: |
+          set -euo pipefail
+          PARITY_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.hostname=process.env.PARITY_DATABASE_HOST;
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$PARITY_DATABASE_URL"
+          echo "BOOTSTRAP_DATABASE_URL=$PARITY_DATABASE_URL" >> "$GITHUB_ENV"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
+          echo "Parity Neon branch verified for smoke execution."
       - name: Install certified core into disposable isolated tenant
         shell: bash
         run: |
