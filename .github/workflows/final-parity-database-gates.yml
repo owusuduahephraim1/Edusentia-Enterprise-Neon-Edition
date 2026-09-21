@@ -1,0 +1,49 @@
+name: Final Parity Database Gates
+
+on:
+  push:
+    branches: [reference-parity-r42]
+    paths:
+      - ".github/workflows/final-parity-database-gates.yml"
+      - "scripts/final-parity-database-gates.sh"
+      - "database/install-master.sh"
+      - "database/migrations/**"
+      - "database/runtime-role.sql"
+      - "database/provisioner-role.sql"
+      - "database/service-login-roles.sql"
+      - "database/tenant-template/**"
+      - "database/reference-compat/**"
+      - "database/synthetic-school-lifecycle-smoke.sh"
+      - "worker/src/provisioning.ts"
+      - "worker/src/tenant-release.ts"
+      - "scripts/reference-surface-inventory.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edusentia-final-parity-database-gates
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+      PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4.c-7.us-east-2.aws.neon.tech
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: npm install --ignore-scripts
+      - name: Require parity database credential
+        run: test -n "$SOURCE_DATABASE_URL"
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Run isolated final database gates
+        run: bash scripts/final-parity-database-gates.sh

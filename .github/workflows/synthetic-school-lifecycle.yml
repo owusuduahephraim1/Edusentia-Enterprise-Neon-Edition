@@ -6,7 +6,7 @@ name: Synthetic School Lifecycle Smoke
 
 on:
   push:
-    branches: [main, reference-parity-r42]
+    branches: [main]
     paths:
       - "database/migrations/**"
       - "database/tenant-template/**"
@@ -28,6 +28,7 @@ jobs:
   basic-and-shs:
     runs-on: ubuntu-latest
     env:
+      CI_TEMPLATE_DATABASE: ""
       BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4

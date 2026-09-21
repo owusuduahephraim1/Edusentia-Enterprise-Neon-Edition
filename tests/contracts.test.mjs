@@ -868,3 +868,16 @@ test("one-time production owner bootstrap finalizes schema and least-privilege w
   assert.match(s,/schema_version.*0025/s);
   assert.match(s,/neon-v1\.0\.0-r42/);
 });
+
+
+test("final parity database gate isolates fresh schema reference and school lifecycle validation",()=>{
+  const w=read(".github/workflows/final-parity-database-gates.yml");
+  const s=read("scripts/final-parity-database-gates.sh");
+  assert.match(w,/Final Parity Database Gates/);
+  assert.match(s,/Fresh control schema gate/);
+  assert.match(s,/Disposable certified reference gate/);
+  assert.match(s,/Synthetic Basic\/JHS and Senior High lifecycle gate/);
+  assert.match(s,/Live parity reference surface verified: 172\/172/);
+  assert.match(s,/CI_TEMPLATE_DATABASE=""/);
+  assert.doesNotMatch(w,/edusentia_ci_base_v2/);
+});

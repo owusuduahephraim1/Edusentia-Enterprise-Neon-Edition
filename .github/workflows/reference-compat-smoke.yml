@@ -7,27 +7,6 @@
 name: Reference Tenant Compatibility Smoke
 
 on:
-  push:
-    branches: [reference-parity-r42]
-    paths:
-      - "database/reference-compat/**"
-      - "database/tenant-template/**"
-      - "database/migrations/0001_platform_and_context.sql"
-      - "database/migrations/0002_identity_auth.sql"
-      - "database/migrations/0003_school_people.sql"
-      - "database/migrations/0004_academics_reporting.sql"
-      - "database/migrations/0005_finance_hr_admissions.sql"
-      - "database/migrations/0006_audit_storage_security.sql"
-      - "database/migrations/0007_rls_and_runtime_grants.sql"
-      - "database/migrations/0008_bootstrap_and_retention.sql"
-      - "database/migrations/0009_academic_models.sql"
-      - "database/migrations/0010_student_services.sql"
-      - "database/migrations/0011_finance_enterprise.sql"
-      - "database/migrations/0012_documents_and_identity.sql"
-      - "database/migrations/0013_operations_compliance.sql"
-      - "database/migrations/0014_bootstrap_auth_hardening.sql"
-      - "database/migrations/0016_mfa_login_challenges.sql"
-      - ".github/workflows/reference-compat-smoke.yml"
   workflow_dispatch:
 
 permissions:
