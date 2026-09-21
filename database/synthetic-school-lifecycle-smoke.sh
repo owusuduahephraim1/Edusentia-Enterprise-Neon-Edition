@@ -31,6 +31,7 @@ url_for() {
 install_tenant() {
   local db_name="$1" tenant_id="$2" tenant_code="$3" school_name="$4" institution_type="$5" admin_email="$6"
   if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
+    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$CI_TEMPLATE_DATABASE' and usename=current_user and pid<>pg_backend_pid();" >/dev/null
     psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
 set role edusentia_provisioner;
 create database "$db_name" owner edusentia_provisioner template "$CI_TEMPLATE_DATABASE";
