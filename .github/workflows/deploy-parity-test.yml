@@ -8,6 +8,8 @@ on:
       - "frontend/**"
       - "worker/**"
       - ".github/workflows/deploy-parity-test.yml"
+      - "scripts/parity-authenticated-e2e.mjs"
+      - "database/provisioner-role.sql"
   workflow_dispatch:
 
 permissions:
@@ -94,11 +96,13 @@ jobs:
           test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select (platform.release_gate()->>'ready')::boolean")" = "t"
           echo "Parity schema 0025 and release gate verified."
 
-      - name: Prepare least-privilege parity Worker credential
+      - name: Prepare isolated parity Worker and provisioner credentials
         if: steps.config.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
+
+          psql "$PARITY_BOOTSTRAP_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
 
           if [ -z "$PARITY_WORKER_DATABASE_URL" ]; then
             WORKER_DB_PASSWORD="$(openssl rand -hex 32)"
@@ -116,8 +120,20 @@ jobs:
             ')"
           fi
 
+          PROVISIONER_DB_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$PROVISIONER_DB_PASSWORD"
+          psql "$PARITY_BOOTSTRAP_URL" -v ON_ERROR_STOP=1 -c "alter role edusentia_provisioner login password '$PROVISIONER_DB_PASSWORD';"
+          PARITY_PROVISIONER_DATABASE_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" PROVISIONER_DB_PASSWORD="$PROVISIONER_DB_PASSWORD" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
+            u.username="edusentia_provisioner";
+            u.password=process.env.PROVISIONER_DB_PASSWORD;
+            process.stdout.write(u.toString());
+          ')"
+
           echo "::add-mask::$PARITY_WORKER_DATABASE_URL"
+          echo "::add-mask::$PARITY_PROVISIONER_DATABASE_URL"
           echo "PARITY_WORKER_DATABASE_URL=$PARITY_WORKER_DATABASE_URL" >> "$GITHUB_ENV"
+          echo "PARITY_PROVISIONER_DATABASE_URL=$PARITY_PROVISIONER_DATABASE_URL" >> "$GITHUB_ENV"
 
       - name: Verify dedicated parity database URL
         if: steps.config.outputs.ready == 'true'
@@ -131,14 +147,25 @@ jobs:
             if(u.username!=="edusentia_worker_runtime") throw new Error("Parity database URL must use the least-privilege Worker role");
             console.log("Dedicated parity Worker database route structure verified.");
           '
+          node --input-type=module -e '
+            const u=new URL(process.env.PARITY_PROVISIONER_DATABASE_URL);
+            if(u.hostname!==process.env.PARITY_DATABASE_HOST) throw new Error("Parity provisioner URL does not target the non-primary parity endpoint");
+            if(u.pathname!=="/edusentia") throw new Error("Parity provisioner URL must target the edusentia control database");
+            if(u.username!=="edusentia_provisioner") throw new Error("Parity provisioner URL must use the dedicated provisioner role");
+          '
           (
             cd worker
             node --input-type=module -e '
               import { neon } from "@neondatabase/serverless";
-              const sql=neon(process.env.PARITY_WORKER_DATABASE_URL);
-              const rows=await sql`select current_user role, current_database() database`;
-              if(rows[0]?.role!=="edusentia_worker_runtime"||rows[0]?.database!=="edusentia")throw new Error("Parity least-privilege database identity verification failed");
-              console.log("Dedicated parity Worker database identity verified.");
+              const worker=neon(process.env.PARITY_WORKER_DATABASE_URL);
+              const provisioner=neon(process.env.PARITY_PROVISIONER_DATABASE_URL);
+              const [wr,pr]=await Promise.all([
+                worker`select current_user role, current_database() database`,
+                provisioner`select current_user role, current_database() database, r.rolcreatedb, r.rolsuper, r.rolcreaterole, r.rolbypassrls from pg_roles r where r.rolname=current_user`
+              ]);
+              if(wr[0]?.role!=="edusentia_worker_runtime"||wr[0]?.database!=="edusentia")throw new Error("Parity least-privilege database identity verification failed");
+              if(pr[0]?.role!=="edusentia_provisioner"||pr[0]?.database!=="edusentia"||!pr[0]?.rolcreatedb||pr[0]?.rolsuper||pr[0]?.rolcreaterole||pr[0]?.rolbypassrls)throw new Error("Parity provisioner database identity verification failed");
+              console.log("Dedicated parity Worker and provisioner database identities verified.");
             '
           )
 
@@ -182,6 +209,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$PARITY_WORKER_DATABASE_URL" | npx wrangler secret put DATABASE_URL --config wrangler.parity.jsonc
+          printf '%s' "$PARITY_PROVISIONER_DATABASE_URL" | npx wrangler secret put PROVISIONER_DATABASE_URL --config wrangler.parity.jsonc
           printf '%s' "$SESSION_PEPPER_VALUE" | npx wrangler secret put SESSION_PEPPER --config wrangler.parity.jsonc
           printf '%s' "$BOOTSTRAP_ADMIN_SECRET_VALUE" | npx wrangler secret put BOOTSTRAP_ADMIN_SECRET --config wrangler.parity.jsonc
 
