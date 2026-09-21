@@ -1,3 +1,4 @@
+# release revalidation: direct-role-isolated parity deploy
 # deployment retry after parity credential isolation contract passed
 name: Deploy Parity Browser Test
 
