@@ -5,8 +5,9 @@ import { tenantTx } from "./db";
 export type CertifiedRegistryArgument=Readonly<{name:string;type:string;required:boolean}>;
 export type CertifiedRegistrySpec=Readonly<{args:readonly CertifiedRegistryArgument[];resultType:string;setof:boolean}>;
 
-// Generated from the certified stable PostgreSQL function signatures at
+// Generated from the complete certified browser RPC surface at
 // nduah385/Edusentia-Enterprise @ a181e18e0ca044db756193209b5b089cd03efb0f.
+// Includes direct rpc()/rpcAllRows() calls and cacheableRpc() operation arguments.
 // Names, argument names and casts below are trusted build-time metadata, never request-provided SQL.
 export const CERTIFIED_RPC_REGISTRY=Object.freeze({
   "academic_analytics": {
@@ -725,6 +726,22 @@ export const CERTIFIED_RPC_REGISTRY=Object.freeze({
     "resultType": "jsonb",
     "setof": false
   },
+  "get_my_emergency_academic_delegations": {
+    "args": [
+      {
+        "name": "target_class_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
   "get_my_headteacher_signature": {
     "args": [],
     "resultType": "jsonb",
@@ -822,6 +839,22 @@ export const CERTIFIED_RPC_REGISTRY=Object.freeze({
         "required": true
       }
     ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "get_role_dashboard": {
+    "args": [
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "get_role_workspace": {
+    "args": [],
     "resultType": "jsonb",
     "setof": false
   },
@@ -1125,6 +1158,17 @@ export const CERTIFIED_RPC_REGISTRY=Object.freeze({
     ],
     "resultType": "TABLE(student_id uuid, enrollment_id uuid, full_name text, admission_no text, class_id uuid, class_name text, academic_year_id uuid, academic_year_name text, photo_url text, gender text, date_of_birth date, guardian_phone text, active_card_id uuid, active_card_number text, active_card_status text)",
     "setof": true
+  },
+  "list_my_attendance_classes": {
+    "args": [
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
   },
   "list_my_children_reports": {
     "args": [],
@@ -2742,7 +2786,6 @@ function normalizeValue(value:unknown,type:string,name:string):unknown{
     }
     case "text": return scalarText(value,name);
     default:{
-      // Remaining certified input types are PostgreSQL enums. Accept only compact text and let the fixed cast enforce membership.
       const v=scalarText(value,name,128);
       if(!/^[a-zA-Z0-9_ -]+$/.test(v))invalid(name+" is invalid");
       return v;
