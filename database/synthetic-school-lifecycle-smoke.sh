@@ -22,7 +22,11 @@ url_for() {
 
 install_tenant() {
   local db_name="$1" tenant_id="$2" tenant_code="$3" school_name="$4" institution_type="$5" admin_email="$6"
-  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$db_name\";"
+  if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
+    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$db_name\" template \"$CI_TEMPLATE_DATABASE\";"
+  else
+    psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$db_name\";"
+  fi
   local db_url
   db_url="$(url_for "$db_name")"
   echo "::add-mask::$db_url"
