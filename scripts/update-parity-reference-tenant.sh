@@ -63,6 +63,7 @@ apply_once "0048e_certified_system_health_notification_compat" "database/referen
 apply_once "0048f_certified_backup_health_metadata_compat" "database/reference-compat/0048f_certified_backup_health_metadata_compat.sql"
 # 0048g preflights all certified public-table RLS policies before forcing RLS.
 # 0048g named-block syntax is contract-tested before persistent parity promotion.
+# 0048g uses a Neon-only runtime-owner policy; browser/API callers remain behind certified Worker RPCs.
 apply_once "0048g_certified_operational_rls_enforcement" "database/reference-compat/0048g_certified_operational_rls_enforcement.sql"
 
 SYSTEM_HEALTH_MISSING_COLUMNS="$(psql "$TARGET_URL" -X -qAt <<'SQL'
