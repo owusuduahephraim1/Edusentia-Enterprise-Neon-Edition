@@ -6,23 +6,23 @@
 do $service_login_roles$
 begin
   if not exists(select 1 from pg_roles where rolname='edusentia_worker_login') then
-    create role edusentia_worker_login login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+    create role edusentia_worker_login login nosuperuser nocreatedb nocreaterole inherit nobypassrls;
   else
-    alter role edusentia_worker_login login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+    alter role edusentia_worker_login login nosuperuser nocreatedb nocreaterole inherit nobypassrls;
   end if;
 
   if not exists(select 1 from pg_roles where rolname='edusentia_provisioner_login') then
-    create role edusentia_provisioner_login login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+    create role edusentia_provisioner_login login nosuperuser createdb nocreaterole inherit nobypassrls;
   else
-    alter role edusentia_provisioner_login login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+    alter role edusentia_provisioner_login login nosuperuser createdb nocreaterole inherit nobypassrls;
   end if;
 end
 $service_login_roles$;
 
 grant edusentia_worker_runtime to edusentia_worker_login
-  with admin false, inherit false, set true;
+  with admin false, inherit true, set true;
 grant edusentia_provisioner to edusentia_provisioner_login
-  with admin false, inherit false, set true;
+  with admin false, inherit true, set true;
 
 grant edusentia_worker_login to edusentia_runtime
   with admin true, inherit false, set false;
@@ -37,8 +37,10 @@ begin
   from pg_roles
   where rolname in ('edusentia_worker_login','edusentia_provisioner_login')
     and (
-      rolsuper or rolcreatedb or rolcreaterole or rolinherit or rolbypassrls
-      or not rolcanlogin
+      rolsuper or rolcreaterole or rolbypassrls or not rolcanlogin
+      or (rolname='edusentia_worker_login' and rolcreatedb)
+      or (rolname='edusentia_provisioner_login' and not rolcreatedb)
+      or not rolinherit
     );
   if unsafe_count<>0 then
     raise exception 'service login wrapper has unsafe role attributes';
@@ -51,7 +53,7 @@ begin
     join pg_roles member_role on member_role.oid=m.member
     where granted.rolname='edusentia_worker_runtime'
       and member_role.rolname='edusentia_worker_login'
-      and not m.admin_option and not m.inherit_option and m.set_option
+      and not m.admin_option and m.inherit_option and m.set_option
   ) then
     raise exception 'worker login wrapper SET-only membership is missing';
   end if;
@@ -63,7 +65,7 @@ begin
     join pg_roles member_role on member_role.oid=m.member
     where granted.rolname='edusentia_provisioner'
       and member_role.rolname='edusentia_provisioner_login'
-      and not m.admin_option and not m.inherit_option and m.set_option
+      and not m.admin_option and m.inherit_option and m.set_option
   ) then
     raise exception 'provisioner login wrapper SET-only membership is missing';
   end if;
