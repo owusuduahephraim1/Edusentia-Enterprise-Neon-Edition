@@ -88,7 +88,10 @@ jobs:
           drop database if exists "$PROBE_DB" with (force);
           SQL
             else
-              psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true
+              psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
+          set role edusentia_provisioner;
+          drop database if exists "$PROBE_DB" with (force);
+          SQL
             fi
           }
           trap cleanup EXIT
@@ -103,7 +106,11 @@ jobs:
           grant connect,create,temp on database "$PROBE_DB" to edusentia_runtime;
           SQL
           else
-            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\";"
+            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
+          set role edusentia_provisioner;
+          create database "$PROBE_DB" owner edusentia_provisioner;
+          grant connect,create,temp on database "$PROBE_DB" to edusentia_runtime;
+          SQL
           fi
 
           PROBE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PROBE_DB="$PROBE_DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.PROBE_DB;process.stdout.write(u.toString())')"
