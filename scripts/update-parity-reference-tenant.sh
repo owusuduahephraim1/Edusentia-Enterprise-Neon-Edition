@@ -61,6 +61,35 @@ apply_once "0048c_certified_backup_settings_compat" "database/reference-compat/0
 apply_once "0048d_certified_system_health_telemetry_compat" "database/reference-compat/0048d_certified_system_health_telemetry_compat.sql"
 apply_once "0048e_certified_system_health_notification_compat" "database/reference-compat/0048e_certified_system_health_notification_compat.sql"
 
+SYSTEM_HEALTH_MISSING_COLUMNS="$(psql "$DATABASE_URL" -X -qAt <<'SQL'
+with required(table_name,column_name) as (
+  values
+    ('backup_exports','completed_at'),('backup_exports','created_at'),('backup_exports','status'),
+    ('backup_exports','backup_type'),('backup_exports','verification_checked_at'),('backup_exports','verification_status'),
+    ('backup_exports','offsite_copied_at'),
+    ('recovery_test_runs','completed_at'),('recovery_test_runs','status'),
+    ('client_error_events','occurrence_count'),('client_error_events','last_seen_at'),('client_error_events','status'),('client_error_events','severity'),
+    ('notification_outbox','attempts'),('notification_outbox','created_at'),('notification_outbox','processed_at'),
+    ('security_events','status'),('security_events','severity'),
+    ('report_publications','revoked_at'),('report_publications','storage_path'),
+    ('profiles','active'),('teachers','active'),('teachers','deleted_at'),('students','status'),('students','deleted_at'),
+    ('assessment_components','scheme_id'),('assessment_components','weight'),
+    ('assessment_schemes','id'),('assessment_schemes','name')
+)
+select coalesce(string_agg(format('%I.%I',r.table_name,r.column_name),',' order by r.table_name,r.column_name),'')
+from required r
+where not exists (
+  select 1 from information_schema.columns c
+  where c.table_schema='public' and c.table_name=r.table_name and c.column_name=r.column_name
+);
+SQL
+)"
+echo "SYSTEM_HEALTH_MISSING_COLUMNS=${SYSTEM_HEALTH_MISSING_COLUMNS:-none}"
+if [ -n "$SYSTEM_HEALTH_MISSING_COLUMNS" ]; then
+  echo "::error::Certified system_health schema dependencies are missing: $SYSTEM_HEALTH_MISSING_COLUMNS"
+  exit 1
+fi
+
 test "$(psql "$TARGET_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 
 cleanup_schema_create
