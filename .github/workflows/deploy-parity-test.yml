@@ -191,6 +191,25 @@ jobs:
             '
           )
 
+      - name: Verify provisioner wrapper can create and remove an isolated database
+        if: steps.config.outputs.secret_refresh_ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROBE_DB="edusentia_wrapper_probe_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          PROBE_DB="${PROBE_DB//-/_}"
+          PROBE_DB="${PROBE_DB:0:60}"
+          cleanup_probe(){
+            psql "$PARITY_PROVISIONER_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force)" >/dev/null 2>&1 || true
+          }
+          trap cleanup_probe EXIT
+          cleanup_probe
+          psql "$PARITY_PROVISIONER_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\" template edusentia_tenant_template"
+          test "$(psql "$PARITY_PROVISIONER_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PROBE_DB'")" = "edusentia_provisioner_login"
+          cleanup_probe
+          trap - EXIT
+          echo "Rotatable provisioner login wrapper can create and remove isolated tenant databases."
+
       - name: Stage parity frontend configuration
         if: steps.config.outputs.code_deploy_ready == 'true'
         shell: bash
