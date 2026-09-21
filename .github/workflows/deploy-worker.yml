@@ -1,4 +1,5 @@
 name: Deploy Cloudflare Worker
+# Owner-bootstrap boundary: deployment verifies owner-established role grants and never replays them as runtime.
 
 on:
   push:
