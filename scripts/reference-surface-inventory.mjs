@@ -67,6 +67,26 @@ for(const name of expected){
   if(installed.get(name)===true)d.executable++;
   else if(installed.has(name))d.blocked.push(name);
 }
+const helperFunctions=[
+  "academic_analytics_v729","admin_apply_user_bundle","admin_validate_user_bundle","apply_certificate_placeholders",
+  "attendance_counts_for_enrollment","build_report_snapshot","build_school_prospectus_snapshot","build_staff_id_card_snapshot",
+  "build_student_id_card_snapshot","build_student_transcript_snapshot","can_access_class","can_create_report_for_class_term",
+  "can_manage_certificates","can_manage_class_report_fields","can_manage_student","can_review_certificates",
+  "can_score_class_subject_for_term","can_view_report","can_view_student","can_view_student_history","canonical_school_email_domain",
+  "certificate_type_code","certificate_type_label","create_notification","create_workflow_notifications","current_aal","current_app_role",
+  "current_app_role_for","default_grading_interpretation","finance_student_hold_status","generate_report_number",
+  "generate_school_identifier","generate_staff_id_card_number","generate_student_id_card_number","get_report_editor",
+  "get_role_dashboard","get_role_workspace","has_role","id_card_effective_status","is_academic_manager",
+  "is_assigned_class_teacher","is_records_manager","is_system_admin","is_term_three","license_read_allowed",
+  "license_write_allowed","next_promotion_academic_year","platform_preview_license_change","record_certificate_event",
+  "record_id_card_event","record_staff_id_card_event","refresh_report_promotion","report_class_id","report_promotion_evaluation",
+  "require_license_feature","require_platform_super_admin","require_sensitive_access","resolve_assessment_scheme",
+  "resolve_report_grading_guide","safe_boolean","safe_date","safe_numeric","safe_timestamptz","safe_uuid",
+  "save_academic_entity","save_assessment_scheme","save_class_subject_assignment","save_grading_scale","save_headteacher",
+  "save_report_card","save_student","save_teacher","staff_id_card_photo_reference_count","sync_attendance_reports",
+  "term_control_snapshot","term_phase_writable","transition_report_status"
+];
+
 const result={
   ok:missing.length===0&&blocked.length===0,
   referenceRpcCount:expected.length,
@@ -76,6 +96,9 @@ const result={
   blockedCount:blocked.length,
   missing,
   blocked,
+  helperFunctionCount:helperFunctions.length,
+  missingHelperFunctions:helperFunctions.filter(name=>!installed.has(name)),
+  blockedHelperFunctions:helperFunctions.filter(name=>installed.has(name)&&installed.get(name)!==true),
   domains
 };
 console.log(JSON.stringify(result));
