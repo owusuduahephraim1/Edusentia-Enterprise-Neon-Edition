@@ -9,6 +9,7 @@ on:
       - "database/install-master.sh"
       - "database/runtime-role.sql"
       - "database/provisioner-role.sql"
+      - "database/service-login-roles.sql"
       - "database/tenant-template/**"
       - ".github/workflows/deploy-worker.yml"
   workflow_dispatch:
@@ -45,23 +46,21 @@ jobs:
         name: Check deployment configuration
         env:
           BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
-          PRODUCTION_WORKER_DATABASE_URL: ${{ secrets.PRODUCTION_WORKER_DATABASE_URL }}
-          PRODUCTION_PROVISIONER_DATABASE_URL: ${{ secrets.PRODUCTION_PROVISIONER_DATABASE_URL }}
           SESSION_PEPPER_VALUE: ${{ secrets.SESSION_PEPPER || secrets.AUTH_SECRET }}
           BOOTSTRAP_ADMIN_SECRET_VALUE: ${{ secrets.BOOTSTRAP_ADMIN_SECRET }}
           TURNSTILE_SECRET_VALUE: ${{ secrets.TURNSTILE_SECRET }}
         run: |
+          set -euo pipefail
           ready=true
           [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "CLOUDFLARE_API_TOKEN is not configured for this repository."; ready=false; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "CLOUDFLARE_ACCOUNT_ID is not configured for this repository."; ready=false; }
           [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::DATABASE_URL or NEON_DATABASE_URL is not configured for this repository."; ready=false; }
-          [ -n "$PRODUCTION_WORKER_DATABASE_URL" ] || { echo "::error::PRODUCTION_WORKER_DATABASE_URL is not configured for this repository."; ready=false; }
-          [ -n "$PRODUCTION_PROVISIONER_DATABASE_URL" ] || { echo "::error::PRODUCTION_PROVISIONER_DATABASE_URL is not configured for this repository."; ready=false; }
           [ -n "$SESSION_PEPPER_VALUE" ] || { echo "::error::SESSION_PEPPER or AUTH_SECRET is not configured for this repository."; ready=false; }
           [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || { echo "BOOTSTRAP_ADMIN_SECRET is not configured for this repository."; ready=false; }
           [ -n "$TURNSTILE_SECRET_VALUE" ] || { echo "TURNSTILE_SECRET is not configured for this repository."; ready=false; }
           echo "ready=$ready" >> "$GITHUB_OUTPUT"
           if [ "$ready" != true ]; then
-            echo "::error::Production deployment requires complete dedicated service credentials."
+            echo "::error::Production deployment requires the bootstrap, Cloudflare, authentication, and Turnstile secrets."
             exit 1
           fi
 
@@ -81,16 +80,15 @@ jobs:
         run: |
           npx wrangler deploy 2>&1 | tee /tmp/initial-worker-deploy.log
 
-      - name: Provision schema and install dedicated Neon service secrets
+      - name: Provision schema and install deployment-managed Neon service credentials
         if: steps.deployment_config.outputs.ready == 'true'
         env:
           BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
-          PRODUCTION_WORKER_DATABASE_URL: ${{ secrets.PRODUCTION_WORKER_DATABASE_URL }}
-          PRODUCTION_PROVISIONER_DATABASE_URL: ${{ secrets.PRODUCTION_PROVISIONER_DATABASE_URL }}
           SESSION_PEPPER_VALUE: ${{ secrets.SESSION_PEPPER || secrets.AUTH_SECRET }}
           BOOTSTRAP_ADMIN_SECRET_VALUE: ${{ secrets.BOOTSTRAP_ADMIN_SECRET }}
           TURNSTILE_SECRET_VALUE: ${{ secrets.TURNSTILE_SECRET }}
         run: |
+          set -euo pipefail
           if ! command -v psql >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y postgresql-client
@@ -99,17 +97,45 @@ jobs:
           ADMIN_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" node --input-type=module -e '
             const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
             u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia";
             process.stdout.write(u.toString());
           ')"
           echo "::add-mask::$ADMIN_DATABASE_URL"
 
-          BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" bash database/install-master.sh
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select current_database()")" = "edusentia"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select current_user")" = "edusentia_runtime"
 
+          BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" bash database/install-master.sh
           psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/runtime-role.sql
           psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
-
           BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template" bash database/tenant-template/install.sh
 
+          # Wrapper roles are installed once by the controlled owner-level promotion bootstrap.
+          # Runtime has ADMIN only on these password-bearing wrappers, never on the fixed service roles.
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*)=2 from pg_roles where rolname in('edusentia_worker_login','edusentia_provisioner_login') and rolcanlogin and not rolsuper and not rolcreaterole and not rolbypassrls")" = "t"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*)=2 from pg_auth_members m join pg_roles granted on granted.oid=m.roleid join pg_roles member_role on member_role.oid=m.member where member_role.rolname='edusentia_runtime' and granted.rolname in('edusentia_worker_login','edusentia_provisioner_login') and m.admin_option and not m.inherit_option and not m.set_option")" = "t"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*)=2 from pg_auth_members m join pg_roles granted on granted.oid=m.roleid join pg_roles member_role on member_role.oid=m.member where member_role.rolname in('edusentia_worker_login','edusentia_provisioner_login') and granted.rolname in('edusentia_worker_runtime','edusentia_provisioner') and not m.admin_option and m.inherit_option and m.set_option")" = "t"
+
+          WORKER_LOGIN_PASSWORD="$(openssl rand -hex 32)"
+          PROVISIONER_LOGIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$WORKER_LOGIN_PASSWORD"
+          echo "::add-mask::$PROVISIONER_LOGIN_PASSWORD"
+
+          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter role edusentia_worker_login login password '$WORKER_LOGIN_PASSWORD'; alter role edusentia_provisioner_login login password '$PROVISIONER_LOGIN_PASSWORD';"
+
+          PRODUCTION_WORKER_DATABASE_URL="$(ADMIN_DATABASE_URL="$ADMIN_DATABASE_URL" WORKER_LOGIN_PASSWORD="$WORKER_LOGIN_PASSWORD" node --input-type=module -e '
+            const u=new URL(process.env.ADMIN_DATABASE_URL);
+            u.hostname=u.hostname.replace(".","-pooler.");
+            u.username="edusentia_worker_login";
+            u.password=process.env.WORKER_LOGIN_PASSWORD;
+            process.stdout.write(u.toString());
+          ')"
+          PRODUCTION_PROVISIONER_DATABASE_URL="$(ADMIN_DATABASE_URL="$ADMIN_DATABASE_URL" PROVISIONER_LOGIN_PASSWORD="$PROVISIONER_LOGIN_PASSWORD" node --input-type=module -e '
+            const u=new URL(process.env.ADMIN_DATABASE_URL);
+            u.username="edusentia_provisioner_login";
+            u.password=process.env.PROVISIONER_LOGIN_PASSWORD;
+            process.stdout.write(u.toString());
+          ')"
           echo "::add-mask::$PRODUCTION_WORKER_DATABASE_URL"
           echo "::add-mask::$PRODUCTION_PROVISIONER_DATABASE_URL"
 
@@ -117,9 +143,9 @@ jobs:
             const admin=new URL(process.env.ADMIN_DATABASE_URL);
             const worker=new URL(process.env.PRODUCTION_WORKER_DATABASE_URL);
             const provisioner=new URL(process.env.PRODUCTION_PROVISIONER_DATABASE_URL);
-            if(worker.pathname!=="/edusentia"||worker.username!=="edusentia_worker_runtime")throw new Error("Production Worker database URL must target edusentia as edusentia_worker_runtime");
+            if(worker.pathname!=="/edusentia"||worker.username!=="edusentia_worker_login")throw new Error("Production Worker database URL must target edusentia through the rotatable Worker login");
             if(!worker.hostname.includes("-pooler."))throw new Error("Production Worker database URL must use the pooled Neon endpoint");
-            if(provisioner.pathname!=="/edusentia"||provisioner.username!=="edusentia_provisioner")throw new Error("Production provisioner database URL must target edusentia as edusentia_provisioner");
+            if(provisioner.pathname!=="/edusentia"||provisioner.username!=="edusentia_provisioner_login")throw new Error("Production provisioner URL must target edusentia through the rotatable provisioner login");
             if(provisioner.hostname!==admin.hostname||provisioner.hostname.includes("-pooler."))throw new Error("Production provisioner database URL must use the direct Neon endpoint");
             console.log("Production service database routes verified.");
           '
@@ -131,15 +157,14 @@ jobs:
               const worker=neon(process.env.PRODUCTION_WORKER_DATABASE_URL);
               const provisioner=neon(process.env.PRODUCTION_PROVISIONER_DATABASE_URL);
               const [wr,pr]=await Promise.all([
-                worker`select current_user role, current_database() database`,
-                provisioner`select current_user role, current_database() database, r.rolcreatedb, r.rolsuper, r.rolcreaterole, r.rolbypassrls from pg_roles r where r.rolname=current_user`
+                worker`select session_user session_role,current_user role,current_database() database, pg_has_role(current_user,${"edusentia_worker_runtime"}::text,${"member"}::text) inherited_runtime`,
+                provisioner`select session_user session_role,current_user role,current_database() database, r.rolcreatedb, r.rolsuper, r.rolcreaterole, r.rolbypassrls, pg_has_role(current_user,${"edusentia_provisioner"}::text,${"member"}::text) inherited_provisioner from pg_roles r where r.rolname=current_user`
               ]);
-              if(wr[0]?.role!=="edusentia_worker_runtime"||wr[0]?.database!=="edusentia")throw new Error("Production Worker identity verification failed");
-              if(pr[0]?.role!=="edusentia_provisioner"||pr[0]?.database!=="edusentia"||!pr[0]?.rolcreatedb||pr[0]?.rolsuper||pr[0]?.rolcreaterole||pr[0]?.rolbypassrls)throw new Error("Production provisioner identity verification failed");
-              console.log("Production Worker and provisioner database identities verified.");
+              if(wr[0]?.session_role!=="edusentia_worker_login"||wr[0]?.role!=="edusentia_worker_login"||wr[0]?.database!=="edusentia"||!wr[0]?.inherited_runtime)throw new Error("Production Worker identity verification failed");
+              if(pr[0]?.session_role!=="edusentia_provisioner_login"||pr[0]?.role!=="edusentia_provisioner_login"||pr[0]?.database!=="edusentia"||!pr[0]?.rolcreatedb||pr[0]?.rolsuper||pr[0]?.rolcreaterole||pr[0]?.rolbypassrls||!pr[0]?.inherited_provisioner)throw new Error("Production provisioner identity verification failed");
+              console.log("Production Worker and provisioner wrapper identities verified.");
             '
           )
-
 
           printf '%s' "$PRODUCTION_WORKER_DATABASE_URL" | (cd worker && npx wrangler secret put DATABASE_URL)
           printf '%s' "$PRODUCTION_PROVISIONER_DATABASE_URL" | (cd worker && npx wrangler secret put PROVISIONER_DATABASE_URL)
@@ -154,6 +179,7 @@ jobs:
         if: steps.deployment_config.outputs.ready == 'true'
         working-directory: worker
         run: |
+          set -euo pipefail
           npx wrangler deploy 2>&1 | tee /tmp/final-worker-deploy.log
           WORKER_URL="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' /tmp/final-worker-deploy.log | tail -1)"
           test -n "$WORKER_URL" || { echo "Could not determine workers.dev URL"; exit 1; }
