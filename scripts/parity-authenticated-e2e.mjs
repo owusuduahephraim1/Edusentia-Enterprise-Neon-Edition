@@ -46,7 +46,7 @@ function cookieValue(setCookie){
 async function http(path,{method="GET",body,cookie,headers={}}={}){
   const response=await fetch(ORIGIN+path,{
     method,
-    headers:{accept:"application/json",...(body!=null?{"content-type":"application/json"}:{}),...(cookie?{cookie}:{}),...headers},
+    headers:{accept:"application/json",origin:ORIGIN,...(body!=null?{"content-type":"application/json"}:{}),...(cookie?{cookie}:{}),...headers},
     body:body==null?undefined:typeof body==="string"?body:JSON.stringify(body),
     redirect:"manual"
   });
@@ -159,7 +159,7 @@ try{
     method:"POST",cookie,body:{filename:"parity-e2e-report.pdf",contentType:"application/pdf",size:pdf.length}
   })).payload;
   assert(prepared?.objectKey&&prepared?.uploadUrl,"Report PDF upload authorization failed");
-  const uploaded=await fetch(ORIGIN+prepared.uploadUrl,{method:"PUT",headers:{cookie,"content-type":"application/pdf",accept:"application/json"},body:pdf});
+  const uploaded=await fetch(ORIGIN+prepared.uploadUrl,{method:"PUT",headers:{cookie,origin:ORIGIN,"content-type":"application/pdf",accept:"application/json"},body:pdf});
   if(!uploaded.ok)throw new Error("Report PDF upload failed "+uploaded.status+": "+(await uploaded.text()).slice(0,500));
 
   await rpc(cookie,"register_report_pdf",{
@@ -173,7 +173,7 @@ try{
 
   if(oldPath&&oldPath!==prepared.objectKey){
     const cleanup=await fetch(ORIGIN+"/api/reports/"+fixture.report_id+"/pdf/object?key="+encodeURIComponent(oldPath),{
-      method:"DELETE",headers:{cookie,accept:"application/json"}
+      method:"DELETE",headers:{cookie,origin:ORIGIN,accept:"application/json"}
     });
     if(!cleanup.ok&&cleanup.status!==404)throw new Error("Old report PDF cleanup failed "+cleanup.status);
   }
