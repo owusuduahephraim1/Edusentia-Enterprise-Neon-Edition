@@ -196,6 +196,20 @@ jobs:
           test "$(psql "$URL" -Atc "select position('public.digest' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='verify_transcript' limit 1")" = "t"
           test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 
+          echo "::group::Disposable certified RPC inventory"
+          TARGET_DATABASE_URL="$URL" node scripts/reference-surface-inventory.mjs | tee /tmp/disposable-reference-surface.json
+          node - <<'NODE'
+          const fs=require("node:fs");
+          const lines=fs.readFileSync("/tmp/disposable-reference-surface.json","utf8").trim().split(/\n/);
+          const result=JSON.parse(lines.at(-1));
+          if(result.referenceRpcCount!==172||result.executableReferenceRpcCount!==172||result.missingCount!==0||result.blockedCount!==0){
+            console.error(result);
+            process.exit(1);
+          }
+          console.log("Disposable certified RPC surface verified: 172/172 Worker-executable.");
+          NODE
+          echo "::endgroup::"
+
           echo "::group::Certified public function inventory"
           psql "$URL" -Atc "select p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and not exists (select 1 from pg_depend d join pg_extension e on e.oid=d.refobjid where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e') order by 1"
           echo "::endgroup::"
