@@ -8,6 +8,7 @@ export interface Env {
   BOOTSTRAP_ADMIN_SECRET: string;
   PLATFORM_BOOTSTRAP_SECRET?: string;
   TURNSTILE_SECRET?: string;
+  TURNSTILE_TEST_MODE?: string;
   SESSION_COOKIE_NAME?: string;
   PLATFORM_SESSION_COOKIE_NAME?: string;
   SESSION_TTL_SECONDS?: string;
