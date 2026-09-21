@@ -81,6 +81,7 @@ psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0047_certif
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048_certified_provider_rpc_neon_r2.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048b_certified_certificate_settings_compat.sql
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048c_certified_backup_settings_compat.sql
+psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048d_certified_system_health_telemetry_compat.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
 
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"

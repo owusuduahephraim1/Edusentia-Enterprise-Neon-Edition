@@ -700,3 +700,23 @@ test("backup settings compatibility hotfix completes the certified backup consol
   }
 });
 
+
+
+test("system health telemetry compatibility completes the certified health schema",()=>{
+  const sql=read("database/reference-compat/0048d_certified_system_health_telemetry_compat.sql");
+  const bulk=read("database/reference-compat/0046_certified_reference_rpc_bulk.sql");
+  const template=read("database/tenant-template/install.sh");
+  const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const updateTemplate=read("scripts/update-parity-tenant-template.sh");
+  const updateReference=read("scripts/update-parity-reference-tenant.sh");
+  for(const column of ["severity","category","status","occurrence_count","first_seen_at","last_seen_at","fingerprint","resolved_at","resolution_note"]){
+    assert.ok(sql.includes(column),column+" telemetry compatibility column missing");
+  }
+  assert.match(sql,/client_error_events_health_idx/i);
+  assert.match(bulk,/sum\(occurrence_count\)[\s\S]*last_seen_at[\s\S]*severity/i);
+  assert.ok(lifecycle.includes('psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048d_certified_system_health_telemetry_compat.sql >/dev/null'));
+  for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
+    assert.match(source,/0048d_certified_system_health_telemetry_compat\.sql/);
+  }
+});
