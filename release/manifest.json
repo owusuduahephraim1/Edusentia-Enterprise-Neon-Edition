@@ -28,5 +28,18 @@
   },
   "customDomain": false,
   "supabaseRuntime": false,
-  "status": "production-ready"
+  "status": "production-ready",
+  "controlAdditiveMigrations": [
+    "0025b_platform_package_distribution",
+    "0025c_platform_package_signing_continuity"
+  ],
+  "packageDistribution": {
+    "provider": "cloudflare-r2",
+    "catalog": "neon-postgresql",
+    "signatureAlgorithm": "ECDSA-P256-SHA256",
+    "privateKeyPersistence": "aes-gcm-encrypted-neon",
+    "templateValidation": "server-side-zip-sha256-provider-scan",
+    "signedDownloads": true,
+    "reconciliation": true
+  }
 }
