@@ -403,11 +403,27 @@ grant execute on function public.backup_worker_mark_r2_deleted(uuid,text) to edu
 
 grant execute on function public.license_snapshot_for_role(text) to edusentia_worker_runtime;
 grant execute on function public.license_feature_enabled(text) to edusentia_worker_runtime;
-grant execute on function public.school_restore_begin(text,text,text,bigint,uuid) to edusentia_worker_runtime;
-grant execute on function public.school_restore_set_status(uuid,text,text,text) to edusentia_worker_runtime;
-grant execute on function public.school_restore_clear_operational_data(uuid) to edusentia_worker_runtime;
-grant execute on function public.school_restore_apply_table(uuid,text,jsonb) to edusentia_worker_runtime;
-grant execute on function public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text) to edusentia_worker_runtime;
+
+-- Historical Supabase releases exposed these restore helpers before the Neon
+-- worker bridge existed. Some certified clean-room snapshots do not contain
+-- them at all, so grant only the helpers that are actually present.
+do $restore_helper_grants$
+declare signature text;
+begin
+  foreach signature in array array[
+    'public.school_restore_begin(text,text,text,bigint,uuid)',
+    'public.school_restore_set_status(uuid,text,text,text)',
+    'public.school_restore_clear_operational_data(uuid)',
+    'public.school_restore_apply_table(uuid,text,jsonb)',
+    'public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)'
+  ]
+  loop
+    if to_regprocedure(signature) is not null then
+      execute format('grant execute on function %s to edusentia_worker_runtime',signature);
+    end if;
+  end loop;
+end
+$restore_helper_grants$;
 
 insert into app.schema_migrations(version)
 values ('0048l_backup_worker_api')
