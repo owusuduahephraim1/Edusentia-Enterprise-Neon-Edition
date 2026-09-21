@@ -66,6 +66,12 @@ apply_once "0048f_certified_backup_health_metadata_compat" "database/reference-c
 # 0048g uses a Neon-only runtime-owner policy; browser/API callers remain behind certified Worker RPCs.
 apply_once "0048g_certified_operational_rls_enforcement" "database/reference-compat/0048g_certified_operational_rls_enforcement.sql"
 apply_once "0048h_certified_release_identity" "database/reference-compat/0048h_certified_release_identity.sql"
+apply_once "0048i_historical_provider_bridges" "database/reference-compat/0048i_historical_provider_bridges.sql"
+apply_once "0048j_notification_worker_compat" "database/reference-compat/0048j_notification_worker_compat.sql"
+apply_once "0048k_mfa_recovery_compat" "database/reference-compat/0048k_mfa_recovery_compat.sql"
+apply_once "0048l_backup_worker_api" "database/reference-compat/0048l_backup_worker_api.sql"
+apply_once "0048m_restore_worker_helpers" "database/reference-compat/0048m_restore_worker_helpers.sql"
+apply_once "0048n_backup_maintenance_helpers" "database/reference-compat/0048n_backup_maintenance_helpers.sql"
 
 SYSTEM_HEALTH_MISSING_COLUMNS="$(psql "$TARGET_URL" -X -qAt <<'SQL'
 with required(table_name,column_name) as (
