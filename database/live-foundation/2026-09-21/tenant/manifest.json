@@ -1,0 +1,27 @@
+{
+  "snapshotDate": "2026-09-21",
+  "source": "live Supabase tenant (read-only catalog export)",
+  "dataIncluded": false,
+  "secretsIncluded": false,
+  "counts": {
+    "tables": 190,
+    "views": 2,
+    "sequences": 43,
+    "functions": 678,
+    "policies": 235,
+    "triggers": 444,
+    "indexes": 719,
+    "constraints": 1180,
+    "enums": 3
+  },
+  "canonicalHashes": {
+    "columnsNormalized": "b4f7983205281450a6ed6155307d6afe",
+    "constraints": "c35837c851bbea7d375b94a730968ad7",
+    "indexes": "ce3060cdfa1b48b0a7f721675bf75266",
+    "functions": "f41b0459ffb80e54e0b5d80efb48c10c",
+    "views": "41e2abf19bd7d868a71992b843b328d0",
+    "policies": "c261ee19c0ffba801f23fc93a8e4da5a",
+    "triggers": "10f75ee2eba67506d4445f4124610e83",
+    "rls": "54dfca1e68a86f5328f7cf74a01759ba"
+  }
+}
