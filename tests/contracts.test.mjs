@@ -348,3 +348,13 @@ test("provisioner bootstrap preserves explicit SET-only membership",()=>{
   assert.match(t,/PGOPTIONS='-c role=edusentia_provisioner'/);
   assert.match(t,/pg_get_userbyid\(datdba\)/);
 });
+
+
+test("tenant template handoff uses provisioner after ownership transfer",()=>{
+  const i=read("database/tenant-template/install.sh");
+  const w=read(".github/workflows/parity-template-install.yml");
+  assert.match(i,/alter database \\"\$TEMPLATE_DB\\" owner to edusentia_provisioner/);
+  assert.match(i,/PGOPTIONS='-c role=edusentia_provisioner'/);
+  assert.match(w,/alter database \\"\$PARITY_TEMPLATE_DATABASE\\" owner to edusentia_provisioner/);
+  assert.match(w,/PGOPTIONS='-c role=edusentia_provisioner'/);
+});
