@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="platform-r40-v9-list-resilience.css">
 </head>
 <body class="pa-page">
-  <section id="paAuthView" class="pa-auth-view">
+  <section id="paAuthView" class="pa-auth-view hidden" aria-hidden="true">
     <img class="pa-auth-scene" src="assets/edusentia-auth-learning.webp" alt="" aria-hidden="true" decoding="async" fetchpriority="high">
     <div class="pa-auth-panel">
       <div class="pa-brand">
@@ -64,6 +64,7 @@
         <button type="button" data-view="licensing"><span class="pa-nav-icon">▣</span><span>Licensing</span></button>
         <button type="button" data-view="provisioning"><span class="pa-nav-icon">↻</span><span>Provisioning</span></button>
         <button type="button" data-view="plans"><span class="pa-nav-icon">◇</span><span>Plans</span></button>
+        <button type="button" data-view="packages"><span class="pa-nav-icon">⬢</span><span>Packages</span></button>
         <button type="button" data-view="health"><span class="pa-nav-icon">●</span><span>Platform Health</span></button>
       </nav>
       <div class="pa-side-footer"><span id="paAdminIdentity" class="pa-admin-name">Platform Administrator</span><span class="pa-admin-role">Platform Super Administrator</span><span class="pa-aal">AAL2 verified</span></div>
@@ -88,8 +89,8 @@
   <div id="qrScratch" class="qr-scratch" aria-hidden="true"></div>
   <script src="config.js"></script>
   <script src="api-client.js"></script>
+  <script src="platform-api-client.js"></script>
   <script src="assets/vendor/qrcode-1.0.0.min.js"></script>
   <script src="platform-saas-admin.js"></script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onPlatformTurnstileLoad&render=explicit" async defer></script>
 </body>
 </html>

@@ -3,8 +3,9 @@
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const api=()=>window.EdusentiaApi;
+const packageApi=()=>window.EdusentiaPlatformApi;
 const cfg=window.EDS_MASTER_CONFIG||{};
-const state={view:"overview",model:null,session:null,mfaChallenge:"",pendingSession:null,turnstileToken:"",turnstileId:null,loading:false};
+const state={view:"overview",model:null,session:null,mfaChallenge:"",pendingSession:null,turnstileToken:"",turnstileId:null,loading:false,packageModel:{templates:[],artifacts:[],reconciliation:[],signing_keys:[],signing_configured:false,signing_bootstrap_available:false}};
 const titles={
   overview:["Platform Overview","Control-plane status and tenant operations"],
   registrations:["School Registrations","Review and approve new school onboarding"],
@@ -13,6 +14,7 @@ const titles={
   licensing:["Licensing","Academic-period licence authorization and activation"],
   provisioning:["Provisioning","Dedicated Neon database provisioning jobs"],
   plans:["Plans","Commercial plans and feature entitlements"],
+  packages:["Package Distribution","Signed Neon tenant packages and Cloudflare R2 lifecycle"],
   health:["Platform Health","Release gate, tenant health and operational audit"]
 };
 function status(message="",kind=""){const n=$("#paStatus");if(!n)return;n.textContent=message;n.className=`pa-status ${kind}`.trim();n.classList.toggle("hidden",!message);}
@@ -23,10 +25,7 @@ function dateValue(v){const d=v?new Date(v):new Date();if(Number.isNaN(d.getTime
 function plusDays(v,n){const d=v instanceof Date?new Date(v):new Date(v||Date.now());d.setUTCDate(d.getUTCDate()+n);return d;}
 function badge(v){const x=String(v||"unknown");return `<span class="pa-badge ${esc(x)}">${esc(x.replaceAll("_"," "))}</span>`;}
 function money(v,c="USD"){if(v==null||v==="")return"Custom";try{return new Intl.NumberFormat("en",{style:"currency",currency:c,maximumFractionDigits:0}).format(Number(v));}catch{return String(v);}}
-function showAuth(step="login"){
-  $("#paAuthView")?.classList.remove("hidden");$("#paConsole")?.classList.add("hidden");
-  $("#paLogin")?.classList.toggle("hidden",step!=="login");$("#paMfa")?.classList.toggle("hidden",step!=="mfa");$("#paRecoveryCodes")?.classList.toggle("hidden",step!=="recovery");
-}
+function showAuth(){location.replace("./?platform=1");}
 function showConsole(session){
   state.session=session;$("#paAuthView")?.classList.add("hidden");$("#paConsole")?.classList.remove("hidden");
   $("#paAdminIdentity").textContent=session?.user?.displayName||session?.user?.email||"Platform Administrator";
@@ -52,8 +51,8 @@ function beginMfa(result){
 }
 async function enter(session){showConsole(session);setView(state.view);await load(true);}
 async function boot(){
-  try{const session=await api().platformSession();if(session?.authenticated){await enter(session);return;}showAuth("login");renderTurnstile();}
-  catch(e){showAuth("login");authMessage(e?.message||"Platform API is unavailable.");renderTurnstile();}
+  try{const session=await api().platformSession();if(session?.authenticated){await enter(session);return;}showAuth();}
+  catch(e){showAuth();}
 }
 async function load(force=false){
   if(state.loading&&!force)return;state.loading=true;$("#paConnection").textContent="Refreshing control plane…";
@@ -65,7 +64,7 @@ function setView(view){
   if(!titles[view])view="overview";state.view=view;
   $$(".pa-nav [data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
   const [title,subtitle]=titles[view];$("#paPageTitle").textContent=title;$("#paPageSubtitle").textContent=subtitle;
-  render();$(".pa-sidebar")?.classList.remove("pa-drawer-open");document.body.classList.remove("pa-mobile-drawer-open");
+  render();if(view==="packages")loadPackages().catch(e=>status(e?.message||"Package service could not be loaded.","error"));$(".pa-sidebar")?.classList.remove("pa-drawer-open");document.body.classList.remove("pa-mobile-drawer-open");
 }
 function pageHead(title,subtitle,actions=""){return `<div class="pa-page-head"><div><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div><div class="pa-actions">${actions}</div></div>`;}
 function empty(text){return `<div class="pa-empty">${esc(text)}</div>`;}
@@ -85,8 +84,35 @@ function render(){
   if(state.view==="licensing")renderLicensing(m);
   if(state.view==="provisioning")renderProvisioning(m);
   if(state.view==="plans")renderPlans(m);
+  if(state.view==="packages")renderPackages(m);
   if(state.view==="health")renderHealth(m);
 }
+async function digestFile(file){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer()));return Array.from(d,b=>b.toString(16).padStart(2,"0")).join("");}
+function packageActionButton(label,action,id="",kind="secondary"){return `<button class="pa-btn ${kind} small" type="button" data-action="${esc(action)}"${id?` data-id="${esc(id)}"`:""}>${esc(label)}</button>`;}
+function packageMetric(label,value,icon,kind=""){return `<article class="pa-stat ${kind}"><div class="pa-stat-icon">${icon}</div><div><span>${esc(label)}</span><strong>${esc(value)}</strong></div></article>`;}
+function renderPackages(m){
+  const p=state.packageModel||{},active=(p.templates||[]).find(x=>x.active),open=(p.reconciliation||[]).filter(x=>x.status!=="resolved");
+  const tenants=(m.tenants||[]).map(t=>`<tr><td><code>${esc(t.tenant_code)}</code></td><td>${esc(t.school_name)}</td><td>${esc(t.plan_code||"—")}</td><td>${badge(t.status)}</td><td>${packageActionButton("Generate package","package-generate",t.tenant_id)}</td></tr>`);
+  const artifacts=(p.artifacts||[]).map(a=>{const actions=[];if(a.status==="ready"){actions.push(packageActionButton("Download","package-download",a.id));actions.push(packageActionButton("Revoke","package-revoke",a.id,"warning"));}if(a.status==="revoked"){actions.push(packageActionButton("Restore","package-restore",a.id));actions.push(packageActionButton("Delete","package-delete",a.id,"danger"));}return `<tr><td><code>${esc(a.tenant_code)}</code><br><small>${esc(a.school_name)}</small></td><td>${esc(a.filename)}</td><td>${badge(a.status)}</td><td><code>${esc(String(a.sha256||"").slice(0,16))}…</code></td><td>${esc(a.signing_key_id||"—")}</td><td>${fmt(a.generated_at)}</td><td>${Number(a.download_count||0)}</td><td><div class="pa-actions">${actions.join("")||"—"}</div></td></tr>`;});
+  $("#paContent").innerHTML=`${pageHead("Package Distribution","Protected repository templates, signed tenant releases and Cloudflare R2 lifecycle")}
+  <section class="pa-stat-grid">
+    ${packageMetric("Active template",active?active.package_version:"Not installed","⬢",active?"green":"gold")}
+    ${packageMetric("Signing identity",p.signing_configured?"Persisted":"Bootstrap ready",p.signing_configured?"✓":"◇",p.signing_configured?"green":"gold")}
+    ${packageMetric("Ready packages",(p.artifacts||[]).filter(a=>a.status==="ready").length,"▣")}
+    ${packageMetric("R2 reconciliation",open.length,open.length?"!":"●",open.length?"red":"green")}
+  </section>
+  <div class="pa-grid two">
+    <section class="pa-panel"><header class="pa-panel-head"><h4>Protected Neon package template</h4></header><div class="pa-panel-body">
+      ${active?`<div class="pa-info success"><strong>${esc(active.package_version)}</strong><span>SHA-256 ${esc(active.sha256)} · ${esc(active.file_size)} bytes</span></div>`:'<div class="pa-info warning"><strong>No active template</strong><span>Upload a ZIP of the certified Neon repository before generating tenant packages.</span></div>'}
+      <label class="pa-field"><span>Repository template ZIP</span><input id="paPackageTemplateFile" type="file" accept=".zip,application/zip"></label>
+      <div class="pa-actions">${packageActionButton("Validate & activate","package-template-upload")}${packageActionButton("Reconcile R2","package-maintain","","ghost")}</div>
+    </div></section>
+    <section class="pa-panel"><header class="pa-panel-head"><h4>Signing continuity</h4></header><div class="pa-panel-body pa-card-list">${(p.signing_keys||[]).map(k=>`<article class="pa-event"><strong>${esc(k.key_id)}</strong><small>${esc(k.public_fingerprint)} · ${k.active?"active":"inactive"}</small></article>`).join("")||'<div class="pa-empty">The signing identity will be created securely on first package generation.</div>'}</div></section>
+  </div>
+  <section class="pa-panel" style="margin-top:17px"><header class="pa-panel-head"><h4>Generate tenant package</h4></header><div class="pa-panel-body">${tenants.length?table(["Tenant","School","Plan","Status","Action"],tenants):empty("No tenants are available for package generation.")}</div></section>
+  <section class="pa-panel" style="margin-top:17px"><header class="pa-panel-head"><h4>Generated packages</h4></header><div class="pa-panel-body">${artifacts.length?table(["Tenant","Artifact","Status","SHA-256","Signing key","Generated","Downloads","Actions"],artifacts):empty("No generated tenant packages yet.")}</div></section>`;
+}
+async function loadPackages(){state.packageModel=await packageApi().packageStatus();if(state.view==="packages")renderPackages(state.model||{tenants:[]});}
 function renderOverview(m){
   const gate=m.releaseGate||{},checks=gate.checks||{},pending=(m.registrations||[]).filter(r=>r.status==="pending").slice(0,6),health=(m.tenants||[]).slice(0,8);
   $("#paContent").innerHTML=`${pageHead("Platform Overview","Control-plane status and tenant operations")}
@@ -259,6 +285,13 @@ async function action(event){
     if(action==="revoke-license"){const reason=prompt("Reason for revoking this unused authorization code");if(reason===null)return;await api().revokeLicenseAuthorization(id,b.dataset.authorization,reason);}
     if(action==="delete-license"){if(prompt("Type DELETE to permanently remove this revoked authorization")!=="DELETE")return;await api().deleteRevokedLicenseAuthorization(id,b.dataset.authorization);}
     if(action==="release-gate"){const g=await api().runReleaseGate();status(g.ready?"Release gate passed.":"Release gate found conditions requiring attention.",g.ready?"success":"error");}
+    if(action==="package-template-upload"){const file=$("#paPackageTemplateFile")?.files?.[0];if(!file)throw new Error("Choose a Neon repository ZIP first.");if(file.size<1024||file.size>48*1024*1024)throw new Error("Template ZIP must be between 1 KB and 48 MB.");status("Hashing and validating package template…");const hash=await digestFile(file),ticket=await packageApi().packageAction("create_template_upload",{filename:file.name,file_size:file.size});const uploaded=await fetch(ticket.token,{method:"PUT",headers:{"content-type":"application/zip"},body:file});if(!uploaded.ok)throw new Error("R2 template upload failed ("+uploaded.status+")");await packageApi().packageAction("activate_template_upload",{storage_path:ticket.storage_path,filename:file.name,client_validation_receipt:{archive_sha256:hash}});await loadPackages();status("Protected Neon package template activated.","success");return;}
+    if(action==="package-generate"){if(!confirm("Generate a new signed package for this tenant? Any previous ready package for the tenant will be revoked."))return;await packageApi().packageAction("generate",{tenant_id:id});await loadPackages();status("Signed tenant package generated in R2.","success");return;}
+    if(action==="package-download"){const result=await packageApi().packageAction("download",{artifact_id:id}),a=document.createElement("a");a.href=result.url;a.download=result.filename||"Edusentia-Neon-Package.zip";a.rel="noopener";document.body.appendChild(a);a.click();a.remove();return;}
+    if(action==="package-revoke"){const reason=prompt("Reason for revocation:","Superseded package");if(reason===null)return;await packageApi().packageAction("revoke",{artifact_id:id,reason});await loadPackages();status("Package revoked.","success");return;}
+    if(action==="package-restore"){if(!confirm("Restore this revoked package as the tenant's ready package?"))return;await packageApi().packageAction("restore",{artifact_id:id});await loadPackages();status("Package restored.","success");return;}
+    if(action==="package-delete"){if(!confirm("Permanently delete this revoked package object from R2?"))return;await packageApi().packageAction("delete",{artifact_id:id});await loadPackages();status("Revoked package deleted.","success");return;}
+    if(action==="package-maintain"){const result=await packageApi().packageAction("repair_package_storage",{});await loadPackages();status(result.ok?"Package R2 reconciliation passed.":"Package reconciliation found missing objects.",result.ok?"success":"error");return;}
     await load(true);if(action!=="release-gate")status("Platform operation completed.","success");
   }catch(err){status(err.message||String(err),"error");}
   finally{b.disabled=false;}
@@ -268,7 +301,7 @@ function wire(){
   $("#paMfaForm")?.addEventListener("submit",async e=>{e.preventDefault();mfaMessage("");const b=e.currentTarget.querySelector('button[type="submit"]');b.disabled=true;try{const r=await api().platformCompleteMfa(state.mfaChallenge,$("#paMfaCode").value.trim());state.mfaChallenge="";if(Array.isArray(r.recoveryCodes)&&r.recoveryCodes.length){state.pendingSession=r;$("#paRecoveryCodeList").textContent=r.recoveryCodes.join("\n");showAuth("recovery");}else await enter(r);}catch(err){mfaMessage(err.message||String(err));}finally{b.disabled=false;}});
   $("#paMfaBack")?.addEventListener("click",()=>{state.mfaChallenge="";showAuth("login");resetTurnstile();renderTurnstile();});
   $("#paRecoveryContinue")?.addEventListener("click",async()=>{if(!state.pendingSession)return;const s=state.pendingSession;state.pendingSession=null;$("#paRecoveryCodeList").textContent="";await enter(s);});
-  $("#paRefresh")?.addEventListener("click",()=>load(true));$("#paSignOut")?.addEventListener("click",async()=>{try{await api().platformLogout();}finally{location.reload();}});
+  $("#paRefresh")?.addEventListener("click",()=>load(true));$("#paSignOut")?.addEventListener("click",async()=>{try{await api().platformLogout();}finally{location.replace("./?platform=1");}});
   $("#paMfaManage")?.addEventListener("click",openMfaManager);
   $$(".pa-nav [data-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
   $("#paContent")?.addEventListener("click",action);$("#paModal")?.addEventListener("click",action);$("#paModal")?.addEventListener("close",()=>$("#paModalBody").innerHTML="");

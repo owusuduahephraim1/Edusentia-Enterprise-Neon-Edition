@@ -924,8 +924,8 @@ test("native package distribution stays Neon/R2 only",()=>{
   const routes=read("worker/src/platform-routes.ts");
   const schema=read("database/migrations/0025b_platform_package_distribution.sql");
   const client=read("frontend/platform-api-client.js");
-  const html=read("frontend/platform-admin.html");
-  const ui=read("frontend/platform-admin.js");
+  const html=read("frontend/platform-saas-admin.html");
+  const ui=read("frontend/platform-saas-admin.js");
   for(const source of [service,routes,schema,client,html,ui]) assert.doesNotMatch(source,/@supabase\/supabase-js|supabase\.co\/functions\/v1|SUPABASE_URL|storage\.objects/i);
   assert.match(service,/cloudflare-r2/);
   assert.match(service,/ECDSA/);

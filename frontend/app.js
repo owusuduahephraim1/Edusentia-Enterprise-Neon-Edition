@@ -1,4 +1,5 @@
 // Worker-backed certified shell parity for the Neon Edition.
+// Unified blueprint authentication routes platform and tenant identities through the shared public sign-in.
 (() => {
   "use strict";
 
@@ -6,8 +7,9 @@
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
   const api = () => window.EdusentiaApi;
   const turnstileSiteKey = String(window.EDS_MASTER_CONFIG?.turnstileSiteKey || "").trim();
-  const state = {session:null, boot:null, view:"dashboard", loginSchool:null};
-  let turnstileToken = "", turnstileWidgetId = null, mfaChallenge = "", pendingSession = null;
+  const platformMode = new URLSearchParams(location.search).get("platform")==="1";
+  const state = {session:null, boot:null, view:"dashboard", loginSchool:null, authScope:platformMode?"platform":"tenant"};
+  let turnstileToken = "", turnstileWidgetId = null, mfaChallenge = "", pendingSession = null, pendingScope = state.authScope;
   let registrationToken = "", registrationWidgetId = null, recoveryTurnstileToken = "", recoveryWidgetId = null;
 
   const NAV = [
@@ -43,7 +45,7 @@
   function resetTurnstile(){turnstileToken="";if(window.turnstile&&turnstileWidgetId!=null){try{window.turnstile.reset(turnstileWidgetId);}catch{}}}
   function renderTurnstile(){
     if(!turnstileSiteKey||!window.turnstile||turnstileWidgetId!=null||!byId("turnstileWidget"))return;
-    turnstileWidgetId=window.turnstile.render("#turnstileWidget",{sitekey:turnstileSiteKey,action:"login",theme:"auto",size:"flexible",callback:token=>{turnstileToken=String(token||"");message("");},"expired-callback":()=>{turnstileToken="";message("Verification expired. Please verify again.","error");},"error-callback":()=>{turnstileToken="";message("Human verification could not be completed. Please try again.","error");}});
+    turnstileWidgetId=window.turnstile.render("#turnstileWidget",{sitekey:turnstileSiteKey,action:platformMode?"platform_login":"login",theme:"auto",size:"flexible",callback:token=>{turnstileToken=String(token||"");message("");},"expired-callback":()=>{turnstileToken="";message("Verification expired. Please verify again.","error");},"error-callback":()=>{turnstileToken="";message("Human verification could not be completed. Please try again.","error");}});
   }
   function renderRegistrationTurnstile(){
     if(!turnstileSiteKey||!window.turnstile||registrationWidgetId!=null||!byId("registrationTurnstile"))return;
@@ -70,6 +72,7 @@
   async function prepareLoginContext(){
     const params=new URLSearchParams(location.search),email=String(params.get("email")||"").trim();
     if(email&&byId("email"))byId("email").value=email;
+    if(platformMode){applyLoginBrand(null);byId("tenantCodeField")?.classList.add("hidden");return;}
     const code=String(params.get("school")||params.get("tenant")||params.get("tenantCode")||"").trim().toUpperCase();
     if(!code){applyLoginBrand(null);return;}
     try{const result=await api().resolveSchool(code);applyLoginBrand(result?.school||null);}
@@ -80,6 +83,11 @@
     show("loader");
     try{
       await prepareLoginContext();
+      if(platformMode){
+        const platformSession=await api().platformSession();
+        if(platformSession?.authenticated){location.replace("./platform-saas-admin.html");return;}
+        show("authView");showAuthStep("loginForm");renderTurnstile();return;
+      }
       const session=await api().session();
       if(!session?.authenticated){show("authView");showAuthStep("loginForm");renderTurnstile();return;}
       await enter(session);
@@ -373,8 +381,8 @@
     byId("content").querySelectorAll("[data-notification-read]").forEach(button=>button.addEventListener("click",async()=>{button.disabled=true;try{await certified("mark_notifications_read",{notification_ids:[button.dataset.notificationRead]});await loadNotificationCount();await renderNotifications();}finally{button.disabled=false;}}));
   }
 
-  function beginMfa(result){
-    mfaChallenge=String(result.challengeToken||"");showAuthStep("mfaPanel");
+  function beginMfa(result,scope=state.authScope){
+    state.authScope=scope;mfaChallenge=String(result.challengeToken||"");showAuthStep("mfaPanel");
     const enrolling=result.mode==="enroll";
     byId("mfaTitle").textContent=enrolling?"Set up two-step verification":"Two-step verification";
     byId("mfaHelp").textContent=enrolling?"Your administrator account requires MFA. Add the setup key to your authenticator app, then enter the current six-digit code.":"Enter the current six-digit code from your authenticator app, or a saved recovery code.";
@@ -387,18 +395,34 @@
     if(turnstileSiteKey&&!turnstileToken){message("Complete the human verification before signing in.","error");renderTurnstile();return;}
     const tenantCode=String(fd.get("tenantCode")||byId("tenantCodeFallback")?.value||"").trim().toUpperCase();
     button.disabled=true;
-    try{const result=await api().login(fd.get("email"),fd.get("password"),tenantCode,turnstileToken);turnstileToken="";if(result?.mfaRequired){beginMfa(result);return;}await enter(result);}
-    catch(error){if(error?.code==="tenant_selection_required"){byId("tenantCodeField")?.classList.remove("hidden");byId("tenantCodeFallback")?.focus();}message(friendly(error),"error");resetTurnstile();}
+    try{
+      const scope=platformMode?"platform":"tenant";
+      const result=scope==="platform"
+        ?await api().platformLogin(fd.get("email"),fd.get("password"),turnstileToken)
+        :await api().login(fd.get("email"),fd.get("password"),tenantCode,turnstileToken);
+      turnstileToken="";state.authScope=scope;
+      if(result?.mfaRequired){beginMfa(result,scope);return;}
+      if(scope==="platform"){location.replace("./platform-saas-admin.html");return;}
+      await enter(result);
+    }
+    catch(error){if(!platformMode&&error?.code==="tenant_selection_required"){byId("tenantCodeField")?.classList.remove("hidden");byId("tenantCodeFallback")?.focus();}message(friendly(error),"error");resetTurnstile();}
     finally{button.disabled=false;}
   });
   byId("mfaForm")?.addEventListener("submit",async event=>{
     event.preventDefault();message("");const button=event.currentTarget.querySelector('button[type="submit"]'),code=String(byId("mfaCode").value||"").trim();button.disabled=true;
-    try{const result=await api().completeMfa(mfaChallenge,code);mfaChallenge="";if(Array.isArray(result.recoveryCodes)&&result.recoveryCodes.length){pendingSession=result;byId("recoveryCodes").textContent=result.recoveryCodes.join("\n");showAuthStep("recoveryPanel");}else await enter(result);}
+    try{
+      const scope=state.authScope;
+      const result=scope==="platform"?await api().platformCompleteMfa(mfaChallenge,code):await api().completeMfa(mfaChallenge,code);
+      mfaChallenge="";
+      if(Array.isArray(result.recoveryCodes)&&result.recoveryCodes.length){pendingSession=result;pendingScope=scope;byId("recoveryCodes").textContent=result.recoveryCodes.join("\n");showAuthStep("recoveryPanel");}
+      else if(scope==="platform")location.replace("./platform-saas-admin.html");
+      else await enter(result);
+    }
     catch(error){message(friendly(error),"error");byId("mfaCode").select();}
     finally{button.disabled=false;}
   });
-  byId("mfaBack")?.addEventListener("click",()=>{mfaChallenge="";showAuthStep("loginForm");resetTurnstile();renderTurnstile();message("");});
-  byId("recoveryContinue")?.addEventListener("click",async()=>{if(!pendingSession)return;const s=pendingSession;pendingSession=null;byId("recoveryCodes").textContent="";await enter(s);});
+  byId("mfaBack")?.addEventListener("click",()=>{mfaChallenge="";state.authScope=platformMode?"platform":"tenant";showAuthStep("loginForm");resetTurnstile();renderTurnstile();message("");});
+  byId("recoveryContinue")?.addEventListener("click",async()=>{if(!pendingSession)return;const s=pendingSession,scope=pendingScope;pendingSession=null;pendingScope=platformMode?"platform":"tenant";byId("recoveryCodes").textContent="";if(scope==="platform"){location.replace("./platform-saas-admin.html");return;}await enter(s);});
   byId("togglePassword")?.addEventListener("click",()=>{const input=byId("password"),showing=input?.type==="text";if(input)input.type=showing?"password":"text";byId("togglePassword").setAttribute("aria-label",showing?"Show password":"Hide password");});
   byId("tenantCodeFallback")?.addEventListener("input",event=>{byId("tenantCode").value=String(event.currentTarget.value||"").trim().toUpperCase();});
   byId("registerSchoolButton")?.addEventListener("click",()=>{const dialog=byId("registrationDialog");byId("registrationMessage").textContent="";if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");setTimeout(renderRegistrationTurnstile,0);});
