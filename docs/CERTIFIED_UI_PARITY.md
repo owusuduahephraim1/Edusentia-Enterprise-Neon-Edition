@@ -47,11 +47,17 @@ Retired Inventory, Library, and Transport workspaces must remain retired.
 
 ## Current Neon environment note
 
-The non-primary Neon branch `reference-parity-r42-20260920` is still at control-plane schema `0019` while the repository release manifest is `0025`.
+The non-primary Neon branch `reference-parity-r42-20260920` is now aligned with the repository release state:
 
-The repository migrations `0020` through `0025` were located and reviewed. A no-compute rollback branch named `backup-reference-parity-r42-pre-0025-20260920` was created before any attempted persistent migration. No migration was applied, and the parity control-plane database remains unchanged at `0019`.
+- master/control-plane database `edusentia`: schema `0025`, 25 recorded master migrations
+- certified tenant template `edusentia_tenant_template`: tenant runtime schema `0020`, certified compatibility schema `0045`, 37 recorded tenant/template migrations, locked against ordinary connections
+- Reference Parity Test School database `edusentia_rpt_000001`: isolated tenant runtime `0020` with certified compatibility `0045`
+- Reference Parity Test School control state: `isolated_ready`, runtime `neon-v1.0.0-r42-parity`, healthy, Professional capacity 0/1000
+- release gate: ready=true with zero stale health, release drift, schema drift, unhealthy tenants, failed provisioning jobs, invalid active licences, capacity violations, or invalid indexes
 
-Applying `0020` through `0025` contains schema operations such as constraint/index replacement and therefore requires explicit approval before executing against the persistent parity database.
+A no-compute rollback branch named `backup-reference-parity-r42-pre-0025-20260920` preserves the pre-migration parity state.
+
+The parity-only workflow `.github/workflows/parity-template-install.yml` verifies the branch guard, validates and locks the certified tenant template, and idempotently provisions the Reference Parity Test School database without targeting production `main`.
 
 ## Release rule
 
