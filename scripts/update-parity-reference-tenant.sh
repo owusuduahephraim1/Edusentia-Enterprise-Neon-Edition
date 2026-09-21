@@ -62,6 +62,7 @@ apply_once "0048d_certified_system_health_telemetry_compat" "database/reference-
 apply_once "0048e_certified_system_health_notification_compat" "database/reference-compat/0048e_certified_system_health_notification_compat.sql"
 apply_once "0048f_certified_backup_health_metadata_compat" "database/reference-compat/0048f_certified_backup_health_metadata_compat.sql"
 # 0048g preflights all certified public-table RLS policies before forcing RLS.
+# 0048g named-block syntax is contract-tested before persistent parity promotion.
 apply_once "0048g_certified_operational_rls_enforcement" "database/reference-compat/0048g_certified_operational_rls_enforcement.sql"
 
 SYSTEM_HEALTH_MISSING_COLUMNS="$(psql "$TARGET_URL" -X -qAt <<'SQL'

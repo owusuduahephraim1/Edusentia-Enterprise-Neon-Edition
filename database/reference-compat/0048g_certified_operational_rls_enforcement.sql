@@ -3,7 +3,7 @@ begin;
 -- Complete the certified public-table RLS posture required by the reference
 -- operational-readiness contract. Refuse to force RLS on a table unless its
 -- certified policy surface is present.
-do $
+do $rls$
 declare
   t text;
   policy_count integer;
@@ -39,7 +39,7 @@ begin
     execute format('alter table public.%I enable row level security',t);
     execute format('alter table public.%I force row level security',t);
   end loop;
-end $;
+end $rls$;
 
 insert into app.schema_migrations(version)
 values ('0048g_certified_operational_rls_enforcement')
