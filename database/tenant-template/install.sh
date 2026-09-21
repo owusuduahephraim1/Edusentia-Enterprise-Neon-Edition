@@ -57,6 +57,7 @@ test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namesp
 test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "alter database \"$TEMPLATE_DB\" owner to edusentia_provisioner;"
+psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "grant usage,create on schema public to edusentia_runtime;"
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 <<SQL
 set role edusentia_provisioner;
 revoke connect on database "$TEMPLATE_DB" from public;
