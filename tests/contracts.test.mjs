@@ -237,7 +237,8 @@ test("accelerated testing workspaces stay Worker-backed and certified",()=>{
   assert.match(reports,/uploadReportPdf/);assert.match(reports,/downloadReportPdf/);assert.match(reports,/deleteReportPdfObject/);
   for(const op of ["list_audit_events_v2","list_audit_archives_v1","list_audit_archive_entries_v1"])assert.match(ops,new RegExp(op));
   assert.match(ops,/mfaFactors/);assert.match(ops,/mfaEnroll/);assert.match(ops,/mfaVerify/);assert.match(ops,/mfaRemove/);
-  assert.match(api,/listFinanceInvoices/);assert.match(api,/listFinancePayments/);assert.match(api,/listOperationsOverview/);\n  assert.match(operations,/Admissions/);assert.match(operations,/Attendance/);assert.match(operations,/Payroll/);assert.match(operations,/Communications/);
+  assert.match(api,/listFinanceInvoices/);assert.match(api,/listFinancePayments/);assert.match(api,/listOperationsOverview/);
+  assert.match(operations,/Admissions/);assert.match(operations,/Attendance/);assert.match(operations,/Payroll/);assert.match(operations,/Communications/);
   assert.match(r,/\/api\/finance\/invoices/);assert.match(r,/\/api\/finance\/payments/);assert.match(r,/\/api\/operations\/overview/);assert.match(r,/requireRole\(ctx,\["system_admin","principal","accountant"\]\)/);
   for(const x of [students,teachers,principal,timetable,reports,ops,operations])assert.doesNotMatch(x,/supabase|postgresql:\/\//i);
 });
