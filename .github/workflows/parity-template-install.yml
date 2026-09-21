@@ -1,0 +1,86 @@
+name: Parity Tenant Template Install
+
+on:
+  push:
+    branches: [reference-parity-r42]
+    paths: [".github/workflows/parity-template-install.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parity-tenant-template-install
+  cancel-in-progress: false
+
+env:
+  PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4-pooler.c-7.us-east-2.aws.neon.tech
+  PARITY_MASTER_DATABASE: edusentia
+  PARITY_TEMPLATE_DATABASE: edusentia_tenant_template
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require deployment database credential
+        run: test -n "$SOURCE_DATABASE_URL"
+
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Build parity-only database URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          PARITY_DATABASE_URL="$(SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" PARITY_MASTER_DATABASE="$PARITY_MASTER_DATABASE" node --input-type=module -e '
+            const u=new URL(process.env.SOURCE_DATABASE_URL);
+            u.hostname=process.env.PARITY_DATABASE_HOST;
+            u.pathname="/"+process.env.PARITY_MASTER_DATABASE;
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$PARITY_DATABASE_URL"
+          echo "PARITY_DATABASE_URL=$PARITY_DATABASE_URL" >> "$GITHUB_ENV"
+
+      - name: Assert non-primary parity target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from app.tenants where code='RPT-000001' and name='Reference Parity Test School'")" = "1"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from app.schema_migrations")" = "25"
+          echo "Parity branch target confirmed."
+
+      - name: Install and lock certified tenant template
+        shell: bash
+        run: |
+          set -euo pipefail
+          BOOTSTRAP_DATABASE_URL="$PARITY_DATABASE_URL" TENANT_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" bash database/tenant-template/install.sh
+
+      - name: Verify certified tenant template
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections true;"
+          TEMPLATE_URL="$(PARITY_DATABASE_URL="$PARITY_DATABASE_URL" PARITY_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_DATABASE_URL);
+            u.pathname="/"+process.env.PARITY_TEMPLATE_DATABASE;
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$TEMPLATE_URL"
+          trap 'psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;" >/dev/null 2>&1 || true' EXIT
+          test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
+          test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
+          test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
+          test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
+          echo "Certified tenant template verified."
