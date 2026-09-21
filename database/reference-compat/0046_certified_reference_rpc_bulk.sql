@@ -1,6 +1,6 @@
 -- Edusentia Enterprise Neon Edition — certified reference RPC bulk parity.
 -- Certified source: nduah385/Edusentia-Enterprise @ a181e18e0ca044db756193209b5b089cd03efb0f
--- Scope: 102 provider-neutral certified RPCs. Identity, licensing, storage and transcript adaptations are separate.
+-- Scope: 103 provider-neutral certified RPCs. Identity, licensing, storage and transcript adaptations are separate.
 
 begin;
 
@@ -3497,6 +3497,32 @@ AS $function$
 $function$;
 revoke all on function public.verify_student_id_card(token uuid) from public;
 grant execute on function public.verify_student_id_card(token uuid) to edusentia_worker_runtime;
+
+-- list_my_attendance_classes(target_term_id uuid)
+CREATE OR REPLACE FUNCTION public.list_my_attendance_classes(target_term_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+begin
+  if public.current_app_role()<>'class_teacher' then raise exception 'Only assigned class teachers can use attendance' using errcode='42501'; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id',c.id,'name',c.name,'level_order',c.level_order,
+      'student_count',(select count(*) from public.enrollments e join public.students s on s.id=e.student_id and s.deleted_at is null and s.status='active'
+        where e.class_id=c.id and e.deleted_at is null and (target_term_id is null or e.academic_year_id=(select t.academic_year_id from public.terms t where t.id=target_term_id)))
+    ) order by c.level_order,c.name)
+    from public.classes c
+    where c.class_teacher_id=auth.uid() and c.active and c.deleted_at is null
+  ),'[]'::jsonb);
+end $function$;
+revoke all on function public.list_my_attendance_classes(target_term_id uuid) from public;
+grant execute on function public.list_my_attendance_classes(target_term_id uuid) to edusentia_worker_runtime;
+
+-- These certified cached browser operations are defined in the helper closure but are part of the public Worker RPC surface.
+grant execute on function public.get_role_dashboard(uuid) to edusentia_worker_runtime;
+grant execute on function public.get_role_workspace() to edusentia_worker_runtime;
 
 insert into app.schema_migrations(version) values ('0046_certified_reference_rpc_bulk') on conflict do nothing;
 update app.release_identity set schema_version='0046' where edition='Edusentia Enterprise Neon Edition';
