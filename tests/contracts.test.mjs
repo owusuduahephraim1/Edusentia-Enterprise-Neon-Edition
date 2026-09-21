@@ -402,7 +402,7 @@ test("parity smoke databases clone the minimal pgcrypto CI base",()=>{
   const lifecycle=read(".github/workflows/synthetic-school-lifecycle.yml");
   const script=read("database/synthetic-school-lifecycle-smoke.sh");
   for(const w of [schema,compat,lifecycle]){
-    assert.match(w,/CI_TEMPLATE_DATABASE=edusentia_ci_base/);
+    assert.match(w,/CI_TEMPLATE_DATABASE=edusentia_ci_base_v2/);
     assert.match(w,/secrets\.NEON_DATABASE_URL \|\| secrets\.DATABASE_URL/);
   }
   assert.match(schema,/owner edusentia_provisioner template/);
@@ -420,7 +420,9 @@ test("parity tenant infrastructure gate stays provisioner-only",()=>{
   assert.match(w,/current_user/);
   assert.match(w,/edusentia_provisioner/);
   assert.match(w,/not datallowconn/);
-  assert.match(w,/datistemplate and not datallowconn/);
+  assert.match(w,/pg_get_userbyid\(datdba\).*PARITY_CI_TEMPLATE_DATABASE/s);
+  assert.match(w,/edusentia_runtime/);
+  assert.match(w,/select datistemplate from pg_database/);
   assert.match(w,/has_database_privilege\('edusentia_worker_runtime'/);
   assert.match(w,/create database .*owner edusentia_provisioner template/);
   assert.doesNotMatch(w,/PARITY_WORKER_DATABASE_URL/);
@@ -468,4 +470,15 @@ test("production deployment separates direct admin and pooled Worker database UR
   assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"/);
   assert.match(w,/WORKER_DATABASE_URL="\$\(BOOTSTRAP_DATABASE_URL="\$BOOTSTRAP_DATABASE_URL"/);
   assert.match(w,/PROVISIONER_DATABASE_URL="\$\(BOOTSTRAP_DATABASE_URL="\$BOOTSTRAP_DATABASE_URL"/);
+});
+
+
+test("runtime-owned CI seed preserves migration and Worker grant ownership",()=>{
+  const schema=read(".github/workflows/schema-smoke.yml");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const lifecycle=read(".github/workflows/synthetic-school-lifecycle.yml");
+  const infra=read(".github/workflows/parity-template-install.yml");
+  for(const w of [schema,compat,lifecycle]) assert.match(w,/edusentia_ci_base_v2/);
+  assert.match(infra,/PARITY_CI_TEMPLATE_DATABASE: edusentia_ci_base_v2/);
+  assert.match(infra,/edusentia_runtime/);
 });
