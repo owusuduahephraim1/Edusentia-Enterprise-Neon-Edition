@@ -212,8 +212,10 @@ jobs:
           npx wrangler deploy --config wrangler.parity.jsonc
           curl --fail --silent --show-error --retry 5 --retry-delay 2 "$PARITY_ORIGIN/api/health" | tee /tmp/parity-health.json
           node -e 'const fs=require("node:fs");const h=JSON.parse(fs.readFileSync("/tmp/parity-health.json","utf8"));if(!h.ok||!h.database||!h.storage)process.exit(1);console.log("Parity Worker health passed.")'
-          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/" | grep -q "Edusentia Enterprise"
-          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" | grep -q "parity-testing"
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/" -o /tmp/parity-index.html
+          grep -q "Edusentia Enterprise" /tmp/parity-index.html
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" -o /tmp/parity-config.js
+          grep -q "parity-testing" /tmp/parity-config.js
           echo "Parity browser test environment is live at $PARITY_ORIGIN"
 
       - name: Verify existing isolated parity deployment
@@ -223,8 +225,10 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error --retry 5 --retry-delay 2 "$PARITY_ORIGIN/api/health" | tee /tmp/parity-health.json
           node -e 'const fs=require("node:fs");const h=JSON.parse(fs.readFileSync("/tmp/parity-health.json","utf8"));if(!h.ok||!h.database||!h.storage)process.exit(1);console.log("Existing parity Worker health passed.")'
-          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/" | grep -q "Edusentia Enterprise"
-          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" | grep -q "parity-testing"
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/" -o /tmp/parity-index.html
+          grep -q "Edusentia Enterprise" /tmp/parity-index.html
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" -o /tmp/parity-config.js
+          grep -q "parity-testing" /tmp/parity-config.js
           echo "Existing isolated parity deployment verified at $PARITY_ORIGIN"
 
       - name: Run authenticated parity end-to-end gate
