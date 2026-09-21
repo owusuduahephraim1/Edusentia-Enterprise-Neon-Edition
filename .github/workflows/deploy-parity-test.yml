@@ -246,7 +246,8 @@ jobs:
           psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048k_mfa_recovery_compat.sql
           psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql
           psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql
-          test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from app.schema_migrations where version in('0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers')")" = "3"
+          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql
+          test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from app.schema_migrations where version in('0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "4"
           test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from information_schema.columns where table_schema='authn' and table_name='mfa_recovery_codes' and column_name in('generation_id','expires_at')")" = "2"
           echo "Persistent parity tenant is schema-compatible with the Worker candidate."
 
