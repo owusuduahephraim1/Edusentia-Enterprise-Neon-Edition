@@ -226,9 +226,9 @@ test("R2-native report PDF integrity preserves certified authorization and remov
 test("accelerated testing workspaces stay Worker-backed and certified",()=>{
   const h=read("frontend/index.html"),a=read("frontend/app.js"),api=read("frontend/api-client.js"),r=read("worker/src/routes.ts");
   const students=read("frontend/parity-students.js"),teachers=read("frontend/parity-teachers.js"),principal=read("frontend/parity-principal.js");
-  const timetable=read("frontend/parity-timetable.js"),reports=read("frontend/parity-reports.js"),ops=read("frontend/parity-audit-security-finance.js");
+  const timetable=read("frontend/parity-timetable.js"),reports=read("frontend/parity-reports.js"),ops=read("frontend/parity-audit-security-finance.js"),operations=read("frontend/parity-operations.js");
   assert.match(a,/EdusentiaShell/);assert.match(a,/registerView/);
-  for(const script of ["parity-common.js","parity-students.js","parity-teachers.js","parity-principal.js","parity-timetable.js","parity-reports.js","parity-audit-security-finance.js"])assert.match(h,new RegExp(script.replace(".","\\.")));
+  for(const script of ["parity-common.js","parity-students.js","parity-teachers.js","parity-principal.js","parity-timetable.js","parity-reports.js","parity-audit-security-finance.js","parity-operations.js"])assert.match(h,new RegExp(script.replace(".","\\.")));
   for(const op of ["search_students_v5","validate_student_import","bulk_import_students","save_student","save_promotion_cutoff"])assert.match(students,new RegExp(op));
   for(const op of ["save_teacher","archive_teacher","restore_teacher","set_teacher_photo"])assert.match(teachers,new RegExp(op));
   for(const op of ["save_headteacher","archive_headteacher","restore_headteacher","set_headteacher_photo","set_my_headteacher_signature"])assert.match(principal,new RegExp(op));
@@ -237,7 +237,7 @@ test("accelerated testing workspaces stay Worker-backed and certified",()=>{
   assert.match(reports,/uploadReportPdf/);assert.match(reports,/downloadReportPdf/);assert.match(reports,/deleteReportPdfObject/);
   for(const op of ["list_audit_events_v2","list_audit_archives_v1","list_audit_archive_entries_v1"])assert.match(ops,new RegExp(op));
   assert.match(ops,/mfaFactors/);assert.match(ops,/mfaEnroll/);assert.match(ops,/mfaVerify/);assert.match(ops,/mfaRemove/);
-  assert.match(api,/listFinanceInvoices/);assert.match(api,/listFinancePayments/);
-  assert.match(r,/\/api\/finance\/invoices/);assert.match(r,/\/api\/finance\/payments/);assert.match(r,/requireRole\(ctx,\["system_admin","principal","accountant"\]\)/);
-  for(const x of [students,teachers,principal,timetable,reports,ops])assert.doesNotMatch(x,/supabase|postgresql:\/\//i);
+  assert.match(api,/listFinanceInvoices/);assert.match(api,/listFinancePayments/);assert.match(api,/listOperationsOverview/);\n  assert.match(operations,/Admissions/);assert.match(operations,/Attendance/);assert.match(operations,/Payroll/);assert.match(operations,/Communications/);
+  assert.match(r,/\/api\/finance\/invoices/);assert.match(r,/\/api\/finance\/payments/);assert.match(r,/\/api\/operations\/overview/);assert.match(r,/requireRole\(ctx,\["system_admin","principal","accountant"\]\)/);
+  for(const x of [students,teachers,principal,timetable,reports,ops,operations])assert.doesNotMatch(x,/supabase|postgresql:\/\//i);
 });
