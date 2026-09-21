@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "edusentia-enterprise-neon-parity-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-20",
+  "observability": {"enabled": true},
+  "vars": {
+    "APP_ORIGIN": "https://edusentia-enterprise-neon-parity-test.edusentia-enterprise-neon.workers.dev",
+    "APP_BASE_PATH": "",
+    "SESSION_COOKIE_NAME": "__Host-edusentia_parity_session",
+    "PLATFORM_SESSION_COOKIE_NAME": "__Host-edusentia_parity_platform_session",
+    "SESSION_TTL_SECONDS": "28800",
+    "PRODUCT_VERSION": "neon-v1.0.0-r42-parity-test",
+    "TENANT_TEMPLATE_DATABASE": "edusentia_tenant_template",
+    "TURNSTILE_TEST_MODE": "true"
+  },
+  "assets": {
+    "directory": "../frontend",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [
+    {"binding":"OBJECTS","bucket_name":"edusentia-enterprise-neon-parity-test"}
+  ]
+}
