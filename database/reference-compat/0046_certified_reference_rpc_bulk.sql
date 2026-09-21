@@ -3524,6 +3524,18 @@ grant execute on function public.list_my_attendance_classes(target_term_id uuid)
 grant execute on function public.get_role_dashboard(uuid) to edusentia_worker_runtime;
 grant execute on function public.get_role_workspace() to edusentia_worker_runtime;
 
+
+-- Final certified browser ACL reconciliation.
+-- These functions are invoked by the Worker after argument validation, while their
+-- internal authorization checks continue to enforce role, scope, and licence rules.
+grant execute on function public.save_academic_entity(text,jsonb) to edusentia_worker_runtime;
+grant execute on function public.archive_academic_entity(text,uuid,text) to edusentia_worker_runtime;
+grant execute on function public.save_grading_scale(jsonb) to edusentia_worker_runtime;
+grant execute on function public.archive_grading_scale(uuid,text) to edusentia_worker_runtime;
+grant execute on function public.save_assessment_scheme(jsonb) to edusentia_worker_runtime;
+grant execute on function public.save_class_subject_assignments_batch(jsonb) to edusentia_worker_runtime;
+grant execute on function public.generate_subject_code(text,uuid) to edusentia_worker_runtime;
+
 insert into app.schema_migrations(version) values ('0046_certified_reference_rpc_bulk') on conflict do nothing;
 update app.release_identity set schema_version='0046' where edition='Edusentia Enterprise Neon Edition';
 commit;
