@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  EXPECTED_PRIMARY_DATABASE_HOST: ep-royal-smoke-b5db61rk.c-7.us-east-2.aws.neon.tech
+  EXPECTED_PRIMARY_DATABASE_HOST: ep-green-night-b5ctawee.c-7.us-east-2.aws.neon.tech
   PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4.c-7.us-east-2.aws.neon.tech
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

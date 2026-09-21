@@ -790,7 +790,7 @@ test("production release identity and cutover preflight are fail-closed",()=>{
   assert.doesNotMatch(worker,/r42-parity/);
   assert.doesNotMatch(frontend,/r42-parity/);
   assert.match(preflight,/Production Cutover Preflight/);
-  assert.match(preflight,/EXPECTED_PRIMARY_DATABASE_HOST: ep-royal-smoke-b5db61rk\.c-7\.us-east-2\.aws\.neon\.tech/);
+  assert.match(preflight,/EXPECTED_PRIMARY_DATABASE_HOST: ep-green-night-b5ctawee\.c-7\.us-east-2\.aws\.neon\.tech/);
   assert.match(preflight,/Production preflight refuses the parity Neon branch/);
   assert.match(preflight,/NEON_DATABASE_URL \|\| secrets\.DATABASE_URL/);
   assert.match(preflight,/CLOUDFLARE_API_TOKEN/);
