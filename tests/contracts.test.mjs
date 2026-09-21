@@ -644,3 +644,13 @@ test("enterprise parity workspace bundle exposes the certified operational modul
   ]) assert.ok(ui.includes('"'+operation+'"'),operation+" RPC missing");
   assert.doesNotMatch(ui,/supabase|storage\.objects|postgresql:\/\//i);
 });
+
+test("provider compatibility migration remains structurally intact",()=>{
+  const sql=read("database/reference-compat/0048_certified_provider_rpc_neon_r2.sql");
+  assert.equal((sql.match(/insert into app\.schema_migrations\(version\)/g)||[]).length,1);
+  assert.equal((sql.match(/\$upsert_plan\$/g)||[]).length,2);
+  assert.match(sql,/plan_code!~'\^\[a-z\]\[a-z0-9_\]\{2,39\}\$'/);
+  assert.match(sql,/returning to_jsonb\(licensed\) into new_json;/);
+  assert.doesNotMatch(sql,/\{2,39\}\s*\nrevoke all on function/);
+  assert.ok(sql.indexOf("insert into app.schema_migrations(version)")>sql.lastIndexOf("$upsert_plan$;"));
+});
