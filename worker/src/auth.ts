@@ -30,7 +30,7 @@ async function issueSession(env:Env,sql:any,row:any,assuranceLevel:number){
   await sql`insert into authn.sessions(id,user_id,tenant_id,token_hash,role,assurance_level,expires_at) values(${sessionId}::uuid,${row.user_id}::uuid,${row.tenant_id}::uuid,${tokenHash},${row.role},${assuranceLevel},now()+(${ttl}::text||' seconds')::interval)`;
   return {token,session:{authenticated:true,user:{id:row.user_id,email:row.email,displayName:row.display_name},membership:{tenantId:row.tenant_id,tenantCode:row.tenant_code,tenantName:row.tenant_name,role:row.role,roleLabel:String(row.role).replaceAll('_',' ')},session:{id:sessionId,assuranceLevel}}};
 }
-async function challengeHash(env:Env,token:string){return sha256Hex(`edusentia:mfa-challenge:v1:${token}:${env.SESSION_PEPPER}`);}
+async function challengeHash(token:string){return sha256Hex(`edusentia:mfa-challenge:v2:${token}`);}
 
 export async function login(env:Env,emailRaw:string,password:string,tenantCodeRaw:string){
   const email=String(emailRaw||"").trim().toLowerCase(),tenantCode=String(tenantCodeRaw||"").trim().toUpperCase();
@@ -58,7 +58,7 @@ export async function login(env:Env,emailRaw:string,password:string,tenantCodeRa
     const created=await sql`insert into authn.mfa_totp_factors(user_id,secret_ciphertext) values(${row.user_id}::uuid,${ciphertext}) returning id`;
     factorId=String((created[0] as any).id);mode="enroll";setup={secret,otpauthUri:otpauthUri(secret,row.email,row.tenant_name)};
   }
-  const challengeToken=routedToken(String(row.tenant_code),randomToken(32)),hash=await challengeHash(env,challengeToken);
+  const challengeToken=routedToken(String(row.tenant_code),randomToken(32)),hash=await challengeHash(challengeToken);
   await sql`insert into authn.login_challenges(user_id,tenant_id,factor_id,purpose,token_hash,expires_at) values(${row.user_id}::uuid,${row.tenant_id}::uuid,${factorId}::uuid,${mode==="enroll"?"mfa_enroll":"mfa_verify"},${hash},now()+interval '5 minutes')`;
   await sql`select audit.record_auth_event(${row.tenant_id}::uuid,${row.user_id}::uuid,'auth.login.password_verified',${JSON.stringify({mfa:mode})}::jsonb)`;
   return {mfaRequired:true,mode,challengeToken,expiresInSeconds:300,tenant:{code:row.tenant_code,name:row.tenant_name},setup};
@@ -67,7 +67,7 @@ export async function login(env:Env,emailRaw:string,password:string,tenantCodeRa
 export async function completeMfa(env:Env,challengeTokenRaw:string,codeRaw:string){
   const challengeToken=String(challengeTokenRaw||"").trim(),code=String(codeRaw||"").trim(),tenantCode=tokenTenantCode(challengeToken);
   if(!challengeToken||!code||!tenantCode)throw Object.assign(new Error("MFA challenge and verification code are required"),{code:"mfa_invalid",status:400});
-  const route=await routeForCode(env,tenantCode),sql=tenantDb(env,String(route.database_name)),hash=await challengeHash(env,challengeToken);
+  const route=await routeForCode(env,tenantCode),sql=tenantDb(env,String(route.database_name)),hash=await challengeHash(challengeToken);
   const rows=await sql`
     select c.id,c.user_id,c.tenant_id,c.factor_id,c.purpose,c.attempts,u.email,u.display_name,t.code tenant_code,t.name tenant_name,m.role,m.status
       from authn.login_challenges c
