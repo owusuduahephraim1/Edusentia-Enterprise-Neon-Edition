@@ -575,3 +575,44 @@ test("CI clones grant runtime public-schema migration access",()=>{
     assert.match(x,/set role edusentia_provisioner; grant usage,create on schema public to edusentia_runtime; reset role;/i);
   }
 });
+
+
+test("certified RPC registry is fixed to the complete 168-operation reference surface",()=>{
+  const registry=read("worker/src/certified-rpc-registry.ts");
+  const gateway=read("worker/src/certified-rpc.ts");
+  const names=[...registry.matchAll(/^  "([^"]+)": \{$/gm)].map(m=>m[1]);
+  assert.equal(names.length,168);
+  assert.equal(new Set(names).size,168);
+  for(const required of [
+    "academic_analytics","get_class_attendance_register","save_class_attendance",
+    "get_student_academic_history","get_school_prospectus_console","get_certificate_console",
+    "get_id_card_console","get_compliance_console","backup_dashboard","operations_dashboard",
+    "get_platform_license_console","issue_student_transcript","verify_transcript"
+  ]) assert.ok(names.includes(required),required+" missing from certified registry");
+  assert.match(registry,/Unknown certified operation argument/);
+  assert.match(registry,/CERTIFIED_RPC_REGISTRY\[operation\]/);
+  assert.match(registry,/select public\."?\+fn\+"?\(/);
+  assert.doesNotMatch(registry,/from request|eval\(|new Function|execute\s+immediate/i);
+  assert.match(gateway,/EXPLICIT_CERTIFIED_RPC_OPERATIONS/);
+  assert.match(gateway,/return invokeRegistryCertifiedRpc\(sql,ctx,operation,args\);/);
+  assert.ok(gateway.indexOf('case "save_student"')<gateway.indexOf("return invokeRegistryCertifiedRpc(sql,ctx,operation,args);"));
+});
+
+test("full reference compatibility installer orders schema and helper closure before certified RPCs",()=>{
+  const installer=read("database/tenant-template/install.sh");
+  const smoke=read(".github/workflows/reference-compat-smoke.yml");
+  for(const source of [installer,smoke]){
+    const schema=source.indexOf("0045c_certified_operational_schema.sql");
+    const helpers=source.indexOf("0045d_certified_rpc_helper_closure.sql");
+    const bulk=source.indexOf("0046_certified_reference_rpc_bulk.sql");
+    const identity=source.indexOf("0047_certified_identity_rpc_neon.sql");
+    const provider=source.indexOf("0048_certified_provider_rpc_neon_r2.sql");
+    assert.ok(schema>=0&&helpers>schema&&bulk>helpers&&identity>bulk&&provider>identity);
+  }
+  const helpers=read("database/reference-compat/0045d_certified_rpc_helper_closure.sql");
+  assert.match(helpers,/prospectus_class_range_label/);
+  assert.match(helpers,/canonical_school_identity_prefix/);
+  assert.match(helpers,/authn\.users/);
+  assert.match(helpers,/storage\.object_metadata/);
+  assert.doesNotMatch(helpers,/\bstorage\.objects\b/);
+});
