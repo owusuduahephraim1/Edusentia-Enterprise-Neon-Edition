@@ -4,7 +4,7 @@
 --   Supabase Storage object catalog -> storage.object_metadata + Cloudflare R2 object keys
 --   local legacy licence storage -> app.tenant_licenses + platform.license_plans
 --   auth.users -> authn.users
---   extensions.digest -> public.digest from Neon pgcrypto
+--   pgcrypto digest resolves through the function search_path (public or extensions)
 begin;
 
 alter table app.tenant_licenses
@@ -50,7 +50,7 @@ begin
   limit 1;
   school_prefix:=coalesce(nullif(regexp_replace(school_prefix,'[^A-Z0-9]','','g'),''),'SCH');
   transcript_no:=school_prefix||'-TR-'||to_char(current_date,'YYYY')||'-'||lpad(nextval('public.transcript_number_seq')::text,6,'0');
-  checksum_text:=encode(public.digest(convert_to(transcript_snapshot::text,'UTF8'),'sha256'),'hex');
+  checksum_text:=encode(digest(convert_to(transcript_snapshot::text,'UTF8'),'sha256'),'hex');
   latest_year:=coalesce(transcript_snapshot->'summary'->>'latest_academic_year','');
   latest_term_text:=coalesce(transcript_snapshot->'summary'->>'latest_term','');
   latest_class_text:=coalesce(transcript_snapshot->'summary'->>'latest_class','');
@@ -104,8 +104,8 @@ AS $function$
   select case when i.id is null then jsonb_build_object('valid',false,'found',false)
   else jsonb_build_object(
     'found',true,
-    'valid',i.status='valid' and i.snapshot_checksum=encode(public.digest(convert_to(i.snapshot::text,'UTF8'),'sha256'),'hex'),
-    'integrity_valid',i.snapshot_checksum=encode(public.digest(convert_to(i.snapshot::text,'UTF8'),'sha256'),'hex'),
+    'valid',i.status='valid' and i.snapshot_checksum=encode(digest(convert_to(i.snapshot::text,'UTF8'),'sha256'),'hex'),
+    'integrity_valid',i.snapshot_checksum=encode(digest(convert_to(i.snapshot::text,'UTF8'),'sha256'),'hex'),
     'status',i.status,
     'transcript_number',i.transcript_number,
     'issued_at',i.issued_at,
