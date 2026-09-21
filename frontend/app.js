@@ -6,8 +6,9 @@
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
   const api = () => window.EdusentiaApi;
   const turnstileSiteKey = String(window.EDS_MASTER_CONFIG?.turnstileSiteKey || "").trim();
-  const state = {session:null, boot:null, view:"dashboard"};
+  const state = {session:null, boot:null, view:"dashboard", loginSchool:null};
   let turnstileToken = "", turnstileWidgetId = null, mfaChallenge = "", pendingSession = null;
+  let registrationToken = "", registrationWidgetId = null, recoveryTurnstileToken = "", recoveryWidgetId = null;
 
   const NAV = [
     {id:"dashboard",label:"Dashboard",icon:"⌂",subtitle:"Academic performance overview",render:renderDashboard},
@@ -44,11 +45,41 @@
     if(!turnstileSiteKey||!window.turnstile||turnstileWidgetId!=null||!byId("turnstileWidget"))return;
     turnstileWidgetId=window.turnstile.render("#turnstileWidget",{sitekey:turnstileSiteKey,action:"login",theme:"auto",size:"flexible",callback:token=>{turnstileToken=String(token||"");message("");},"expired-callback":()=>{turnstileToken="";message("Verification expired. Please verify again.","error");},"error-callback":()=>{turnstileToken="";message("Human verification could not be completed. Please try again.","error");}});
   }
-  window.onTurnstileLoad=renderTurnstile;
+  function renderRegistrationTurnstile(){
+    if(!turnstileSiteKey||!window.turnstile||registrationWidgetId!=null||!byId("registrationTurnstile"))return;
+    registrationWidgetId=window.turnstile.render("#registrationTurnstile",{sitekey:turnstileSiteKey,action:"school_registration",theme:"auto",size:"flexible",callback:token=>{registrationToken=String(token||"");const el=byId("registrationMessage");if(el){el.textContent="";el.dataset.kind="";}},"expired-callback":()=>{registrationToken="";const el=byId("registrationMessage");if(el){el.textContent="Verification expired. Please verify again.";el.dataset.kind="error";}}});
+  }
+  function renderRecoveryTurnstile(){
+    if(!turnstileSiteKey||!window.turnstile||recoveryWidgetId!=null||!byId("accessRecoveryTurnstile"))return;
+    recoveryWidgetId=window.turnstile.render("#accessRecoveryTurnstile",{sitekey:turnstileSiteKey,action:"access_recovery",theme:"auto",size:"flexible",callback:token=>{recoveryTurnstileToken=String(token||"");const el=byId("accessRecoveryMessage");if(el){el.textContent="";el.dataset.kind="";}},"expired-callback":()=>{recoveryTurnstileToken="";}});
+  }
+  window.onTurnstileLoad=()=>{renderTurnstile();if(byId("registrationDialog")?.open)renderRegistrationTurnstile();if(byId("accessRecoveryDialog")?.open)renderRecoveryTurnstile();};
+
+  function applyLoginBrand(school){
+    const tenant=school||null;state.loginSchool=tenant;const tenantMode=Boolean(tenant?.tenant_code);
+    byId("authBrandName").textContent=tenantMode?(tenant.school_name||tenant.short_name||tenant.tenant_code):"Edusentia";
+    byId("authBrandTagline").textContent=tenantMode?"Student Academic Service":"The Academic Operations Platform";
+    byId("authBrandLogo").alt=tenantMode?(tenant.school_name||"School"):"Edusentia";
+    byId("tenantCode").value=tenantMode?String(tenant.tenant_code):"";
+    byId("tenantCodeFallback").value=tenantMode?String(tenant.tenant_code):"";
+    byId("registerSchoolButton")?.classList.toggle("hidden",tenantMode);
+    document.body.classList.toggle("tenant-login",tenantMode);
+    document.title=tenantMode?String(tenant.school_name||tenant.short_name||tenant.tenant_code)+" · Edusentia":"Edusentia Enterprise";
+  }
+
+  async function prepareLoginContext(){
+    const params=new URLSearchParams(location.search),email=String(params.get("email")||"").trim();
+    if(email&&byId("email"))byId("email").value=email;
+    const code=String(params.get("school")||params.get("tenant")||params.get("tenantCode")||"").trim().toUpperCase();
+    if(!code){applyLoginBrand(null);return;}
+    try{const result=await api().resolveSchool(code);applyLoginBrand(result?.school||null);}
+    catch{applyLoginBrand(null);byId("tenantCode").value=code;byId("tenantCodeFallback").value=code;byId("tenantCodeField")?.classList.remove("hidden");message("The requested school workspace could not be resolved. You can still sign in using the institution code.","error");}
+  }
 
   async function boot(){
     show("loader");
     try{
+      await prepareLoginContext();
       const session=await api().session();
       if(!session?.authenticated){show("authView");showAuthStep("loginForm");renderTurnstile();return;}
       await enter(session);
@@ -354,9 +385,10 @@
   byId("loginForm")?.addEventListener("submit",async event=>{
     event.preventDefault();message("");const fd=new FormData(event.currentTarget),button=event.currentTarget.querySelector('button[type="submit"]');
     if(turnstileSiteKey&&!turnstileToken){message("Complete the human verification before signing in.","error");renderTurnstile();return;}
+    const tenantCode=String(fd.get("tenantCode")||byId("tenantCodeFallback")?.value||"").trim().toUpperCase();
     button.disabled=true;
-    try{const result=await api().login(fd.get("email"),fd.get("password"),fd.get("tenantCode"),turnstileToken);turnstileToken="";if(result?.mfaRequired){beginMfa(result);return;}await enter(result);}
-    catch(error){message(friendly(error),"error");resetTurnstile();}
+    try{const result=await api().login(fd.get("email"),fd.get("password"),tenantCode,turnstileToken);turnstileToken="";if(result?.mfaRequired){beginMfa(result);return;}await enter(result);}
+    catch(error){if(error?.code==="tenant_selection_required"){byId("tenantCodeField")?.classList.remove("hidden");byId("tenantCodeFallback")?.focus();}message(friendly(error),"error");resetTurnstile();}
     finally{button.disabled=false;}
   });
   byId("mfaForm")?.addEventListener("submit",async event=>{
@@ -367,6 +399,16 @@
   });
   byId("mfaBack")?.addEventListener("click",()=>{mfaChallenge="";showAuthStep("loginForm");resetTurnstile();renderTurnstile();message("");});
   byId("recoveryContinue")?.addEventListener("click",async()=>{if(!pendingSession)return;const s=pendingSession;pendingSession=null;byId("recoveryCodes").textContent="";await enter(s);});
+  byId("togglePassword")?.addEventListener("click",()=>{const input=byId("password"),showing=input?.type==="text";if(input)input.type=showing?"password":"text";byId("togglePassword").setAttribute("aria-label",showing?"Show password":"Hide password");});
+  byId("tenantCodeFallback")?.addEventListener("input",event=>{byId("tenantCode").value=String(event.currentTarget.value||"").trim().toUpperCase();});
+  byId("registerSchoolButton")?.addEventListener("click",()=>{const dialog=byId("registrationDialog");byId("registrationMessage").textContent="";if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");setTimeout(renderRegistrationTurnstile,0);});
+  const closeRegistration=()=>{const dialog=byId("registrationDialog");if(dialog?.open)dialog.close();};
+  byId("registrationClose")?.addEventListener("click",closeRegistration);byId("registrationCancel")?.addEventListener("click",closeRegistration);byId("registrationDialog")?.addEventListener("click",event=>{if(event.target===event.currentTarget)closeRegistration();});
+  byId("registrationForm")?.addEventListener("submit",async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),msg=byId("registrationMessage");msg.textContent="";msg.dataset.kind="";if(turnstileSiteKey&&!registrationToken){msg.textContent="Complete the human verification before submitting your registration.";msg.dataset.kind="error";renderRegistrationTurnstile();return;}button.disabled=true;try{const fd=new FormData(form),result=await api().registerSchool({schoolName:fd.get("schoolName"),institutionType:fd.get("institutionType"),contactName:fd.get("contactName"),contactEmail:fd.get("contactEmail"),contactPhone:fd.get("contactPhone"),country:fd.get("country"),turnstileToken:registrationToken});form.reset();registrationToken="";msg.textContent="Registration submitted successfully. The Platform Super Administrator will review it before the school workspace is provisioned.";msg.dataset.kind="success";if(window.turnstile&&registrationWidgetId!=null){try{window.turnstile.reset(registrationWidgetId);}catch{}}return result;}catch(error){msg.textContent=friendly(error);msg.dataset.kind="error";registrationToken="";if(window.turnstile&&registrationWidgetId!=null){try{window.turnstile.reset(registrationWidgetId);}catch{}}}finally{button.disabled=false;}});
+  byId("forgotPasswordButton")?.addEventListener("click",()=>{const dialog=byId("accessRecoveryDialog"),form=byId("accessRecoveryForm"),email=String(byId("email")?.value||"").trim(),tenantCode=String(byId("tenantCode")?.value||"").trim();if(form){form.elements.identifier.value=tenantCode||email||"";form.elements.contactEmail.value=email||"";}byId("accessRecoveryMessage").textContent="";if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");setTimeout(renderRecoveryTurnstile,0);});
+  const closeRecovery=()=>{const dialog=byId("accessRecoveryDialog");if(dialog?.open)dialog.close();};
+  byId("accessRecoveryClose")?.addEventListener("click",closeRecovery);byId("accessRecoveryCancel")?.addEventListener("click",closeRecovery);byId("accessRecoveryDialog")?.addEventListener("click",event=>{if(event.target===event.currentTarget)closeRecovery();});
+  byId("accessRecoveryForm")?.addEventListener("submit",async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),msg=byId("accessRecoveryMessage");msg.textContent="";msg.dataset.kind="";if(turnstileSiteKey&&!recoveryTurnstileToken){msg.textContent="Complete the human verification before submitting the recovery request.";msg.dataset.kind="error";renderRecoveryTurnstile();return;}button.disabled=true;try{const fd=new FormData(form),result=await api().requestAccessRecovery({identifier:fd.get("identifier"),contactEmail:fd.get("contactEmail"),recoveryType:fd.get("recoveryType"),turnstileToken:recoveryTurnstileToken});msg.textContent=result?.message||"Recovery request submitted for protected review.";msg.dataset.kind="success";recoveryTurnstileToken="";if(window.turnstile&&recoveryWidgetId!=null){try{window.turnstile.reset(recoveryWidgetId);}catch{}}}catch(error){msg.textContent=friendly(error);msg.dataset.kind="error";recoveryTurnstileToken="";if(window.turnstile&&recoveryWidgetId!=null){try{window.turnstile.reset(recoveryWidgetId);}catch{}}}finally{button.disabled=false;}});
   byId("logoutButton")?.addEventListener("click",async()=>{try{await api().logout();}finally{location.reload();}});
   byId("menuButton")?.addEventListener("click",()=>byId("sidebar")?.classList.toggle("open"));
   byId("refreshButton")?.addEventListener("click",()=>navigate(state.view));
