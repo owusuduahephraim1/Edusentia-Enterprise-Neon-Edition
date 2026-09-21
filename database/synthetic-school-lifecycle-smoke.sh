@@ -64,6 +64,7 @@ install_tenant() {
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0039_certified_timetable_academic_alignment.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0040_certified_audit_trail_v1.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0041_certified_notification_publication_sync.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0041b_neon_notification_recipient_compat.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0042_certified_principal_academic_history_read.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0043_certified_report_governance_prerequisites.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0043b_certified_report_assignment_scope.sql >/dev/null
@@ -93,6 +94,7 @@ SQL
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0039_certified_timetable_academic_alignment'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0040_certified_audit_trail_v1'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0041_certified_notification_publication_sync'")" = "1"
+  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0041b_neon_notification_recipient_compat'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0042_certified_principal_academic_history_read'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0043_certified_report_governance_prerequisites'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0043b_certified_report_assignment_scope'")" = "1"
@@ -137,7 +139,7 @@ SQL
   test "$(psql "$db_url" -Atc "select position('report_transition_deadline_allowed' in pg_get_functiondef(p.oid))>0 and position('mark_report_correction_applied' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='transition_report_status' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select position('REPORT_DRAFT_PERMANENTLY_DELETED' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='delete_report_card_permanently' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select c.relrowsecurity and c.relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='emergency_academic_delegations'")" = "t"
-  test "$(psql "$db_url" -Atc "select position('studentprofile' in lower(pg_get_functiondef(p.oid)))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_workflow_notifications' limit 1")" = "t"
+  test "$(psql "$db_url" -Atc "select position('guardian_links' in lower(pg_get_functiondef(p.oid)))>0 and position('s.profile_id' in lower(pg_get_functiondef(p.oid)))=0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='create_workflow_notifications' limit 1")" = "t"
   test "$(psql "$db_url" -Atc "select exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='class_timetable_entries' and t.tgname='class_timetable_entry_integrity_guard' and not t.tgisinternal) and exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='class_timetable_entries' and t.tgname='class_timetable_entries_audit' and not t.tgisinternal)")" = "t"
   test "$(psql "$db_url" -Atc "select count(*)=5 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal and ((c.relname='teachers' and t.tgname in('teachers_audit','teachers_license_write_guard','sync_teacher_record_class_links_trigger')) or (c.relname='headteachers' and t.tgname in('headteachers_audit','headteachers_license_write_guard')))")" = "t"
 
