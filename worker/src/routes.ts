@@ -188,6 +188,59 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({rows,limit,offset});
   }
 
+  if(method==="GET"&&p==="/api/operations/overview"){
+    requireRole(ctx,["system_admin","principal"]);
+    const [counts,admissions,attendance,discipline,welfare,health,hostel,payroll,communications,documents,continuity]=await tenantTx<any[]>(sql,ctx,txn=>[
+      txn`select
+        (select count(*)::int from app.admissions_applications where tenant_id=${ctx.tenantId}::uuid) admissions,
+        (select count(*)::int from academics.attendance_registers where tenant_id=${ctx.tenantId}::uuid) attendance_registers,
+        (select count(*)::int from services.discipline_incidents where tenant_id=${ctx.tenantId}::uuid) discipline_incidents,
+        (select count(*)::int from services.welfare_cases where tenant_id=${ctx.tenantId}::uuid) welfare_cases,
+        (select count(*)::int from services.health_visits where tenant_id=${ctx.tenantId}::uuid) health_visits,
+        (select count(*)::int from services.hostel_allocations where tenant_id=${ctx.tenantId}::uuid) hostel_allocations,
+        (select count(*)::int from finance.payroll_runs where tenant_id=${ctx.tenantId}::uuid) payroll_runs,
+        (select count(*)::int from services.communication_campaigns where tenant_id=${ctx.tenantId}::uuid) communication_campaigns,
+        (select count(*)::int from documents.certificate_batches where tenant_id=${ctx.tenantId}::uuid) certificate_batches,
+        (select count(*)::int from ops.import_batches where tenant_id=${ctx.tenantId}::uuid) import_batches`,
+      txn`select a.id,a.application_no,concat_ws(' ',a.first_name,nullif(a.middle_name,''),a.last_name) applicant_name,a.status,a.submitted_at,c.name applying_class
+        from app.admissions_applications a left join academics.classes c on c.id=a.applying_class_id and c.tenant_id=a.tenant_id
+        where a.tenant_id=${ctx.tenantId}::uuid order by a.created_at desc limit 20`,
+      txn`select r.id,r.attendance_date,r.status,c.name class_name,t.name term_name,
+        (select count(*)::int from academics.attendance_entries e where e.register_id=r.id and e.tenant_id=r.tenant_id) entry_count
+        from academics.attendance_registers r
+        left join academics.classes c on c.id=r.class_id and c.tenant_id=r.tenant_id
+        left join academics.terms t on t.id=r.term_id and t.tenant_id=r.tenant_id
+        where r.tenant_id=${ctx.tenantId}::uuid order by r.attendance_date desc,r.created_at desc limit 20`,
+      txn`select d.id,d.incident_date,d.category,d.severity,d.summary,d.status,
+        concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name
+        from services.discipline_incidents d left join app.students s on s.id=d.student_id and s.tenant_id=d.tenant_id
+        where d.tenant_id=${ctx.tenantId}::uuid order by d.incident_date desc,d.created_at desc limit 20`,
+      txn`select w.id,w.case_type,w.priority,w.summary,w.status,w.opened_at,w.closed_at,
+        concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name
+        from services.welfare_cases w left join app.students s on s.id=w.student_id and s.tenant_id=w.tenant_id
+        where w.tenant_id=${ctx.tenantId}::uuid order by w.opened_at desc limit 20`,
+      txn`select h.id,h.visited_at,h.complaint,h.assessment,h.disposition,
+        concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name
+        from services.health_visits h left join app.students s on s.id=h.student_id and s.tenant_id=h.tenant_id
+        where h.tenant_id=${ctx.tenantId}::uuid order by h.visited_at desc limit 20`,
+      txn`select h.id,h.starts_on,h.ends_on,h.status,
+        concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name
+        from services.hostel_allocations h left join app.students s on s.id=h.student_id and s.tenant_id=h.tenant_id
+        where h.tenant_id=${ctx.tenantId}::uuid order by h.starts_on desc limit 20`,
+      txn`select p.id,p.period_start,p.period_end,p.status,p.created_at,
+        (select count(*)::int from finance.payroll_entries e where e.payroll_run_id=p.id and e.tenant_id=p.tenant_id) entry_count,
+        coalesce((select sum(e.net_amount) from finance.payroll_entries e where e.payroll_run_id=p.id and e.tenant_id=p.tenant_id),0)::numeric total_net
+        from finance.payroll_runs p where p.tenant_id=${ctx.tenantId}::uuid order by p.period_end desc,p.created_at desc limit 20`,
+      txn`select id,name,channel,audience,subject,status,scheduled_at,published_at,created_at
+        from services.communication_campaigns where tenant_id=${ctx.tenantId}::uuid order by created_at desc limit 20`,
+      txn`select b.id,b.batch_no,b.certificate_type,b.status,b.submitted_at,b.reviewed_at
+        from documents.certificate_batches b where b.tenant_id=${ctx.tenantId}::uuid order by coalesce(b.reviewed_at,b.submitted_at) desc nulls last limit 20`,
+      txn`select id,import_type,file_name,status,row_count,success_count,error_count,created_at,completed_at
+        from ops.import_batches where tenant_id=${ctx.tenantId}::uuid order by created_at desc limit 20`
+    ]);
+    return json({counts:counts[0]||{},admissions,attendance,discipline,welfare,health,hostel,payroll,communications,documents,continuity});
+  }
+
   const reportPdfUpload=p.match(/^\/api\/reports\/([0-9a-f-]{36})\/pdf\/upload-url$/i);
   if(method==="POST"&&reportPdfUpload){
     const reportId=reportPdfUpload[1];
