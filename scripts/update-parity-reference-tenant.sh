@@ -25,6 +25,19 @@ echo "::add-mask::$TARGET_URL"
 test "$(psql "$TARGET_URL" -Atc "select current_database()")" = "$EXPECTED_DATABASE"
 test "$(psql "$TARGET_URL" -Atc "select session_user")" = "edusentia_runtime"
 
+cleanup_schema_create() {
+  psql "$TARGET_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
+set role edusentia_provisioner;
+revoke create on schema public from edusentia_runtime;
+SQL
+}
+trap cleanup_schema_create EXIT
+
+psql "$TARGET_URL" -v ON_ERROR_STOP=1 <<SQL
+set role edusentia_provisioner;
+grant usage,create on schema public to edusentia_runtime;
+SQL
+
 apply_once() {
   local version="$1"
   local file="$2"
@@ -45,5 +58,9 @@ apply_once "0047_certified_identity_rpc_neon" "database/reference-compat/0047_ce
 apply_once "0048_certified_provider_rpc_neon_r2" "database/reference-compat/0048_certified_provider_rpc_neon_r2.sql"
 
 test "$(psql "$TARGET_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
+
+cleanup_schema_create
+trap - EXIT
+test "$(psql "$TARGET_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" = "f"
 
 echo "Parity reference tenant $EXPECTED_DATABASE updated through certified compatibility 0048."
