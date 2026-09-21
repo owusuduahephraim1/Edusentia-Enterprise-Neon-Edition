@@ -1,6 +1,28 @@
 import test from "node:test";import assert from "node:assert/strict";import fs from "node:fs";
 const read=p=>fs.readFileSync(p,"utf8");
 test("r42-v18 accounts staff deletion invariant is preserved",()=>{const sql=read("database/migrations/0005_finance_hr_admissions.sql");assert.match(sql,/archive-only/);assert.doesNotMatch(sql,/delete from finance\.accounts_office_staff/i)});
+test("reference authentication blueprint keeps master registration modal and tenant branding",()=>{
+  const h=read("frontend/index.html"),a=read("frontend/app.js"),css=read("frontend/r37-final-ui.css"),pages=read(".github/workflows/deploy-pages.yml");
+  assert.match(h,/id="authBrandName">Edusentia</);
+  assert.match(h,/id="authBrandTagline">The Academic Operations Platform</);
+  assert.match(h,/id="tenantCode" name="tenantCode" type="hidden"/);
+  assert.match(h,/id="registrationDialog"/);
+  assert.match(h,/New school onboarding/i);
+  assert.match(h,/Initial licence plan/i);
+  assert.match(h,/Register new school/i);
+  assert.match(h,/Forgot password\?/i);
+  assert.match(h,/id="togglePassword"/);
+  assert.doesNotMatch(h,/href="register\.html">Register school/);
+  assert.match(a,/resolveSchool\(code\)/);
+  assert.match(a,/Student Academic Service/);
+  assert.match(a,/tenant-login/);
+  assert.match(a,/registerSchoolButton/);
+  assert.match(a,/requestAccessRecovery/);
+  assert.match(css,/Reference-blueprint authentication controls/);
+  assert.match(pages,/actions\/deploy-pages@v4/);
+  assert.match(pages,/path: frontend/);
+});
+
 test("frontend never receives database configuration",()=>{const c=read("frontend/config.js");assert.doesNotMatch(c,/DATABASE_URL|postgresql:\/\//i)});
 test("certified UI parity stays inside the Worker-backed production boundary",()=>{const h=read("frontend/index.html"),a=read("frontend/app.js"),w=read(".github/workflows/worker-check.yml");assert.match(h,/id="mainNav"/);assert.match(h,/class="app-shell hidden"/);assert.match(a,/window\.EdusentiaApi/);assert.match(a,/get_academic_configuration/);assert.match(a,/set_active_period/);assert.match(w,/"frontend\/\*\*"/);assert.equal(fs.existsSync("frontend/certified"),false);assert.equal(fs.existsSync("reference/certified-ui/app.js"),true);});
 test("session cookie is HttpOnly and Secure",()=>{const a=read("worker/src/auth.ts");assert.match(a,/HttpOnly/);assert.match(a,/Secure/)});
