@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4-pooler.c-7.us-east-2.aws.neon.tech
+  PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4.c-7.us-east-2.aws.neon.tech
   PARITY_MASTER_DATABASE: edusentia
   PARITY_TEMPLATE_DATABASE: edusentia_tenant_template
   PARITY_TEST_TENANT_DATABASE: edusentia_rpt_000001
@@ -62,16 +62,17 @@ jobs:
         run: |
           set -euo pipefail
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select current_database()")" = "$PARITY_MASTER_DATABASE"
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")" = "edusentia_provisioner"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select session_user||'|'||current_user||'|'||current_setting('role')")" = "edusentia_runtime|edusentia_runtime|none"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_provisioner','set')")" = "t"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_worker_runtime','set')")" = "t"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname in ('$PARITY_TEMPLATE_DATABASE','$PARITY_TEST_TENANT_DATABASE','$PARITY_CI_TEMPLATE_DATABASE')")" = "3"
-
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
 
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")" = "edusentia_provisioner"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select not datallowconn from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")" = "t"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "edusentia_provisioner"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_CI_TEMPLATE_DATABASE'")" = "edusentia_provisioner"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select datistemplate and not datallowconn from pg_database where datname='$PARITY_CI_TEMPLATE_DATABASE'")" = "t"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_worker_runtime','set') and not exists(select 1 from pg_auth_members m join pg_roles g on g.oid=m.roleid join pg_roles u on u.oid=m.member where g.rolname='edusentia_worker_runtime' and u.rolname='edusentia_runtime' and (m.admin_option or m.inherit_option or not m.set_option))")" = "t"
 
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select has_database_privilege('edusentia_worker_runtime','$PARITY_TEST_TENANT_DATABASE','connect')")" = "t"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select has_database_privilege('edusentia_worker_runtime','$PARITY_TEMPLATE_DATABASE','connect')")" = "t"
@@ -79,10 +80,18 @@ jobs:
           PROBE_DB="edusentia_provisioner_probe_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
           PROBE_DB="${PROBE_DB//-/_}"
           PROBE_DB="${PROBE_DB:0:60}"
-          cleanup_probe(){ psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true; }
+          cleanup_probe(){
+            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
+set role edusentia_provisioner;
+drop database if exists "$PROBE_DB" with (force);
+SQL
+          }
           trap cleanup_probe EXIT
           cleanup_probe
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\" owner edusentia_provisioner template \"$PARITY_TEMPLATE_DATABASE\";"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
+set role edusentia_provisioner;
+create database "$PROBE_DB" owner edusentia_provisioner template "$PARITY_TEMPLATE_DATABASE";
+SQL
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PROBE_DB'")" = "edusentia_provisioner"
           cleanup_probe
           trap - EXIT
