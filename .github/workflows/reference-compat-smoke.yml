@@ -161,6 +161,7 @@ jobs:
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0047_certified_identity_rpc_neon.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048_certified_provider_rpc_neon_r2.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048b_certified_certificate_settings_compat.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048c_certified_backup_settings_compat.sql
 
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"

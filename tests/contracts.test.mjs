@@ -683,3 +683,19 @@ test("certificate settings compatibility hotfix completes the console schema",()
     assert.match(source,/0048b_certified_certificate_settings_compat\.sql/);
   }
 });
+
+test("backup settings compatibility hotfix completes the certified backup console schema",()=>{
+  const sql=read("database/reference-compat/0048c_certified_backup_settings_compat.sql");
+  const template=read("database/tenant-template/install.sh");
+  const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const updateTemplate=read("scripts/update-parity-tenant-template.sh");
+  const updateReference=read("scripts/update-parity-reference-tenant.sh");
+  assert.match(sql,/backup_retention_days integer not null default 30/i);
+  assert.match(sql,/backup_minimum_copies integer not null default 7/i);
+  assert.match(sql,/0048c_certified_backup_settings_compat/i);
+  for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
+    assert.match(source,/0048c_certified_backup_settings_compat\.sql/);
+  }
+});
+
