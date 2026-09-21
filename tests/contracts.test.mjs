@@ -751,3 +751,21 @@ test("backup health metadata compatibility completes system health backup depend
     assert.match(source,/0048f_certified_backup_health_metadata_compat\.sql/);
   }
 });
+
+
+test("operational readiness RLS compatibility forces the certified public surface",()=>{
+  const sql=read("database/reference-compat/0048g_certified_operational_rls_enforcement.sql");
+  const template=read("database/tenant-template/install.sh");
+  const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const updateTemplate=read("scripts/update-parity-tenant-template.sh");
+  const updateReference=read("scripts/update-parity-reference-tenant.sh");
+  for(const table of ["terms","classes","profiles","students","subjects","enrollments","academic_years","class_subjects","grading_scales","guardian_links","student_reports","subject_results","student_guardians","user_class_access","assessment_schemes","assessment_components","assessment_score_entries"]){
+    assert.ok(sql.includes("'"+table+"'"),table+" missing from certified RLS enforcement set");
+  }
+  assert.match(sql,/pg_policies/);
+  assert.match(sql,/force row level security/i);
+  for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
+    assert.match(source,/0048g_certified_operational_rls_enforcement\.sql/);
+  }
+});
