@@ -57,6 +57,7 @@ jobs:
           ')"
           echo "::add-mask::$PARITY_DATABASE_URL"
           echo "BOOTSTRAP_DATABASE_URL=$PARITY_DATABASE_URL" >> "$GITHUB_ENV"
+          echo "CI_TEMPLATE_DATABASE=edusentia_ci_base" >> "$GITHUB_ENV"
           PARITY_DB_NAME="$(psql "$PARITY_DATABASE_URL" -Atc "select current_database()")"
           PARITY_DB_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")"
           test "$PARITY_DB_NAME" = "edusentia"
@@ -77,7 +78,11 @@ jobs:
           trap cleanup EXIT
 
           cleanup
-          psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\";"
+          if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
+            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\" template \"$CI_TEMPLATE_DATABASE\";"
+          else
+            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\";"
+          fi
 
           PROBE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PROBE_DB="$PROBE_DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.PROBE_DB;process.stdout.write(u.toString())')"
           echo "::add-mask::$PROBE_URL"
