@@ -454,3 +454,18 @@ test("parity administrative workflows avoid pooled Neon sessions",()=>{
     assert.doesNotMatch(w,/ep-shy-meadow-b5e4d9e4-pooler/);
   }
 });
+
+
+test("production deployment separates direct admin and pooled Worker database URLs",()=>{
+  const w=read(".github/workflows/deploy-worker.yml");
+  assert.match(w,/ADMIN_DATABASE_URL/);
+  assert.match(w,/u\.hostname=u\.hostname\.replace\("-pooler\.","\."\)/);
+  assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" bash database\/install-master\.sh/);
+  assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/runtime-role\.sql/);
+  assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/provisioner-role\.sql/);
+  assert.match(w,/set role edusentia_worker_runtime/i);
+  assert.match(w,/set role edusentia_provisioner/i);
+  assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"/);
+  assert.match(w,/WORKER_DATABASE_URL="\$\(BOOTSTRAP_DATABASE_URL="\$BOOTSTRAP_DATABASE_URL"/);
+  assert.match(w,/PROVISIONER_DATABASE_URL="\$\(BOOTSTRAP_DATABASE_URL="\$BOOTSTRAP_DATABASE_URL"/);
+});
