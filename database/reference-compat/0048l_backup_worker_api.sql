@@ -61,7 +61,7 @@ as $fn$
     'app_metadata',coalesce(u.raw_app_meta_data,'{}'::jsonb),
     'created_at',u.created_at,
     'updated_at',u.updated_at,
-    'last_sign_in_at',u.last_sign_in_at,
+    'last_sign_in_at',null,
     'banned_until',u.disabled_at
   ) order by u.created_at,u.id),'[]'::jsonb)
   from authn.users u
