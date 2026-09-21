@@ -149,12 +149,12 @@ jobs:
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048f_certified_backup_health_metadata_compat.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048g_certified_operational_rls_enforcement.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048h_certified_release_identity.sql
-  psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048i_historical_provider_bridges.sql
-  psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048j_notification_worker_compat.sql
-  psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048k_mfa_recovery_compat.sql
-  psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql
-  psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql
-  psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048i_historical_provider_bridges.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048j_notification_worker_compat.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048k_mfa_recovery_compat.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql
 
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"
