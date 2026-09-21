@@ -155,6 +155,39 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json(rows[0]||{});
   }
 
+  if(method==="GET"&&p==="/api/finance/invoices"){
+    requireRole(ctx,["system_admin","principal","accountant"]);
+    const limit=Math.min(200,Math.max(1,Number(url.searchParams.get("limit")||100)));
+    const offset=Math.max(0,Number(url.searchParams.get("offset")||0));
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select
+      i.id,i.invoice_no,i.student_id,i.term_id,i.amount_due,i.amount_paid,i.status,i.due_date,i.created_at,
+      concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name,
+      t.name term_name
+      from finance.invoices i
+      left join app.students s on s.id=i.student_id and s.tenant_id=i.tenant_id
+      left join academics.terms t on t.id=i.term_id and t.tenant_id=i.tenant_id
+      where i.tenant_id=${ctx.tenantId}::uuid
+      order by i.created_at desc,i.invoice_no desc
+      limit ${limit} offset ${offset}`]);
+    return json({rows,limit,offset});
+  }
+  if(method==="GET"&&p==="/api/finance/payments"){
+    requireRole(ctx,["system_admin","principal","accountant"]);
+    const limit=Math.min(200,Math.max(1,Number(url.searchParams.get("limit")||100)));
+    const offset=Math.max(0,Number(url.searchParams.get("offset")||0));
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select
+      pmt.id,pmt.receipt_no,pmt.student_id,pmt.invoice_id,pmt.amount,pmt.method,pmt.reference,pmt.received_at,pmt.reversed_at,pmt.reversal_reason,
+      concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name,
+      i.invoice_no
+      from finance.payments pmt
+      left join app.students s on s.id=pmt.student_id and s.tenant_id=pmt.tenant_id
+      left join finance.invoices i on i.id=pmt.invoice_id and i.tenant_id=pmt.tenant_id
+      where pmt.tenant_id=${ctx.tenantId}::uuid
+      order by pmt.received_at desc,pmt.receipt_no desc
+      limit ${limit} offset ${offset}`]);
+    return json({rows,limit,offset});
+  }
+
   const reportPdfUpload=p.match(/^\/api\/reports\/([0-9a-f-]{36})\/pdf\/upload-url$/i);
   if(method==="POST"&&reportPdfUpload){
     const reportId=reportPdfUpload[1];
