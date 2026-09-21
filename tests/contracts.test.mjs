@@ -359,3 +359,13 @@ test("tenant template handoff uses provisioner after ownership transfer",()=>{
   assert.match(w,/alter database \\"\$PARITY_TEMPLATE_DATABASE\\" owner to edusentia_provisioner/);
   assert.match(w,/set role edusentia_provisioner/);
 });
+
+
+test("provisioner-owned template retains deployment-only public schema migration access",()=>{
+  const i=read("database/tenant-template/install.sh");
+  const w=read(".github/workflows/parity-template-install.yml");
+  assert.match(i,/grant usage,create on schema public to edusentia_runtime/i);
+  assert.match(w,/grant usage,create on schema public to edusentia_runtime/i);
+  assert.doesNotMatch(i,/grant .*schema public to edusentia_worker_runtime/i);
+  assert.doesNotMatch(w,/grant usage,create on schema public to edusentia_worker_runtime/i);
+});
