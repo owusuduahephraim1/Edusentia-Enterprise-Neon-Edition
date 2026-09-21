@@ -7,7 +7,9 @@
 --   extensions.digest -> public.digest from Neon pgcrypto
 begin;
 
-alter table app.tenant_licenses add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table app.tenant_licenses
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
 
 -- Certified issue_student_transcript(target_student_id uuid, purpose_text text) with pgcrypto schema adaptation.
 CREATE OR REPLACE FUNCTION public.issue_student_transcript(target_student_id uuid, purpose_text text DEFAULT 'Academic transcript'::text)
@@ -432,12 +434,21 @@ begin
   if lock_mode_text not in ('read_only','deny') then raise exception 'Invalid lock mode' using errcode='22023'; end if;
   if length(trim(coalesce(reason_text,'')))<5 then raise exception 'A clear lock reason is required' using errcode='22023'; end if;
   if ends_at_value is not null and ends_at_value<=now() then raise exception 'Lock end time must be in the future' using errcode='22023'; end if;
-  update public.platform_access_locks set active=false,released_at=now(),released_by=auth.uid(),release_reason='Replaced by a new lock',updated_at=now()
-  where active and lock_scope=lock_scope_text;
+
+  update public.platform_access_locks
+     set active=false,released_at=now(),released_by=auth.uid(),
+         release_reason='Replaced by a new lock',updated_at=now()
+   where active and lock_scope=lock_scope_text;
+
   insert into public.platform_access_locks(lock_scope,lock_mode,reason,ends_at,created_by)
-  values(lock_scope_text,lock_mode_text,trim(reason_text),ends_at_value,auth.uid()) returning * into new_lock;
+  values(lock_scope_text,lock_mode_text,trim(reason_text),ends_at_value,auth.uid())
+  returning * into new_lock;
+
   insert into app.license_events(tenant_id,event_type,actor_id,metadata)
-  values(tenant,'access_lock_applied',auth.uid(),jsonb_build_object('reason',trim(reason_text),'lock',to_jsonb(new_lock)));
+  values(tenant,'access_lock_applied',auth.uid(),jsonb_build_object(
+    'reason',trim(reason_text),'lock',to_jsonb(new_lock)
+  ));
+
   return public.get_platform_license_console();
 end
 $lock$;
@@ -451,20 +462,32 @@ as $release$
 declare old_lock public.platform_access_locks%rowtype; tenant uuid:=app.current_tenant_id();
 begin
   perform public.require_platform_super_admin();
-  select * into old_lock from public.platform_access_locks where id=target_lock_id and active for update;
+  select * into old_lock
+  from public.platform_access_locks
+  where id=target_lock_id and active
+  for update;
+
   if old_lock.id is null then raise exception 'Active access lock not found' using errcode='P0002'; end if;
+
   update public.platform_access_locks
      set active=false,released_at=now(),released_by=auth.uid(),
-         release_reason=coalesce(nullif(trim(reason_text),''),'Access lock released'),updated_at=now()
+         release_reason=coalesce(nullif(trim(reason_text),''),'Access lock released'),
+         updated_at=now()
    where id=target_lock_id;
+
   insert into app.license_events(tenant_id,event_type,actor_id,metadata)
-  values(tenant,'access_lock_released',auth.uid(),jsonb_build_object('reason',coalesce(nullif(trim(reason_text),''),'Access lock released'),'old_lock',to_jsonb(old_lock)));
+  values(tenant,'access_lock_released',auth.uid(),jsonb_build_object(
+    'reason',coalesce(nullif(trim(reason_text),''),'Access lock released'),
+    'old_lock',to_jsonb(old_lock)
+  ));
+
   return public.get_platform_license_console();
 end
 $release$;
 
 create or replace function public.platform_set_distribution_authority(
-  target_actor_id uuid,active_value boolean,can_generate_value boolean,can_revoke_value boolean,notes_text text default ''
+  target_actor_id uuid,active_value boolean,can_generate_value boolean,
+  can_revoke_value boolean,notes_text text default ''
 ) returns jsonb
 language plpgsql security definer
 set search_path to 'public','app','pg_catalog'
@@ -472,30 +495,60 @@ as $distribution$
 declare caller public.platform_distribution_authorities%rowtype; code text; tenant uuid:=app.current_tenant_id();
 begin
   perform public.require_platform_super_admin();
-  select * into caller from public.platform_distribution_authorities where actor_id=auth.uid() and active and can_revoke;
+
+  select * into caller
+  from public.platform_distribution_authorities
+  where actor_id=auth.uid() and active and can_revoke;
+
   if caller.id is null and exists(select 1 from public.platform_distribution_authorities) then
     raise exception 'Active distributor revocation authority is required to manage distributor access' using errcode='42501';
   end if;
-  if not exists(select 1 from public.profiles p where p.id=target_actor_id and p.active and public.current_app_role_for(p.role)::text='platform_super_admin') then
+
+  if not exists(
+    select 1 from public.profiles p
+    where p.id=target_actor_id and p.active
+      and public.current_app_role_for(p.role)::text='platform_super_admin'
+  ) then
     raise exception 'Target account must be an active Platform Super Administrator' using errcode='22023';
   end if;
+
   if not (active_value and can_generate_value and can_revoke_value)
      and exists(select 1 from public.platform_distribution_authorities)
-     and not exists(select 1 from public.platform_distribution_authorities a where a.actor_id<>target_actor_id and a.active and a.can_generate and a.can_revoke) then
+     and not exists(
+       select 1 from public.platform_distribution_authorities a
+       where a.actor_id<>target_actor_id and a.active and a.can_generate and a.can_revoke
+     ) then
     raise exception 'At least one active distributor must retain both generation and revocation authority' using errcode='23514';
   end if;
+
   code:='DIST-'||upper(substr(replace(target_actor_id::text,'-',''),1,12));
-  insert into public.platform_distribution_authorities(actor_id,distributor_code,active,can_generate,can_revoke,notes)
-  values(target_actor_id,code,active_value,can_generate_value,can_revoke_value,coalesce(notes_text,''))
-  on conflict(actor_id) do update set active=excluded.active,can_generate=excluded.can_generate,can_revoke=excluded.can_revoke,notes=excluded.notes,updated_at=now();
+
+  insert into public.platform_distribution_authorities(
+    actor_id,distributor_code,active,can_generate,can_revoke,notes
+  ) values(
+    target_actor_id,code,active_value,can_generate_value,can_revoke_value,coalesce(notes_text,'')
+  )
+  on conflict(actor_id) do update
+    set active=excluded.active,
+        can_generate=excluded.can_generate,
+        can_revoke=excluded.can_revoke,
+        notes=excluded.notes,
+        updated_at=now();
+
   insert into app.license_events(tenant_id,event_type,actor_id,metadata)
-  values(tenant,'distribution_authority_updated',auth.uid(),jsonb_build_object('reason',coalesce(nullif(btrim(notes_text),''),'Distributor authority updated'),'target_actor_id',target_actor_id,'active',active_value,'can_generate',can_generate_value,'can_revoke',can_revoke_value));
+  values(tenant,'distribution_authority_updated',auth.uid(),jsonb_build_object(
+    'reason',coalesce(nullif(btrim(notes_text),''),'Distributor authority updated'),
+    'target_actor_id',target_actor_id,'active',active_value,
+    'can_generate',can_generate_value,'can_revoke',can_revoke_value
+  ));
+
   return public.get_platform_license_console();
 end
 $distribution$;
 
-create or replace function public.platform_clear_license_history(reason_text text,confirmation_text text)
-returns jsonb
+create or replace function public.platform_clear_license_history(
+  reason_text text,confirmation_text text
+) returns jsonb
 language plpgsql security definer
 set search_path to 'public','app','pg_catalog'
 as $clear$
@@ -503,67 +556,146 @@ declare reason text:=btrim(coalesce(reason_text,'')); event_total bigint; tenant
 begin
   perform public.require_platform_super_admin();
   if length(reason)<5 then raise exception 'A clear history-reset reason is required' using errcode='22023'; end if;
-  if upper(btrim(coalesce(confirmation_text,'')))<>'CLEAR ALL' then raise exception 'Type CLEAR ALL exactly to confirm permanent history removal' using errcode='22023'; end if;
+  if upper(btrim(coalesce(confirmation_text,'')))<>'CLEAR ALL' then
+    raise exception 'Type CLEAR ALL exactly to confirm permanent history removal' using errcode='22023';
+  end if;
+
   select count(*) into event_total from app.license_events where tenant_id=tenant;
   delete from app.license_events where tenant_id=tenant;
+
   insert into public.system_maintenance_log(actor_id,operation,affected_rows,details,created_at)
-  values(auth.uid(),'LICENCE_COMPLIANCE_HISTORY_RESET',event_total,jsonb_build_object('reason',reason,'license_events_removed',event_total),now());
+  values(auth.uid(),'LICENCE_COMPLIANCE_HISTORY_RESET',event_total,
+    jsonb_build_object('reason',reason,'license_events_removed',event_total),now());
+
   return public.get_platform_license_console();
 end
 $clear$;
 
 create or replace function public.platform_update_license(
   target_plan_id uuid,target_status text,issue_date date,
-  activation_date timestamptz default null,expiry_date timestamptz default null,grace_end_date timestamptz default null,
-  license_reference_text text default '',notes_text text default '',compliance_reason_text text default ''
+  activation_date timestamptz default null,
+  expiry_date timestamptz default null,
+  grace_end_date timestamptz default null,
+  license_reference_text text default '',
+  notes_text text default '',
+  compliance_reason_text text default ''
 ) returns jsonb
 language plpgsql security definer
 set search_path to 'public','app','platform','pg_catalog'
 as $update_license$
 declare
-  tenant uuid:=app.current_tenant_id(); cur app.tenant_licenses%rowtype; p platform.license_plans%rowtype;
-  preview jsonb; effective_activation timestamptz; default_term_days integer; grace_days integer; perpetual_allowed boolean;
-  old_json jsonb; new_json jsonb;
+  tenant uuid:=app.current_tenant_id();
+  cur app.tenant_licenses%rowtype;
+  p platform.license_plans%rowtype;
+  preview jsonb;
+  effective_activation timestamptz;
+  default_term_days integer;
+  grace_days integer;
+  perpetual_allowed boolean;
+  old_json jsonb;
+  new_json jsonb;
 begin
   perform public.require_platform_super_admin();
+
   select * into p from platform.license_plans where id=target_plan_id and active;
   if p.id is null then raise exception 'Select an active licence plan' using errcode='22023'; end if;
+
   select * into cur from app.tenant_licenses where tenant_id=tenant for update;
   if cur.id is null then raise exception 'Platform licence is not configured' using errcode='22023'; end if;
-  if target_status not in ('pending_activation','active','grace_period','expired','suspended','revoked','perpetual') then raise exception 'Invalid licence status' using errcode='22023'; end if;
-  if issue_date is null or length(btrim(coalesce(license_reference_text,'')))<5 then raise exception 'Issue date and a valid licence reference are required' using errcode='22023'; end if;
-  if target_status in ('suspended','revoked') and length(btrim(coalesce(compliance_reason_text,'')))<5 then raise exception 'A compliance reason is required' using errcode='22023'; end if;
+
+  if target_status not in ('pending_activation','active','grace_period','expired','suspended','revoked','perpetual') then
+    raise exception 'Invalid licence status' using errcode='22023';
+  end if;
+  if issue_date is null or length(btrim(coalesce(license_reference_text,'')))<5 then
+    raise exception 'Issue date and a valid licence reference are required' using errcode='22023';
+  end if;
+  if target_status in ('suspended','revoked') and length(btrim(coalesce(compliance_reason_text,'')))<5 then
+    raise exception 'A compliance reason is required' using errcode='22023';
+  end if;
+
   default_term_days:=coalesce(nullif(p.limits->>'default_term_days','')::integer,365);
   grace_days:=coalesce(nullif(p.limits->>'grace_days','')::integer,30);
   perpetual_allowed:=coalesce((p.limits->>'perpetual_allowed')::boolean,false);
-  effective_activation:=case when target_status in ('active','grace_period','perpetual') then coalesce(activation_date,now()) else activation_date end;
-  if target_status in ('active','grace_period','perpetual','expired') and issue_date>current_date then raise exception 'Issue date cannot be in the future for this status' using errcode='22023'; end if;
-  if effective_activation is not null and effective_activation::date<issue_date then raise exception 'Activation date cannot precede issue date' using errcode='22023'; end if;
-  if target_status in ('active','grace_period','perpetual') and effective_activation>now() then raise exception 'Activation date cannot be in the future for an active licence' using errcode='22023'; end if;
-  if target_status='perpetual' and not perpetual_allowed then raise exception 'The selected plan does not permit perpetual licensing' using errcode='22023'; end if;
-  if target_status='perpetual' and (expiry_date is not null or grace_end_date is not null) then raise exception 'A perpetual licence cannot have expiry or grace dates' using errcode='22023'; end if;
-  if target_status<>'perpetual' and p.billing_cycle in ('monthly','annual') and expiry_date is null then raise exception 'This plan requires an expiry date' using errcode='22023'; end if;
-  if expiry_date is not null and (expiry_date::date<issue_date or (effective_activation is not null and expiry_date<=effective_activation)) then raise exception 'Expiry must be after issue and activation' using errcode='22023'; end if;
-  if target_status<>'perpetual' and p.billing_cycle in ('monthly','annual') and expiry_date>coalesce(effective_activation,issue_date::timestamptz)+make_interval(days=>default_term_days)+interval '1 day' then raise exception 'Expiry exceeds the selected plan term of % days',default_term_days using errcode='22023'; end if;
-  if grace_end_date is not null and (expiry_date is null or grace_end_date<expiry_date or grace_end_date>expiry_date+make_interval(days=>grace_days)) then raise exception 'Grace end must be between expiry and the plan grace limit' using errcode='22023'; end if;
-  if target_status='grace_period' and (expiry_date is null or grace_end_date is null or expiry_date>now() or grace_end_date<now()) then raise exception 'Grace-period status requires a past expiry and a current grace window' using errcode='22023'; end if;
-  if target_status='expired' and (expiry_date is null or expiry_date>now()) then raise exception 'Expired status requires an expiry date that has passed' using errcode='22023'; end if;
-  if target_status='active' and expiry_date is not null and expiry_date<=now() then raise exception 'Active status requires a future expiry date' using errcode='22023'; end if;
+  effective_activation:=case
+    when target_status in ('active','grace_period','perpetual') then coalesce(activation_date,now())
+    else activation_date
+  end;
+
+  if target_status in ('active','grace_period','perpetual','expired') and issue_date>current_date then
+    raise exception 'Issue date cannot be in the future for this status' using errcode='22023';
+  end if;
+  if effective_activation is not null and effective_activation::date<issue_date then
+    raise exception 'Activation date cannot precede issue date' using errcode='22023';
+  end if;
+  if target_status in ('active','grace_period','perpetual') and effective_activation>now() then
+    raise exception 'Activation date cannot be in the future for an active licence' using errcode='22023';
+  end if;
+  if target_status='perpetual' and not perpetual_allowed then
+    raise exception 'The selected plan does not permit perpetual licensing' using errcode='22023';
+  end if;
+  if target_status='perpetual' and (expiry_date is not null or grace_end_date is not null) then
+    raise exception 'A perpetual licence cannot have expiry or grace dates' using errcode='22023';
+  end if;
+  if target_status<>'perpetual' and p.billing_cycle in ('monthly','annual') and expiry_date is null then
+    raise exception 'This plan requires an expiry date' using errcode='22023';
+  end if;
+  if expiry_date is not null and (
+    expiry_date::date<issue_date or
+    (effective_activation is not null and expiry_date<=effective_activation)
+  ) then
+    raise exception 'Expiry must be after issue and activation' using errcode='22023';
+  end if;
+  if target_status<>'perpetual'
+     and p.billing_cycle in ('monthly','annual')
+     and expiry_date>coalesce(effective_activation,issue_date::timestamptz)+make_interval(days=>default_term_days)+interval '1 day' then
+    raise exception 'Expiry exceeds the selected plan term of % days',default_term_days using errcode='22023';
+  end if;
+  if grace_end_date is not null and (
+    expiry_date is null or grace_end_date<expiry_date or grace_end_date>expiry_date+make_interval(days=>grace_days)
+  ) then
+    raise exception 'Grace end must be between expiry and the plan grace limit' using errcode='22023';
+  end if;
+  if target_status='grace_period' and (
+    expiry_date is null or grace_end_date is null or expiry_date>now() or grace_end_date<now()
+  ) then
+    raise exception 'Grace-period status requires a past expiry and a current grace window' using errcode='22023';
+  end if;
+  if target_status='expired' and (expiry_date is null or expiry_date>now()) then
+    raise exception 'Expired status requires an expiry date that has passed' using errcode='22023';
+  end if;
+  if target_status='active' and expiry_date is not null and expiry_date<=now() then
+    raise exception 'Active status requires a future expiry date' using errcode='22023';
+  end if;
+
   preview:=public.platform_preview_license_change(target_plan_id);
-  if not coalesce((preview->>'compatible')::boolean,false) then raise exception 'LICENSE_DOWNGRADE_BLOCKED: Current usage exceeds the target plan: %',preview->'excess' using errcode='23514'; end if;
+  if not coalesce((preview->>'compatible')::boolean,false) then
+    raise exception 'LICENSE_DOWNGRADE_BLOCKED: Current usage exceeds the target plan: %',preview->'excess' using errcode='23514';
+  end if;
+
   old_json:=to_jsonb(cur);
   update app.tenant_licenses
-     set plan_id=p.id,status=target_status,
+     set plan_id=p.id,
+         status=target_status,
          starts_at=coalesce(effective_activation,issue_date::timestamptz),
          expires_at=case when target_status='perpetual' then null else expiry_date end,
          metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
-           'issued_on',issue_date,'activated_at',effective_activation,'grace_ends_at',case when target_status='perpetual' then null else grace_end_date end,
-           'license_reference',btrim(license_reference_text),'notes',coalesce(notes_text,''),'compliance_reason',coalesce(compliance_reason_text,'')
-         ),updated_at=now()
+           'issued_on',issue_date,
+           'activated_at',effective_activation,
+           'grace_ends_at',case when target_status='perpetual' then null else grace_end_date end,
+           'license_reference',btrim(license_reference_text),
+           'notes',coalesce(notes_text,''),
+           'compliance_reason',coalesce(compliance_reason_text,'')
+         ),
+         updated_at=now()
    where tenant_id=tenant
    returning to_jsonb(app.tenant_licenses) into new_json;
+
   insert into app.license_events(tenant_id,event_type,actor_id,metadata)
-  values(tenant,'license_updated',auth.uid(),jsonb_build_object('reason',coalesce(nullif(compliance_reason_text,''),'Platform licence updated'),'old_data',old_json,'new_data',new_json));
+  values(tenant,'license_updated',auth.uid(),jsonb_build_object(
+    'reason',coalesce(nullif(compliance_reason_text,''),'Platform licence updated'),
+    'old_data',old_json,'new_data',new_json
+  ));
+
   return public.get_platform_license_console();
 end
 $update_license$;
@@ -574,16 +706,137 @@ language plpgsql security definer
 set search_path to 'public','app','platform','pg_catalog'
 as $upsert_plan$
 declare
-  pid uuid:=public.safe_uuid(payload->>'id'); p platform.license_plans%rowtype; preview jsonb;
-  reason text:=btrim(coalesce(payload->>'reason','')); plan_code text:=lower(btrim(coalesce(payload->>'code','')));
-  plan_name text:=btrim(coalesce(payload->>'name','')); cycle text:=lower(btrim(coalesce(payload->>'billing_cycle','annual')));
-  support text:=lower(btrim(coalesce(payload->>'support_level','standard'))); flags jsonb:=coalesce(payload->'feature_flags','{}'::jsonb)-'platform_package_management';
-  term_days integer; grace_value integer; new_limits jsonb; next_revision integer;
+  pid uuid:=public.safe_uuid(payload->>'id');
+  p platform.license_plans%rowtype;
+  preview jsonb;
+  reason text:=btrim(coalesce(payload->>'reason',''));
+  plan_code text:=lower(btrim(coalesce(payload->>'code','')));
+  plan_name text:=btrim(coalesce(payload->>'name',''));
+  cycle text:=lower(btrim(coalesce(payload->>'billing_cycle','annual')));
+  support text:=lower(btrim(coalesce(payload->>'support_level','standard')));
+  flags jsonb:=coalesce(payload->'feature_flags','{}'::jsonb)-'platform_package_management';
+  term_days integer;
+  grace_value integer;
+  new_limits jsonb;
+  next_revision integer;
 begin
   perform public.require_platform_super_admin();
-  if jsonb_typeof(coalesce(payload,'{}'::jsonb))<>'object' then raise exception 'Plan payload must be a JSON object' using errcode='22023'; end if;
-  if length(reason)<5 then raise exception 'A plan revision reason is required' using errcode='22023'; end if;
-  if pid is null and plan_code!~'^[a-z][a-z0-9_]{2,39}
+
+  if jsonb_typeof(coalesce(payload,'{}'::jsonb))<>'object' then
+    raise exception 'Plan payload must be a JSON object' using errcode='22023';
+  end if;
+  if length(reason)<5 then
+    raise exception 'A plan revision reason is required' using errcode='22023';
+  end if;
+  if pid is null and plan_code!~'^[a-z][a-z0-9_]{2,39}$' then
+    raise exception 'Plan code must contain 3-40 lowercase letters, numbers, or underscores' using errcode='22023';
+  end if;
+  if length(plan_name)<3 or length(plan_name)>100 then
+    raise exception 'Plan name must contain 3-100 characters' using errcode='22023';
+  end if;
+  if cycle not in ('monthly','annual','custom') then
+    raise exception 'Billing cycle must be monthly, annual, or custom' using errcode='22023';
+  end if;
+  if support not in ('standard','priority','enterprise','custom') then
+    raise exception 'Support level must be standard, priority, enterprise, or custom' using errcode='22023';
+  end if;
+  if jsonb_typeof(flags)<>'object'
+     or exists(select 1 from jsonb_each(flags) x where jsonb_typeof(x.value)<>'boolean') then
+    raise exception 'Every plan feature flag must be a Boolean value' using errcode='22023';
+  end if;
+  if exists(
+    select 1 from jsonb_each(flags) x
+    where not exists(select 1 from platform.license_feature_catalog f where f.code=x.key)
+  ) then
+    raise exception 'Feature flags contain an unknown feature code' using errcode='22023';
+  end if;
+  if flags->'core_records' is distinct from 'true'::jsonb
+     or flags->'governance' is distinct from 'true'::jsonb then
+    raise exception 'Every active school plan must include core_records and governance' using errcode='22023';
+  end if;
+
+  term_days:=coalesce(nullif(payload->>'default_term_days','')::integer,365);
+  grace_value:=coalesce(nullif(payload->>'grace_days','')::integer,30);
+  if term_days not between 1 and 3660 or grace_value not between 0 and 365 then
+    raise exception 'Plan term or grace period is outside the permitted range' using errcode='22023';
+  end if;
+  if exists(
+    select 1
+    from (values
+      (nullif(payload->>'max_students','')::integer),
+      (nullif(payload->>'max_teachers','')::integer),
+      (nullif(payload->>'max_system_admins','')::integer),
+      (nullif(payload->>'max_guardians','')::integer),
+      (nullif(payload->>'max_storage_mb','')::integer)
+    ) v(n)
+    where n is not null and n<=0
+  ) then
+    raise exception 'Plan capacities must be positive or unlimited' using errcode='22023';
+  end if;
+
+  if pid is not null
+     and coalesce((payload->>'active')::boolean,true)=false
+     and exists(select 1 from app.tenant_licenses where plan_id=pid) then
+    raise exception 'A plan assigned to the current licence cannot be deactivated' using errcode='23503';
+  end if;
+
+  select coalesce(nullif(limits->>'revision','')::integer,0)+1
+    into next_revision
+  from platform.license_plans
+  where id=pid;
+  next_revision:=coalesce(next_revision,1);
+
+  new_limits:=jsonb_strip_nulls(jsonb_build_object(
+    'max_students',nullif(payload->>'max_students','')::integer,
+    'max_teachers',nullif(payload->>'max_teachers','')::integer,
+    'max_system_admins',nullif(payload->>'max_system_admins','')::integer,
+    'max_guardians',nullif(payload->>'max_guardians','')::integer,
+    'max_storage_mb',nullif(payload->>'max_storage_mb','')::integer,
+    'default_term_days',term_days,
+    'grace_days',grace_value,
+    'perpetual_allowed',coalesce((payload->>'perpetual_allowed')::boolean,false),
+    'support_level',support,
+    'revision',next_revision
+  ));
+
+  if pid is null then
+    insert into platform.license_plans(
+      code,name,description,billing_cycle,feature_flags,limits,active,sort_order
+    ) values(
+      plan_code,plan_name,coalesce(payload->>'description',''),cycle,flags,new_limits,
+      coalesce((payload->>'active')::boolean,true),100
+    )
+    returning * into p;
+  else
+    update platform.license_plans
+       set name=plan_name,
+           description=coalesce(payload->>'description',''),
+           billing_cycle=cycle,
+           feature_flags=flags,
+           limits=new_limits,
+           active=coalesce((payload->>'active')::boolean,active)
+     where id=pid
+     returning * into p;
+    if p.id is null then raise exception 'Licence plan not found' using errcode='22023'; end if;
+  end if;
+
+  if exists(select 1 from app.tenant_licenses l where l.plan_id=p.id) then
+    preview:=public.platform_preview_license_change(p.id);
+    if not coalesce((preview->>'compatible')::boolean,false) then
+      raise exception 'LICENSE_CAPACITY_REACHED: The revised plan is below current usage: %',preview->'excess' using errcode='23514';
+    end if;
+  end if;
+
+  insert into app.license_events(tenant_id,event_type,actor_id,metadata)
+  values(app.current_tenant_id(),'plan_revision_created',auth.uid(),jsonb_build_object(
+    'reason',reason,'plan',to_jsonb(p),'revision',next_revision
+  ));
+
+  return public.get_platform_license_console();
+end
+$upsert_plan$;
+
+revoke all on function public.get_school_license_capacity_console() from public;
 revoke all on function public.get_platform_license_console() from public;
 revoke all on function public.platform_set_license_override(jsonb,integer,integer,integer,integer,integer,text) from public;
 revoke all on function public.set_school_logo_reference(text) from public;
@@ -593,6 +846,7 @@ revoke all on function public.platform_set_distribution_authority(uuid,boolean,b
 revoke all on function public.platform_clear_license_history(text,text) from public;
 revoke all on function public.platform_update_license(uuid,text,date,timestamptz,timestamptz,timestamptz,text,text,text) from public;
 revoke all on function public.platform_upsert_license_plan(jsonb) from public;
+
 grant execute on function public.get_school_license_capacity_console() to edusentia_worker_runtime;
 grant execute on function public.get_platform_license_console() to edusentia_worker_runtime;
 grant execute on function public.platform_set_license_override(jsonb,integer,integer,integer,integer,integer,text) to edusentia_worker_runtime;
@@ -603,62 +857,6 @@ grant execute on function public.platform_set_distribution_authority(uuid,boolea
 grant execute on function public.platform_clear_license_history(text,text) to edusentia_worker_runtime;
 grant execute on function public.platform_update_license(uuid,text,date,timestamptz,timestamptz,timestamptz,text,text,text) to edusentia_worker_runtime;
 grant execute on function public.platform_upsert_license_plan(jsonb) to edusentia_worker_runtime;
-
-insert into app.schema_migrations(version)
-values ('0048_certified_provider_rpc_neon_r2')
-on conflict do nothing;
-update app.release_identity set schema_version='0048' where edition='Edusentia Enterprise Neon Edition';
-
-commit;
- then raise exception 'Plan code must contain 3-40 lowercase letters, numbers, or underscores' using errcode='22023'; end if;
-  if length(plan_name)<3 or length(plan_name)>100 then raise exception 'Plan name must contain 3-100 characters' using errcode='22023'; end if;
-  if cycle not in ('monthly','annual','custom') then raise exception 'Billing cycle must be monthly, annual, or custom' using errcode='22023'; end if;
-  if support not in ('standard','priority','enterprise','custom') then raise exception 'Support level must be standard, priority, enterprise, or custom' using errcode='22023'; end if;
-  if jsonb_typeof(flags)<>'object' or exists(select 1 from jsonb_each(flags) x where jsonb_typeof(x.value)<>'boolean') then raise exception 'Every plan feature flag must be a Boolean value' using errcode='22023'; end if;
-  if exists(select 1 from jsonb_each(flags) x where not exists(select 1 from platform.license_feature_catalog f where f.code=x.key)) then raise exception 'Feature flags contain an unknown feature code' using errcode='22023'; end if;
-  if flags->'core_records' is distinct from 'true'::jsonb or flags->'governance' is distinct from 'true'::jsonb then raise exception 'Every active school plan must include core_records and governance' using errcode='22023'; end if;
-  term_days:=coalesce(nullif(payload->>'default_term_days','')::integer,365);
-  grace_value:=coalesce(nullif(payload->>'grace_days','')::integer,30);
-  if term_days not between 1 and 3660 or grace_value not between 0 and 365 then raise exception 'Plan term or grace period is outside the permitted range' using errcode='22023'; end if;
-  if exists(select 1 from (values(nullif(payload->>'max_students','')::integer),(nullif(payload->>'max_teachers','')::integer),(nullif(payload->>'max_system_admins','')::integer),(nullif(payload->>'max_guardians','')::integer),(nullif(payload->>'max_storage_mb','')::integer)) v(n) where n is not null and n<=0) then raise exception 'Plan capacities must be positive or unlimited' using errcode='22023'; end if;
-  if pid is not null and coalesce((payload->>'active')::boolean,true)=false and exists(select 1 from app.tenant_licenses where plan_id=pid) then raise exception 'A plan assigned to the current licence cannot be deactivated' using errcode='23503'; end if;
-  select coalesce(nullif(limits->>'revision','')::integer,0)+1 into next_revision from platform.license_plans where id=pid;
-  next_revision:=coalesce(next_revision,1);
-  new_limits:=jsonb_strip_nulls(jsonb_build_object(
-    'max_students',nullif(payload->>'max_students','')::integer,'max_teachers',nullif(payload->>'max_teachers','')::integer,
-    'max_system_admins',nullif(payload->>'max_system_admins','')::integer,'max_guardians',nullif(payload->>'max_guardians','')::integer,
-    'max_storage_mb',nullif(payload->>'max_storage_mb','')::integer,'default_term_days',term_days,'grace_days',grace_value,
-    'perpetual_allowed',coalesce((payload->>'perpetual_allowed')::boolean,false),'support_level',support,'revision',next_revision
-  ));
-  if pid is null then
-    insert into platform.license_plans(code,name,description,billing_cycle,feature_flags,limits,active,sort_order)
-    values(plan_code,plan_name,coalesce(payload->>'description',''),cycle,flags,new_limits,coalesce((payload->>'active')::boolean,true),100)
-    returning * into p;
-  else
-    update platform.license_plans set name=plan_name,description=coalesce(payload->>'description',''),billing_cycle=cycle,
-      feature_flags=flags,limits=new_limits,active=coalesce((payload->>'active')::boolean,active)
-    where id=pid returning * into p;
-    if p.id is null then raise exception 'Licence plan not found' using errcode='22023'; end if;
-  end if;
-  if exists(select 1 from app.tenant_licenses l where l.plan_id=p.id) then
-    preview:=public.platform_preview_license_change(p.id);
-    if not coalesce((preview->>'compatible')::boolean,false) then raise exception 'LICENSE_CAPACITY_REACHED: The revised plan is below current usage: %',preview->'excess' using errcode='23514'; end if;
-  end if;
-  insert into app.license_events(tenant_id,event_type,actor_id,metadata)
-  values(app.current_tenant_id(),'plan_revision_created',auth.uid(),jsonb_build_object('reason',reason,'plan',to_jsonb(p),'revision',next_revision));
-  return public.get_platform_license_console();
-end
-$upsert_plan$;
-
-
-revoke all on function public.get_school_license_capacity_console() from public;
-revoke all on function public.get_platform_license_console() from public;
-revoke all on function public.platform_set_license_override(jsonb,integer,integer,integer,integer,integer,text) from public;
-revoke all on function public.set_school_logo_reference(text) from public;
-grant execute on function public.get_school_license_capacity_console() to edusentia_worker_runtime;
-grant execute on function public.get_platform_license_console() to edusentia_worker_runtime;
-grant execute on function public.platform_set_license_override(jsonb,integer,integer,integer,integer,integer,text) to edusentia_worker_runtime;
-grant execute on function public.set_school_logo_reference(text) to edusentia_worker_runtime;
 
 insert into app.schema_migrations(version)
 values ('0048_certified_provider_rpc_neon_r2')
