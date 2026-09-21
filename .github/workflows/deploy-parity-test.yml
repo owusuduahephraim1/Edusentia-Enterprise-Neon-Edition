@@ -11,6 +11,7 @@ on:
       - "worker/**"
       - ".github/workflows/deploy-parity-test.yml"
       - "scripts/parity-authenticated-e2e.mjs"
+      - "tests/contracts.test.mjs"
       - "database/provisioner-role.sql"
   workflow_dispatch:
 
