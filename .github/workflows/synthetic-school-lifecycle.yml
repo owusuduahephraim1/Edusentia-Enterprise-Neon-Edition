@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: synthetic-school-lifecycle-${{ github.ref }}
-  cancel-in-progress: true
+  group: edusentia-database-smoke-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   basic-and-shs:
