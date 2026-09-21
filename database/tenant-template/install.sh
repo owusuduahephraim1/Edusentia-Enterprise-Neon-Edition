@@ -56,8 +56,8 @@ test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identi
 test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
 test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
 
-psql "$MASTER_URL" -v ON_ERROR_STOP=1 <<SQL
-alter database "$TEMPLATE_DB" owner to edusentia_provisioner;
+psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "alter database \"$TEMPLATE_DB\" owner to edusentia_provisioner;"
+PGOPTIONS='-c role=edusentia_provisioner' psql "$MASTER_URL" -v ON_ERROR_STOP=1 <<SQL
 revoke connect on database "$TEMPLATE_DB" from public;
 grant connect on database "$TEMPLATE_DB" to edusentia_runtime;
 grant connect on database "$TEMPLATE_DB" to edusentia_worker_runtime;
