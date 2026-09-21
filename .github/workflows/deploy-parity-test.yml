@@ -117,7 +117,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select current_user")" = "edusentia_runtime"
-          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_worker_login','admin') and pg_has_role('edusentia_runtime','edusentia_provisioner_login','admin')")" = "t"
+          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select count(*)=2 from pg_auth_members m join pg_roles granted on granted.oid=m.roleid join pg_roles member_role on member_role.oid=m.member where member_role.rolname='edusentia_runtime' and granted.rolname in('edusentia_worker_login','edusentia_provisioner_login') and m.admin_option and not m.inherit_option and not m.set_option")" = "t"
 
           WORKER_LOGIN_PASSWORD="$(openssl rand -hex 32)"
           PROVISIONER_LOGIN_PASSWORD="$(openssl rand -hex 32)"
