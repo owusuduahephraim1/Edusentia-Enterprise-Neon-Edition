@@ -1,6 +1,6 @@
 import type { Env, SessionContext } from "./types";
-import type { TenantSql } from "./tenant-db";
-import { tenantTx } from "./db";
+import { tenantDb, type TenantSql } from "./tenant-db";
+import { db, tenantTx } from "./db";
 
 const SCHEMA_VERSION="7.4.0";
 const FORMAT_VERSION=2;
@@ -70,7 +70,7 @@ async function encryptionMaterial(env:Env){
   const source=configured||(env.TURNSTILE_TEST_MODE==="true"?`edusentia:parity-backup:v1:${env.SESSION_PEPPER}`:"");
   if(source.length<32)fail("BACKUP_ENCRYPTION_KEY must contain at least 32 characters","backup_encryption_unavailable",503);
   const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(source)));
-  const key=await crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+  const key=await crypto.subtle.importKey("raw",ownedBuffer(digest),{name:"AES-GCM"},false,["encrypt","decrypt"]);
   return {key,hint:(await sha256Bytes(digest)).slice(0,16)};
 }
 async function encryptPayload(bytes:Uint8Array,key:CryptoKey){
@@ -296,7 +296,7 @@ async function signTransfer(env:Env,payload:Record<string,unknown>){
 }
 async function verifyTransfer(env:Env,token:string){
   const [body,sig]=String(token||"").split(".");if(!body||!sig)return null;
-  const ok=await crypto.subtle.verify("HMAC",await transferKey(env),unb64url(sig),enc.encode(body));if(!ok)return null;
+  const ok=await crypto.subtle.verify("HMAC",await transferKey(env),ownedBuffer(unb64url(sig)),enc.encode(body));if(!ok)return null;
   const payload=JSON.parse(dec.decode(unb64url(body))) as any;
   if(!payload?.exp||Date.now()>Number(payload.exp)*1000)return null;
   return payload;
@@ -337,15 +337,116 @@ export async function backupDownloadGateway(env:Env,sql:TenantSql,ctx:SessionCon
   return {ok:true,backup_id:id,backup_key:backup.backup_key,created_at:backup.created_at,verification_status:backup.verification_status,expires_in_seconds:600,storage_provider:"cloudflare-r2",files};
 }
 
+async function purgeBackupCandidate(env:Env,sql:TenantSql,ctx:SessionContext,row:any){
+  const id=String(row?.id||""),key=String(row?.backup_key||"");if(!id||!key)return false;
+  const [purgedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_purge_backup(${id}::uuid) purged`]);
+  const purged=(purgedRows[0] as any)?.purged===true;
+  if(purged)await removeBackupPrefix(env,sql,ctx,`full/${key}`).catch(e=>console.error(JSON.stringify({level:"error",service:"backup-maintenance",backupId:id,message:String((e as any)?.message||e)})));
+  return purged;
+}
+
+export async function performStorageMaintenance(env:Env,sql:TenantSql,ctx:SessionContext){
+  if(ctx.role!=="system_admin"||ctx.assuranceLevel<2)fail("A verified System Administrator session is required","mfa_required",403);
+  const [staleRows,restoreRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select public.backup_worker_reconcile_stale_backups() count`,
+    txn`select public.backup_worker_reconcile_stale_restore_jobs() jobs`
+  ]);
+  const staleBackups=Number((staleRows[0] as any)?.count||0),restoreJobs=asArray<any>((restoreRows[0] as any)?.jobs);
+  let restoreUploadsRemoved=0;
+  for(const job of restoreJobs){
+    const path=String(job?.import_path||""),id=String(job?.id||"");if(!path||!id)continue;
+    const key=backupR2Key(ctx.tenantId,path);
+    await env.OBJECTS.delete(key).catch(()=>undefined);
+    await tenantTx<any[]>(sql,ctx,txn=>[
+      txn`select public.backup_worker_mark_r2_deleted(${ctx.tenantId}::uuid,${key})`,
+      txn`select public.backup_worker_clear_restore_import_path(${id}::uuid)`
+    ]).catch(()=>undefined);
+    restoreUploadsRemoved++;
+  }
+
+  const settings=await readTable(sql,ctx,"school_settings"),backups=await readTable(sql,ctx,"backup_exports");
+  const minimum=Math.min(365,Math.max(1,Number((settings[0] as any)?.backup_minimum_copies??2)||2));
+  const completed=backups.filter((x:any)=>x.status==="completed"&&x.backup_type==="full").sort((a:any,b:any)=>Date.parse(String(b.created_at||""))-Date.parse(String(a.created_at||"")));
+  const failed=backups.filter((x:any)=>x.status==="failed"&&x.backup_type==="full");
+  let failedPurged=0,expiredPurged=0;
+  for(const row of failed)if(await purgeBackupCandidate(env,sql,ctx,row))failedPurged++;
+  for(let i=minimum;i<completed.length;i++){
+    const row:any=completed[i],expires=Date.parse(String(row.expires_at||""));
+    if(Number.isFinite(expires)&&expires<Date.now()&&await purgeBackupCandidate(env,sql,ctx,row))expiredPurged++;
+  }
+  return {status:"completed",stale_backups_reconciled:staleBackups,failed_backups_purged:failedPurged,expired_backups_purged:expiredPurged,restore_uploads_removed:restoreUploadsRemoved,minimum_copies:minimum};
+}
+
+async function runRecoveryTest(env:Env,sql:TenantSql,ctx:SessionContext,backupId:string){
+  if(!/^[0-9a-f-]{36}$/i.test(backupId))fail("backup_id is required","validation_error",422);
+  const [startRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_recovery_test_begin(${backupId}::uuid,${ctx.userId}::uuid) run_id`]);
+  const runId=String((startRows[0] as any)?.run_id||"");if(!runId)fail("Recovery rehearsal record could not be created");
+  try{
+    const result=await verifyBackup(env,sql,ctx,backupId);
+    const notes="Recovery rehearsal passed. The encrypted database was reconstructed in memory and all protected R2 objects were decrypted and checksum-verified without overwriting production data.";
+    await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_recovery_test_complete(
+      ${runId}::uuid,'passed',${Number(result.checked_tables||0)}::integer,${Number(result.checked_rows||0)}::bigint,
+      ${Number(result.checked_objects||0)}::integer,${Number(result.checked_bytes||0)}::bigint,${notes},''
+    )`]);
+    return {...result,recovery_test_id:runId,recovery_status:"passed"};
+  }catch(e:any){
+    await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_recovery_test_complete(
+      ${runId}::uuid,'failed',0,0,0,0,'Recovery rehearsal failed before production data was changed.',${String(e?.message||e).slice(0,1900)}
+    )`]).catch(()=>undefined);
+    throw e;
+  }
+}
+
 export async function handleScheduledBackupCompat(env:Env,sql:TenantSql,ctx:SessionContext,body:Record<string,unknown>){
   if(ctx.role!=="system_admin")fail("School System Administrator access required","forbidden",403);
   const action=String(body.action||"create");
   if(action==="create")return performFullBackup(env,sql,ctx,"manual");
   if(action==="verify")return verifyBackup(env,sql,ctx,String(body.backup_id||""));
   if(action==="verify_latest")return verifyBackup(env,sql,ctx,null);
-  if(action==="recovery_test"){
-    const result=await verifyBackup(env,sql,ctx,String(body.backup_id||""));
-    return {...result,recovery_status:"passed"};
-  }
+  if(action==="recovery_test")return runRecoveryTest(env,sql,ctx,String(body.backup_id||""));
+  if(action==="storage_maintenance")return performStorageMaintenance(env,sql,ctx);
   fail("Unsupported backup action","unsupported_action",400);
+}
+
+export async function dispatchScheduledBackups(env:Env){
+  const master=db(env);
+  const tenants=await master`
+    select tenant_id,tenant_code,school_name,database_name
+      from platform.tenant_control
+     where status='active' and database_state='isolated_ready' and database_name is not null
+     order by tenant_code
+     limit 500
+  `;
+  let completed=0,failed=0,skipped=0;
+  for(let offset=0;offset<tenants.length;offset+=2){
+    const batch=(tenants as any[]).slice(offset,offset+2);
+    const results=await Promise.allSettled(batch.map(async tenant=>{
+      const sql=tenantDb(env,String(tenant.database_name));
+      const rows=await sql`select public.backup_worker_scheduled_context() context`;
+      const raw=(rows[0] as any)?.context;
+      if(!raw){skipped++;return;}
+      const ctx:SessionContext={
+        sessionId:"scheduled-backup",
+        userId:String(raw.user_id),
+        tenantId:String(raw.tenant_id),
+        tenantCode:String(raw.tenant_code),
+        tenantName:String(raw.tenant_name),
+        databaseName:String(tenant.database_name),
+        role:"system_admin",
+        assuranceLevel:2,
+        email:String(raw.email||""),
+        displayName:String(raw.display_name||"System Administrator")
+      };
+      await performStorageMaintenance(env,sql,ctx);
+      await performFullBackup(env,sql,ctx,"scheduled");
+      completed++;
+    }));
+    for(const result of results)if(result.status==="rejected"){
+      failed++;
+      console.error(JSON.stringify({level:"error",service:"scheduled-backup",message:String(result.reason?.message||result.reason)}));
+    }
+  }
+  const summary={completed,failed,skipped,tenants:tenants.length};
+  console.log(JSON.stringify({level:"info",service:"scheduled-backup",...summary}));
+  return summary;
 }
