@@ -2,6 +2,7 @@ import type { Env } from "./types";
 import { route } from "./routes";
 import { corsHeaders, error, withHeaders } from "./http";
 import { dispatchScheduledNotifications } from "./notification-dispatcher";
+import { dispatchScheduledBackups } from "./backup-service";
 export default { async fetch(request:Request,env:Env):Promise<Response>{
   const requestId=request.headers.get("x-request-id")||crypto.randomUUID();
   if(request.method==="OPTIONS") return withHeaders(new Response(null,{status:204,headers:corsHeaders(request,env)}),request,env);
@@ -16,7 +17,8 @@ export default { async fetch(request:Request,env:Env):Promise<Response>{
     return withHeaders(error(code,status===500?"An internal error occurred":String(e?.message||"Request failed"),status,requestId),request,env);
   }
 },
-  async scheduled(_controller:ScheduledController,env:Env,ctx:ExecutionContext):Promise<void>{
+  async scheduled(controller:ScheduledController,env:Env,ctx:ExecutionContext):Promise<void>{
     ctx.waitUntil(dispatchScheduledNotifications(env));
+    if(controller.cron==="0 2 * * *")ctx.waitUntil(dispatchScheduledBackups(env));
   }
 };
