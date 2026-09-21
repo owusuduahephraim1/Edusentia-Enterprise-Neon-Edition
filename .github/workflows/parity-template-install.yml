@@ -58,10 +58,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0025"
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from app.tenants where code='RPT-000001' and name='Reference Parity Test School'")" = "1"
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from app.schema_migrations")" = "25"
-          echo "Parity branch target confirmed."
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select current_database()")" = "$PARITY_MASTER_DATABASE"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname in ('$PARITY_TEMPLATE_DATABASE','$PARITY_TEST_TENANT_DATABASE','edusentia_ci_base')")" = "3"
+          echo "Parity branch infrastructure target confirmed."
 
       - name: Verify canonical provisioner role and certified tenant template
         shell: bash
