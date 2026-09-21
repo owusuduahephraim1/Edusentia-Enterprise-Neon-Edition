@@ -131,14 +131,12 @@ jobs:
             u.hostname=process.env.PARITY_POOLER_DATABASE_HOST;
             u.username="edusentia_worker_login";
             u.password=process.env.WORKER_LOGIN_PASSWORD;
-            u.searchParams.set("options","-c role=edusentia_worker_runtime");
             process.stdout.write(u.toString());
           ')"
           PARITY_PROVISIONER_DATABASE_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" PROVISIONER_LOGIN_PASSWORD="$PROVISIONER_LOGIN_PASSWORD" node --input-type=module -e '
             const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
             u.username="edusentia_provisioner_login";
             u.password=process.env.PROVISIONER_LOGIN_PASSWORD;
-            u.searchParams.set("options","-c role=edusentia_provisioner");
             process.stdout.write(u.toString());
           ')"
 
@@ -169,7 +167,6 @@ jobs:
             if(u.hostname!==process.env.PARITY_POOLER_DATABASE_HOST) throw new Error("Parity Worker URL must target the pooled non-primary parity endpoint");
             if(u.pathname!=="/edusentia") throw new Error("Parity Worker URL must target the edusentia control database");
             if(u.username!=="edusentia_worker_login") throw new Error("Parity Worker URL must use the rotatable Worker login wrapper");
-            if(u.searchParams.get("options")!=="-c role=edusentia_worker_runtime") throw new Error("Parity Worker URL must assume the fixed Worker runtime role");
             console.log("Dedicated parity Worker database route structure verified.");
           '
           node --input-type=module -e '
@@ -177,7 +174,6 @@ jobs:
             if(u.hostname!==process.env.PARITY_DATABASE_HOST) throw new Error("Parity provisioner URL does not target the direct non-primary parity endpoint");
             if(u.pathname!=="/edusentia") throw new Error("Parity provisioner URL must target the edusentia control database");
             if(u.username!=="edusentia_provisioner_login") throw new Error("Parity provisioner URL must use the rotatable provisioner login wrapper");
-            if(u.searchParams.get("options")!=="-c role=edusentia_provisioner") throw new Error("Parity provisioner URL must assume the fixed provisioner role");
           '
           (
             cd worker
@@ -186,11 +182,11 @@ jobs:
               const worker=neon(process.env.PARITY_WORKER_DATABASE_URL);
               const provisioner=neon(process.env.PARITY_PROVISIONER_DATABASE_URL);
               const [wr,pr]=await Promise.all([
-                worker`select session_user session_role,current_user role,current_database() database`,
-                provisioner`select session_user session_role,current_user role,current_database() database, r.rolcreatedb, r.rolsuper, r.rolcreaterole, r.rolbypassrls from pg_roles r where r.rolname=current_user`
+                worker`select session_user session_role,current_user role,current_database() database, pg_has_role(current_user,'edusentia_worker_runtime','member') inherited_runtime`,
+                provisioner`select session_user session_role,current_user role,current_database() database, r.rolcreatedb, r.rolsuper, r.rolcreaterole, r.rolbypassrls, pg_has_role(current_user,'edusentia_provisioner','member') inherited_provisioner from pg_roles r where r.rolname=current_user`
               ]);
-              if(wr[0]?.session_role!=="edusentia_worker_login"||wr[0]?.role!=="edusentia_worker_runtime"||wr[0]?.database!=="edusentia")throw new Error("Parity least-privilege database identity verification failed");
-              if(pr[0]?.session_role!=="edusentia_provisioner_login"||pr[0]?.role!=="edusentia_provisioner"||pr[0]?.database!=="edusentia"||!pr[0]?.rolcreatedb||pr[0]?.rolsuper||pr[0]?.rolcreaterole||pr[0]?.rolbypassrls)throw new Error("Parity provisioner database identity verification failed");
+              if(wr[0]?.session_role!=="edusentia_worker_login"||wr[0]?.role!=="edusentia_worker_login"||wr[0]?.database!=="edusentia"||!wr[0]?.inherited_runtime)throw new Error("Parity least-privilege database identity verification failed");
+              if(pr[0]?.session_role!=="edusentia_provisioner_login"||pr[0]?.role!=="edusentia_provisioner_login"||pr[0]?.database!=="edusentia"||!pr[0]?.rolcreatedb||pr[0]?.rolsuper||pr[0]?.rolcreaterole||pr[0]?.rolbypassrls||!pr[0]?.inherited_provisioner)throw new Error("Parity provisioner database identity verification failed");
               console.log("Dedicated parity Worker and provisioner database identities verified.");
             '
           )
