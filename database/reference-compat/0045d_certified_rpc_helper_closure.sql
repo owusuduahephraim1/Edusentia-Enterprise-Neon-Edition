@@ -3,6 +3,93 @@
 -- Helper functions are internal to certified RPCs and remain unavailable as browser RPC operations.
 begin;
 
+-- Certified prerequisite used by resolve_report_grading_guide; browser EXECUTE is granted later in 0046.
+CREATE OR REPLACE FUNCTION public.resolve_grading_guide(target_academic_year_id uuid, target_class_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare
+  v_year_scope uuid;
+  v_class_scope uuid;
+  v_subject_scope uuid;
+  v_year_name text;
+  v_class_name text;
+  v_subject_name text;
+  v_rows jsonb;
+  v_exceptions jsonb;
+  v_scope_label text;
+begin
+  if target_academic_year_id is null or target_class_id is null then
+    raise exception 'Academic year and class are required to resolve the grading guide';
+  end if;
+  select q.academic_year_id,q.class_id into v_year_scope,v_class_scope
+  from (
+    select g.academic_year_id,g.class_id,max(g.updated_at) latest_update
+    from public.grading_scales g
+    where g.deleted_at is null and g.subject_id is null
+      and (g.academic_year_id is null or g.academic_year_id=target_academic_year_id)
+      and (g.class_id is null or g.class_id=target_class_id)
+    group by g.academic_year_id,g.class_id
+  ) q
+  order by ((q.academic_year_id is not null)::integer+(q.class_id is not null)::integer) desc,
+           (q.class_id is not null)::integer desc,(q.academic_year_id is not null)::integer desc,q.latest_update desc
+  limit 1;
+  if not found then
+    select q.academic_year_id,q.class_id,q.subject_id into v_year_scope,v_class_scope,v_subject_scope
+    from (
+      select g.academic_year_id,g.class_id,g.subject_id,max(g.updated_at) latest_update
+      from public.grading_scales g
+      join public.class_subjects cs on cs.class_id=target_class_id and cs.subject_id=g.subject_id and cs.active
+      where g.deleted_at is null and g.subject_id is not null
+        and (g.academic_year_id is null or g.academic_year_id=target_academic_year_id)
+        and (g.class_id is null or g.class_id=target_class_id)
+      group by g.academic_year_id,g.class_id,g.subject_id
+    ) q
+    order by ((q.academic_year_id is not null)::integer+(q.class_id is not null)::integer) desc,
+             (q.class_id is not null)::integer desc,(q.academic_year_id is not null)::integer desc,q.latest_update desc
+    limit 1;
+    if not found then raise exception 'No grading scale is configured for the selected academic year and class'; end if;
+  end if;
+  select ay.name::text into v_year_name from public.academic_years ay where ay.id=target_academic_year_id;
+  select c.name::text into v_class_name from public.classes c where c.id=target_class_id;
+  select sb.name::text into v_subject_name from public.subjects sb where sb.id=v_subject_scope;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',g.id,'grade',g.grade,'min_mark',g.min_mark,'max_mark',g.max_mark,'remark',g.remark,
+    'interpretation',coalesce(nullif(btrim(g.interpretation),''),public.default_grading_interpretation(g.grade,g.remark)),
+    'grade_point',g.grade_point,'display_order',g.display_order
+  ) order by g.display_order,g.min_mark desc,g.max_mark desc),'[]'::jsonb)
+  into v_rows
+  from public.grading_scales g
+  where g.deleted_at is null and g.subject_id is not distinct from v_subject_scope
+    and g.academic_year_id is not distinct from v_year_scope and g.class_id is not distinct from v_class_scope;
+  if jsonb_array_length(v_rows)=0 then raise exception 'The selected grading guide contains no active ranges'; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('subject_id',q.subject_id,'subject_name',q.subject_name) order by q.subject_name),'[]'::jsonb)
+  into v_exceptions
+  from (
+    select distinct s.id subject_id,s.name::text subject_name
+    from public.class_subjects cs join public.subjects s on s.id=cs.subject_id
+    where cs.class_id=target_class_id and cs.active and s.active and s.deleted_at is null
+      and exists(select 1 from public.grading_scales gx where gx.deleted_at is null and gx.subject_id=s.id
+        and (gx.academic_year_id is null or gx.academic_year_id=target_academic_year_id)
+        and (gx.class_id is null or gx.class_id=target_class_id))
+  ) q;
+  v_scope_label:=concat_ws(' • ',
+    case when v_class_scope is not null then coalesce(v_class_name,'Selected class') else 'All classes' end,
+    case when v_year_scope is not null then coalesce(v_year_name,'Selected academic year') else 'All academic years' end,
+    case when v_subject_scope is not null then concat('Representative subject: ',coalesce(v_subject_name,'Configured subject')) else null end
+  );
+  return jsonb_build_object(
+    'version',1,'generated_at',now(),
+    'scope',jsonb_build_object('academic_year_id',v_year_scope,'class_id',v_class_scope,
+      'academic_year_name',case when v_year_scope is not null then v_year_name else null end,
+      'class_name',case when v_class_scope is not null then v_class_name else null end,'label',v_scope_label),
+    'rows',v_rows,'subject_exceptions',v_exceptions
+  );
+end $function$;
+revoke all on function public.resolve_grading_guide(uuid,uuid) from public;
+
 -- Second-level certified helper closure discovered from the complete 172-operation graph.
 create or replace function public.prospectus_class_range_label(value text)
 returns text
