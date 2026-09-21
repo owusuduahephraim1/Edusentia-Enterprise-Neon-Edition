@@ -7,6 +7,13 @@
 name: Reference Tenant Compatibility Smoke
 
 on:
+  push:
+    branches: [reference-parity-r42]
+    paths:
+      - "database/reference-compat/**"
+      - "database/tenant-template/**"
+      - ".github/workflows/reference-compat-smoke.yml"
+      - "scripts/reference-surface-inventory.mjs"
   workflow_dispatch:
 
 permissions:
