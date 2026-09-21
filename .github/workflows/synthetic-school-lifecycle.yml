@@ -1,3 +1,4 @@
+# final production candidate gate: r42-20260921-v2
 # final production candidate gate: r42-20260921
 # release revalidation: direct-role-isolated lifecycle
 name: Synthetic School Lifecycle Smoke
@@ -19,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: edusentia-database-smoke-${{ github.ref }}
+  group: edusentia-synthetic-school-lifecycle-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
