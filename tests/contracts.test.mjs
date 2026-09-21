@@ -264,6 +264,11 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/u\.username!=="edusentia_worker_runtime"/);
   assert.match(workflow,/select current_user role, current_database\(\) database/);
   assert.match(workflow,/Dedicated parity Worker database identity verified/);
-  assert.doesNotMatch(workflow,/alter\s+role|login\s+password/i);
+  assert.match(workflow,/PARITY_BOOTSTRAP_URL/);
+  assert.match(workflow,/schema_version from app\.release_identity/);
+  assert.match(workflow,/platform\.release_gate\(\)/);
+  assert.match(workflow,/alter role edusentia_worker_runtime login password/i);
+  assert.match(workflow,/WORKER_DB_PASSWORD/);
+  assert.doesNotMatch(workflow,/alter role (?!edusentia_worker_runtime)/i);
   assert.match(workflow,/edusentia-enterprise-neon-parity-test/);
 });
