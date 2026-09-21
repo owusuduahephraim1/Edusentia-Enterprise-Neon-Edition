@@ -10,6 +10,7 @@ on:
       - "database/runtime-role.sql"
       - "database/provisioner-role.sql"
       - "database/service-login-roles.sql"
+      - "database/reference-compat/**"
       - "database/tenant-template/**"
       - ".github/workflows/deploy-worker.yml"
   workflow_dispatch:
@@ -108,9 +109,10 @@ jobs:
           BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" bash database/install-master.sh
           psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/runtime-role.sql
           psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
+          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/service-login-roles.sql
           BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template" bash database/tenant-template/install.sh
 
-          # Wrapper roles are installed once by the controlled owner-level promotion bootstrap.
+          # Wrapper roles are created or revalidated by the controlled production bootstrap.
           # Runtime has ADMIN only on these password-bearing wrappers, never on the fixed service roles.
           test "$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*)=2 from pg_roles where rolname in('edusentia_worker_login','edusentia_provisioner_login') and rolcanlogin and not rolsuper and not rolcreaterole and not rolbypassrls")" = "t"
           test "$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*)=2 from pg_auth_members m join pg_roles granted on granted.oid=m.roleid join pg_roles member_role on member_role.oid=m.member where member_role.rolname='edusentia_runtime' and granted.rolname in('edusentia_worker_login','edusentia_provisioner_login') and m.admin_option and not m.inherit_option and not m.set_option")" = "t"

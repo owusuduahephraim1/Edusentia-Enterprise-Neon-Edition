@@ -508,6 +508,8 @@ test("production deployment separates direct admin and pooled Worker routes with
   assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" bash database\/install-master\.sh/);
   assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/runtime-role\.sql/);
   assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/provisioner-role\.sql/);
+  assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/service-login-roles\.sql/);
+  assert.match(w,/database\/reference-compat\/\*\*/);
   assert.doesNotMatch(w,/secrets\.PRODUCTION_WORKER_DATABASE_URL/);
   assert.doesNotMatch(w,/secrets\.PRODUCTION_PROVISIONER_DATABASE_URL/);
   assert.match(w,/edusentia_worker_login/);
@@ -517,7 +519,7 @@ test("production deployment separates direct admin and pooled Worker routes with
   assert.match(w,/worker\.hostname\.includes\("-pooler\."\)/);
   assert.match(w,/provisioner\.hostname!==admin\.hostname/);
   assert.match(w,/Production Worker and provisioner wrapper identities verified/);
-  assert.match(w,/controlled owner-level promotion bootstrap/);
+  assert.match(w,/controlled production bootstrap/);
   assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"/);
   assert.doesNotMatch(w,/alter role edusentia_worker_runtime login password/i);
   assert.doesNotMatch(w,/alter role edusentia_provisioner login password/i);
@@ -770,4 +772,30 @@ test("operational readiness RLS compatibility forces the certified public surfac
   for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
     assert.match(source,/0048g_certified_operational_rls_enforcement\.sql/);
   }
+});
+
+
+test("production release identity and cutover preflight are fail-closed",()=>{
+  const manifest=JSON.parse(read("release/manifest.json"));
+  const worker=read("worker/wrangler.jsonc");
+  const frontend=read("frontend/config.js");
+  const preflight=read(".github/workflows/production-cutover-preflight.yml");
+  assert.equal(manifest.status,"production-ready");
+  assert.equal(manifest.databaseSchemaVersion,"0025");
+  assert.equal(manifest.controlDatabaseSchemaVersion,"0025");
+  assert.equal(manifest.tenantCompatibilitySchemaVersion,"0048");
+  assert.equal(manifest.certifiedReleaseGate.referenceRpcCount,172);
+  assert.equal(manifest.certifiedReleaseGate.authenticatedModuleSurfaces,25);
+  assert.equal(manifest.certifiedReleaseGate.assuranceLevel,2);
+  assert.doesNotMatch(worker,/r42-parity/);
+  assert.doesNotMatch(frontend,/r42-parity/);
+  assert.match(preflight,/Production Cutover Preflight/);
+  assert.match(preflight,/EXPECTED_PRIMARY_DATABASE_HOST: ep-royal-smoke-b5db61rk\.c-7\.us-east-2\.aws\.neon\.tech/);
+  assert.match(preflight,/Production preflight refuses the parity Neon branch/);
+  assert.match(preflight,/NEON_DATABASE_URL \|\| secrets\.DATABASE_URL/);
+  assert.match(preflight,/CLOUDFLARE_API_TOKEN/);
+  assert.match(preflight,/BOOTSTRAP_ADMIN_SECRET/);
+  assert.match(preflight,/TURNSTILE_SECRET/);
+  assert.match(preflight,/select current_database\(\)/);
+  assert.match(preflight,/legacy lifecycle test databases present/);
 });

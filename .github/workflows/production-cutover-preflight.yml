@@ -1,0 +1,127 @@
+name: Production Cutover Preflight
+
+on:
+  push:
+    branches: [reference-parity-r42]
+    paths:
+      - ".github/workflows/production-cutover-preflight.yml"
+      - ".github/workflows/deploy-worker.yml"
+      - "worker/wrangler.jsonc"
+      - "frontend/config.js"
+      - "release/manifest.json"
+      - "database/service-login-roles.sql"
+      - "database/runtime-role.sql"
+      - "database/provisioner-role.sql"
+      - "database/tenant-template/**"
+      - "database/reference-compat/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-cutover-preflight
+  cancel-in-progress: true
+
+env:
+  EXPECTED_PRIMARY_DATABASE_HOST: ep-royal-smoke-b5db61rk.c-7.us-east-2.aws.neon.tech
+  PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4.c-7.us-east-2.aws.neon.tech
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Quality and release identity
+        run: |
+          set -euo pipefail
+          npm run check
+          npm test
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const manifest=JSON.parse(fs.readFileSync("release/manifest.json","utf8"));
+          const worker=fs.readFileSync("worker/wrangler.jsonc","utf8");
+          const frontend=fs.readFileSync("frontend/config.js","utf8");
+          if(manifest.status!=="production-ready") throw new Error("Release manifest is not production-ready");
+          if(manifest.databaseSchemaVersion!=="0025"||manifest.controlDatabaseSchemaVersion!=="0025") throw new Error("Control schema target must be 0025");
+          if(manifest.tenantCompatibilitySchemaVersion!=="0048") throw new Error("Tenant compatibility target must be 0048");
+          if(manifest.certifiedReleaseGate?.referenceRpcCount!==172||manifest.certifiedReleaseGate?.authenticatedModuleSurfaces!==25||manifest.certifiedReleaseGate?.assuranceLevel!==2) throw new Error("Certified release gate metadata is incomplete");
+          if(worker.includes("r42-parity")||frontend.includes("r42-parity")||JSON.stringify(manifest).includes("r42-parity")) throw new Error("Parity release identity leaked into production configuration");
+          if(!frontend.includes('environment: "production"')) throw new Error("Frontend is not marked production");
+          if(!frontend.includes("edusentia-enterprise-neon-api.edusentia-enterprise-neon.workers.dev")) throw new Error("Frontend production Worker route is not configured");
+          console.log("Production release identity verified.");
+          NODE
+
+      - id: secrets
+        name: Verify required deployment secrets are present
+        env:
+          BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          SESSION_PEPPER_VALUE: ${{ secrets.SESSION_PEPPER || secrets.AUTH_SECRET }}
+          BOOTSTRAP_ADMIN_SECRET_VALUE: ${{ secrets.BOOTSTRAP_ADMIN_SECRET }}
+          TURNSTILE_SECRET_VALUE: ${{ secrets.TURNSTILE_SECRET }}
+        run: |
+          set -euo pipefail
+          ready=true
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::CLOUDFLARE_API_TOKEN is missing"; ready=false; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::CLOUDFLARE_ACCOUNT_ID is missing"; ready=false; }
+          [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::NEON_DATABASE_URL or DATABASE_URL is missing"; ready=false; }
+          [ -n "$SESSION_PEPPER_VALUE" ] || { echo "::error::SESSION_PEPPER or AUTH_SECRET is missing"; ready=false; }
+          [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || { echo "::error::BOOTSTRAP_ADMIN_SECRET is missing"; ready=false; }
+          [ -n "$TURNSTILE_SECRET_VALUE" ] || { echo "::error::TURNSTILE_SECRET is missing"; ready=false; }
+          [ "$ready" = true ]
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Cloudflare production access
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: worker
+        run: |
+          set -euo pipefail
+          npx wrangler whoami >/tmp/wrangler-whoami.txt
+          echo "Cloudflare production credentials accepted."
+
+      - name: Verify primary Neon target without mutation
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+          ADMIN_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" EXPECTED_PRIMARY_DATABASE_HOST="$EXPECTED_PRIMARY_DATABASE_HOST" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            if(u.hostname===process.env.PARITY_DATABASE_HOST) throw new Error("Production preflight refuses the parity Neon branch");
+            if(u.hostname!==process.env.EXPECTED_PRIMARY_DATABASE_HOST) throw new Error("Production database secret does not target the certified primary Neon endpoint");
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$ADMIN_DATABASE_URL"
+
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select current_database()")" = "edusentia"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select current_user")" = "edusentia_runtime"
+          VERSION="$(psql "$ADMIN_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")"
+          case "$VERSION" in
+            0019|0020|0021|0022|0023|0024|0025) ;;
+            *) echo "::error::Unexpected primary control schema version $VERSION"; exit 1 ;;
+          esac
+
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select rolcreatedb and rolcreaterole and rolbypassrls from pg_roles where rolname=current_user")" = "t"
+          test "$(psql "$ADMIN_DATABASE_URL" -Atc "select not rolsuper and not rolcreatedb and not rolcreaterole and not rolbypassrls from pg_roles where rolname='edusentia_worker_runtime'")" = "t"
+
+          WRAPPER_STATE="$(psql "$ADMIN_DATABASE_URL" -Atc "select case when count(*)=0 then 'bootstrap' when count(*)=2 and bool_and(rolcanlogin and not rolsuper and not rolcreaterole and not rolbypassrls) then 'ready' else 'unsafe' end from pg_roles where rolname in('edusentia_worker_login','edusentia_provisioner_login')")"
+          test "$WRAPPER_STATE" != "unsafe"
+
+          STALE_TEST_DATABASES="$(psql "$ADMIN_DATABASE_URL" -Atc "select count(*) from pg_database where datname like 'edusentia_lifecycle_%'")"
+          echo "Primary Neon preflight passed at control schema $VERSION; service wrappers: $WRAPPER_STATE; legacy lifecycle test databases present: $STALE_TEST_DATABASES."

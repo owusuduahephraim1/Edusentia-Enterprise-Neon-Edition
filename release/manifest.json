@@ -1,20 +1,32 @@
 {
   "edition": "Edusentia Enterprise Neon Edition",
-  "version": "neon-v1.0.0-r42-parity",
+  "version": "neon-v1.0.0-r42",
   "sourceBaseline": "Edusentia-Enterprise-r42-v18-STABLE-20260919",
   "sourceCommit": "a181e18e0ca044db756193209b5b089cd03efb0f",
   "suppliedBlueprint": "Edusentia-Enterprise-r42-v17-STABLE-20260913",
   "databaseSchemaVersion": "0025",
+  "controlDatabaseSchemaVersion": "0025",
+  "tenantCompatibilitySchemaVersion": "0048",
   "apiVersion": "v1",
-  "frontendVersion": "neon-v1.0.0-r42-parity",
-  "workerVersion": "neon-v1.0.0-r42-parity",
+  "frontendVersion": "neon-v1.0.0-r42",
+  "workerVersion": "neon-v1.0.0-r42",
   "runtime": {
     "frontend": "GitHub Pages",
     "api": "Cloudflare Workers",
     "database": "Neon PostgreSQL",
     "storage": "Cloudflare R2"
   },
+  "certifiedReleaseGate": {
+    "referenceRpcCount": 172,
+    "authenticatedModuleSurfaces": 25,
+    "assuranceLevel": 2,
+    "r2RoundTripRequired": true,
+    "supportedInstitutionTypes": [
+      "basic_jhs",
+      "senior_high"
+    ]
+  },
   "customDomain": false,
   "supabaseRuntime": false,
-  "status": "foundation-build"
+  "status": "production-ready"
 }
