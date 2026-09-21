@@ -106,17 +106,9 @@ jobs:
           psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/runtime-role.sql
           psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
 
-          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-          set role edusentia_worker_runtime;
-          alter role edusentia_worker_runtime login password '$WORKER_DB_PASSWORD';
-          reset role;
-          SQL
+          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_worker_runtime; alter role edusentia_worker_runtime login password '$WORKER_DB_PASSWORD'; reset role;"
 
-          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-          set role edusentia_provisioner;
-          alter role edusentia_provisioner login password '$PROVISIONER_DB_PASSWORD';
-          reset role;
-          SQL
+          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner; alter role edusentia_provisioner login password '$PROVISIONER_DB_PASSWORD'; reset role;"
 
           BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template" bash database/tenant-template/install.sh
 
