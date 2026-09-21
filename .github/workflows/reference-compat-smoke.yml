@@ -152,6 +152,7 @@ jobs:
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044b_certified_report_transition_helpers.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0045_certified_report_pdf_integrity_r2.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0045b_neon_report_view_compat.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0046_certified_reference_rpc_bulk.sql
 
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"
@@ -181,7 +182,9 @@ jobs:
           test "$(psql "$URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef(p.oid))>0 and position('storage.objects' in pg_get_functiondef(p.oid))=0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='register_report_pdf' limit 1")" = "t"
           test "$(psql "$URL" -Atc "select count(*) from app.schema_migrations where version='0045b_neon_report_view_compat'")" = "1"
           test "$(psql "$URL" -Atc "select position('system_admin' in pg_get_functiondef(p.oid))>0 and position('principal' in pg_get_functiondef(p.oid))>0 and position('s.profile_id' in pg_get_functiondef(p.oid))=0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='can_view_report' limit 1")" = "t"
-          test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
+          test "$(psql "$URL" -Atc "select count(*) from app.schema_migrations where version='0046_certified_reference_rpc_bulk'")" = "1"
+          test "$(psql "$URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('academic_analytics','get_class_attendance_register','save_class_attendance','get_student_academic_history','get_school_prospectus_console','get_certificate_console','get_id_card_console','get_compliance_console','backup_dashboard','operations_dashboard','list_my_children_reports')")" = "11"
+          test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0046"
 
           echo "::group::Certified public function inventory"
           psql "$URL" -Atc "select p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and not exists (select 1 from pg_depend d join pg_extension e on e.oid=d.refobjid where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e') order by 1"
