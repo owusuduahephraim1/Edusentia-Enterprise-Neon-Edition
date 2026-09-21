@@ -7,6 +7,10 @@ on:
       - ".github/workflows/parity-template-install.yml"
       - "database/provisioner-role.sql"
       - "database/tenant-template/install.sh"
+      - "scripts/update-parity-tenant-template.sh"
+      - "scripts/update-parity-reference-tenant.sh"
+      - "scripts/promote-parity-tenant-runtime.sh"
+      - "scripts/reference-surface-inventory.mjs"
   workflow_dispatch:
 
 permissions:
