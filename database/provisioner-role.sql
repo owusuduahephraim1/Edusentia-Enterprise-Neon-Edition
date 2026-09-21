@@ -1,8 +1,10 @@
 -- Deployment-only tenant provisioner.
 -- PostgreSQL 16+ requires SET TRUE membership to transfer database ownership
--- or CREATE DATABASE while acting as the provisioner role. The deployment role
--- deliberately does not inherit provisioner privileges.
-set role neon_superuser;
+-- or CREATE DATABASE while acting as the provisioner role.
+-- Neon does not permit ordinary sessions to SET ROLE neon_superuser, so the
+-- deployment script never attempts that escalation. The membership is either
+-- already bootstrapped by the database owner/control plane or grantable by the
+-- current deployment role.
 
 do $$
 begin
@@ -12,10 +14,31 @@ begin
 end$$;
 
 alter role edusentia_provisioner nosuperuser createdb nocreaterole noinherit nobypassrls;
-grant edusentia_provisioner to edusentia_runtime
-  with admin false, inherit false, set true;
 
-reset role;
+do $provisioner_membership$
+begin
+  if not exists(
+    select 1
+    from pg_auth_members m
+    join pg_roles granted on granted.oid=m.roleid
+    join pg_roles member_role on member_role.oid=m.member
+    where granted.rolname='edusentia_provisioner'
+      and member_role.rolname='edusentia_runtime'
+      and m.set_option
+      and not m.inherit_option
+      and not m.admin_option
+  ) then
+    begin
+      execute 'grant edusentia_provisioner to edusentia_runtime with admin false, inherit false, set true';
+    exception
+      when insufficient_privilege then
+        raise exception 'edusentia_provisioner membership requires one-time database-owner bootstrap'
+          using errcode='42501',
+                hint='Grant edusentia_provisioner to edusentia_runtime with ADMIN FALSE, INHERIT FALSE, SET TRUE using the Neon database owner, then rerun deployment.';
+    end;
+  end if;
+end
+$provisioner_membership$;
 
 revoke all on schema app,authn,academics,finance,storage,audit,services,documents,ops,platform
   from edusentia_provisioner;
