@@ -104,6 +104,12 @@ SQL
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048f_certified_backup_health_metadata_compat.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048g_certified_operational_rls_enforcement.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048h_certified_release_identity.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048i_historical_provider_bridges.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048j_notification_worker_compat.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048k_mfa_recovery_compat.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql >/dev/null
+  psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql >/dev/null
   psql "$db_url" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql >/dev/null
 
   psql "$db_url" -v ON_ERROR_STOP=1 -v tenant_id="$tenant_id" -v tenant_code="$tenant_code" -v school_name="$school_name" -v institution_type="$institution_type" -v admin_email="$admin_email" <<'SQL' >/dev/null
@@ -124,7 +130,7 @@ SQL
   test "$(psql "$db_url" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
   test "$(psql "$db_url" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
   test "$(psql "$db_url" -Atc "select bool_and(c.relrowsecurity and c.relforcerowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname=any(array['terms','classes','profiles','students','subjects','enrollments','academic_years','class_subjects','grading_scales','guardian_links','student_reports','subject_results','student_guardians','user_class_access','assessment_schemes','assessment_components','assessment_score_entries','teachers','headteachers'])")" = "t"
-  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version in ('0048b_certified_certificate_settings_compat','0048c_certified_backup_settings_compat','0048d_certified_system_health_telemetry_compat','0048e_certified_system_health_notification_compat','0048f_certified_backup_health_metadata_compat','0048g_certified_operational_rls_enforcement','0048h_certified_release_identity')")" = "7"
+  test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version in ('0048b_certified_certificate_settings_compat','0048c_certified_backup_settings_compat','0048d_certified_system_health_telemetry_compat','0048e_certified_system_health_notification_compat','0048f_certified_backup_health_metadata_compat','0048g_certified_operational_rls_enforcement','0048h_certified_release_identity','0048i_historical_provider_bridges','0048j_notification_worker_compat','0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "13"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0037_certified_academic_configuration_mutations'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0038_certified_teacher_principal_crud'")" = "1"
   test "$(psql "$db_url" -Atc "select count(*) from app.schema_migrations where version='0039_certified_timetable_academic_alignment'")" = "1"
