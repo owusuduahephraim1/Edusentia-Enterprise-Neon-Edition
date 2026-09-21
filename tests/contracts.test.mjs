@@ -304,13 +304,13 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/u\.username="edusentia_worker_runtime"/);
   assert.match(workflow,/u\.username!=="edusentia_worker_runtime"/);
   assert.match(workflow,/select current_user role, current_database\(\) database/);
-  assert.match(workflow,/Dedicated parity Worker database identity verified/);
+  assert.match(workflow,/Dedicated parity Worker and provisioner database identities verified/);
   assert.match(workflow,/PARITY_BOOTSTRAP_URL/);
   assert.match(workflow,/schema_version from app\.release_identity/);
   assert.match(workflow,/platform\.release_gate\(\)/);
   assert.match(workflow,/alter role edusentia_worker_runtime login password/i);
   assert.match(workflow,/WORKER_DB_PASSWORD/);
-  assert.doesNotMatch(workflow,/alter role (?!edusentia_worker_runtime)/i);
+  assert.match(workflow,/alter role edusentia_provisioner login password/i);
   assert.match(workflow,/edusentia-enterprise-neon-parity-test/);
 });
 
@@ -331,4 +331,19 @@ test("authenticated parity E2E rotates credentials and exercises R2",()=>{
   assert.doesNotMatch(s,/Qa!|Nanak2026/i);
   assert.match(w,/Run authenticated parity end-to-end gate/);
   assert.match(w,/scripts\/parity-authenticated-e2e\.mjs/);
+});
+
+
+test("provisioner bootstrap preserves explicit SET-only membership",()=>{
+  const p=read("database/provisioner-role.sql");
+  const w=read(".github/workflows/deploy-parity-test.yml");
+  const t=read(".github/workflows/parity-template-install.yml");
+  assert.doesNotMatch(p,/set role neon_superuser/i);
+  assert.match(p,/grant edusentia_provisioner to edusentia_runtime with admin false, inherit false, set true/i);
+  assert.match(p,/one-time database-owner bootstrap/i);
+  assert.match(w,/PARITY_PROVISIONER_DATABASE_URL/);
+  assert.match(w,/PROVISIONER_DATABASE_URL/);
+  assert.match(w,/u\.username="edusentia_provisioner"/);
+  assert.match(t,/PGOPTIONS='-c role=edusentia_provisioner'/);
+  assert.match(t,/pg_get_userbyid\(datdba\)/);
 });
