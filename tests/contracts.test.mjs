@@ -303,7 +303,7 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/PARITY_DATABASE_HOST/);
   assert.match(workflow,/u\.hostname=process\.env\.PARITY_DATABASE_HOST/);
   assert.match(workflow,/u\.username!=="edusentia_worker_runtime"/);
-  assert.match(workflow,/u\.username!=="edusentia_worker_runtime"/);
+  assert.match(workflow,/u\.username!=="edusentia_provisioner"/);
   assert.match(workflow,/select current_user role, current_database\(\) database/);
   assert.match(workflow,/Dedicated parity Worker and provisioner database identities verified/);
   assert.match(workflow,/PARITY_BOOTSTRAP_URL/);
@@ -311,9 +311,10 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/select current_user/);
   assert.doesNotMatch(workflow,/schema_version from app\.release_identity/);
   assert.doesNotMatch(workflow,/platform\.release_gate\(\)/);
-  assert.match(workflow,/Missing PARITY_WORKER_DATABASE_URL/);
-  assert.match(workflow,/Missing PARITY_PROVISIONER_DATABASE_URL/);
-  assert.match(workflow,/Parity browser release gate requires complete isolated deployment credentials/);
+  assert.match(workflow,/deploy_ready=false/);
+  assert.match(workflow,/reusing the already deployed isolated parity Worker for authenticated release testing/);
+  assert.match(workflow,/Verify existing isolated parity deployment/);
+  assert.match(workflow,/Existing parity Worker health passed/);
   assert.match(workflow,/service-role credentials are managed outside CI/);
   assert.doesNotMatch(workflow,/alter role edusentia_worker_runtime login password/i);
   assert.doesNotMatch(workflow,/alter role edusentia_provisioner login password/i);
