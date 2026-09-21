@@ -62,6 +62,7 @@ apply_once "0045d_certified_rpc_helper_closure" "database/reference-compat/0045d
 apply_once "0046_certified_reference_rpc_bulk" "database/reference-compat/0046_certified_reference_rpc_bulk.sql"
 apply_once "0047_certified_identity_rpc_neon" "database/reference-compat/0047_certified_identity_rpc_neon.sql"
 apply_once "0048_certified_provider_rpc_neon_r2" "database/reference-compat/0048_certified_provider_rpc_neon_r2.sql"
+apply_once "0048b_certified_certificate_settings_compat" "database/reference-compat/0048b_certified_certificate_settings_compat.sql"
 
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 
