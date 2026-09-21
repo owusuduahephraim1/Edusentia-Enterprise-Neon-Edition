@@ -32,12 +32,14 @@ relock() {
   psql "$MASTER_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
 set role edusentia_provisioner;
 alter database "$TEMPLATE_DB" with allow_connections false;
+revoke connect on database "$TEMPLATE_DB" from edusentia_runtime;
 SQL
 }
 trap relock EXIT
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 <<SQL
 set role edusentia_provisioner;
+grant connect on database "$TEMPLATE_DB" to edusentia_runtime;
 alter database "$TEMPLATE_DB" with allow_connections true;
 SQL
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$TEMPLATE_DB' and pid<>pg_backend_pid();" >/dev/null
@@ -81,5 +83,6 @@ NODE
 relock
 trap - EXIT
 test "$(psql "$MASTER_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|f"
+test "$(psql "$MASTER_URL" -Atc "select has_database_privilege('edusentia_runtime','$TEMPLATE_DB','connect')")" = "f"
 
 echo "Parity tenant template updated incrementally through certified compatibility 0048 and relocked."
