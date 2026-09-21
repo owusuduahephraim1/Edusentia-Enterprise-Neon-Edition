@@ -1,3 +1,4 @@
+# final release revalidation: locked-ci-seed
 # refresh after tagged tenant delimiter repair
 # refresh after SQL quoting repair
 name: Reference Tenant Compatibility Smoke
