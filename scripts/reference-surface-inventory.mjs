@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { neon } from "@neondatabase/serverless";
+import { execFileSync } from "node:child_process";
 
 const source=fs.readFileSync(new URL("../reference/certified-ui/app.js",import.meta.url),"utf8");
 const rpcNames=new Set();
@@ -20,16 +20,19 @@ const base=explicit||String(process.env.PARITY_WORKER_DATABASE_URL||"");
 if(!base)throw new Error("TARGET_DATABASE_URL or PARITY_WORKER_DATABASE_URL is required");
 const url=new URL(base);
 if(!explicit)url.pathname="/edusentia_rpt_000001";
-const sql=neon(url.toString());
-const rows=await sql`
-  select distinct p.proname,
-         bool_or(has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')) can_execute
+const query=`
+  select p.proname||E'\\t'||case when bool_or(has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')) then 't' else 'f' end
     from pg_proc p
     join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='public'
    group by p.proname
    order by p.proname
 `;
+const output=execFileSync("psql",[url.toString(),"-At","-c",query],{encoding:"utf8",stdio:["ignore","pipe","pipe"]});
+const rows=output.trim()?output.trim().split(/\n/).map(line=>{
+  const [proname,canExecute]=line.split("\t");
+  return {proname,can_execute:canExecute==="t"};
+}):[];
 const installed=new Map(rows.map(row=>[String(row.proname),Boolean(row.can_execute)]));
 const present=expected.filter(name=>installed.has(name));
 const executable=expected.filter(name=>installed.get(name)===true);
