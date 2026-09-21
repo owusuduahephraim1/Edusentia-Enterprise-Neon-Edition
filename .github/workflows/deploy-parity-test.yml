@@ -231,21 +231,45 @@ jobs:
           trap - EXIT
           echo "Rotatable provisioner login wrapper can create and remove isolated tenant databases."
 
-      - name: Verify parity release-tail migrations before Worker promotion
+      - name: Apply parity release-tail migrations with temporary schema grant
         if: steps.config.outputs.secret_refresh_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          PARITY_TENANT_URL="$(PARITY_WORKER_DATABASE_URL="$PARITY_WORKER_DATABASE_URL" node --input-type=module -e '
-            const u=new URL(process.env.PARITY_WORKER_DATABASE_URL);
+          PARITY_TENANT_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
             u.pathname="/edusentia_rpt_000001";
             process.stdout.write(u.toString());
           ')"
           echo "::add-mask::$PARITY_TENANT_URL"
-          test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from app.schema_migrations where version in('0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "4"
+
+          cleanup_schema_grant(){
+            psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL' || true
+          set role edusentia_provisioner;
+          revoke create on schema public from edusentia_runtime;
+          SQL
+          }
+          trap cleanup_schema_grant EXIT
+
+          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          set role edusentia_provisioner;
+          grant create on schema public to edusentia_runtime;
+          reset role;
+          SQL
+
+          for migration in             0048i_historical_provider_bridges.sql             0048j_notification_worker_compat.sql             0048k_mfa_recovery_compat.sql             0048l_backup_worker_api.sql             0048m_restore_worker_helpers.sql             0048n_backup_maintenance_helpers.sql
+          do
+            psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f "database/reference-compat/$migration"
+          done
+
+          cleanup_schema_grant
+          trap - EXIT
+
+          test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from app.schema_migrations where version in('0048i_historical_provider_bridges','0048j_notification_worker_compat','0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "6"
           test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from information_schema.columns where table_schema='authn' and table_name='mfa_recovery_codes' and column_name in('generation_id','expires_at')")" = "2"
           test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('backup_worker_create','backup_worker_reconcile_auth_user','backup_worker_scheduled_context')")" = "3"
-          echo "Persistent parity tenant release-tail migrations are installed before Worker promotion."
+          test "$(psql "$PARITY_TENANT_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" = "f"
+          echo "Persistent parity tenant release tail installed; temporary schema CREATE privilege revoked."
 
       - name: Stage parity frontend configuration
         if: steps.config.outputs.code_deploy_ready == 'true'
