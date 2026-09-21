@@ -1,6 +1,44 @@
 -- Least-privilege Cloudflare Worker API for certified encrypted backup/restore on Neon + R2.
 begin;
 
+-- Complete the backup metadata surface on older parity/template databases. The
+-- live clean-room snapshot already has these columns, so every clause is safe
+-- to replay and preserves historical data.
+alter table public.backup_exports
+  add column if not exists backup_key text not null default '',
+  add column if not exists schema_version text not null default '7.4.0',
+  add column if not exists backup_type text not null default 'full',
+  add column if not exists manifest_path text not null default '',
+  add column if not exists database_path text not null default '',
+  add column if not exists storage_object_counts jsonb not null default '{}'::jsonb,
+  add column if not exists storage_bytes bigint not null default 0,
+  add column if not exists encrypted boolean not null default true,
+  add column if not exists encryption_key_hint text not null default '',
+  add column if not exists started_at timestamptz not null default now(),
+  add column if not exists completed_at timestamptz,
+  add column if not exists expires_at timestamptz,
+  add column if not exists error_message text not null default '',
+  add column if not exists verification_status text not null default 'not_tested',
+  add column if not exists verification_checked_at timestamptz,
+  add column if not exists verification_notes text not null default '',
+  add column if not exists offsite_copied_at timestamptz,
+  add column if not exists offsite_copy_note text not null default '';
+
+create table if not exists public.backup_storage_objects(
+  id uuid primary key default gen_random_uuid(),
+  backup_export_id uuid not null references public.backup_exports(id) on delete cascade,
+  source_bucket text not null,
+  source_path text not null,
+  backup_path text not null,
+  content_type text not null default 'application/octet-stream',
+  original_size bigint not null default 0,
+  encrypted_size bigint not null default 0,
+  checksum text not null default '',
+  status text not null default 'completed',
+  error_message text not null default '',
+  created_at timestamptz not null default now()
+);
+
 create or replace function public.backup_worker_read_table(
   target_table text,
   target_offset integer default 0,
