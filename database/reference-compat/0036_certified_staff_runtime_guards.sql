@@ -1,8 +1,10 @@
 -- Certified source project: zjbdsntgifnwmbhgmyxy
 -- Certified source commit baseline: a181e18e0ca044db756193209b5b089cd03efb0f
 -- Function bodies extracted read-only with pg_get_functiondef.
--- Neon adaptation: Supabase auth.users is represented by a narrow read-only
--- compatibility view over authn.users; Supabase Realtime broadcasting is not recreated.
+-- Neon adaptation: auth.users may be either the legacy clean-room compatibility
+-- table (required when the live historical schema has FKs to auth.users) or the
+-- narrow read-only compatibility view used by earlier Neon-only installs.
+-- Supabase Realtime broadcasting is not recreated.
 
 begin;
 
@@ -19,7 +21,7 @@ begin
       select id,email,raw_user_meta_data,raw_app_meta_data,created_at,updated_at
       from authn.users
     $view$;
-  elsif relkind<>'v' then
+  elsif relkind not in ('v','r') then
     raise exception 'auth.users compatibility relation has unexpected kind %',relkind;
   end if;
 end
