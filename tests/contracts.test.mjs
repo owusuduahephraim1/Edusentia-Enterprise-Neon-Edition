@@ -181,6 +181,21 @@ test("Certified report workflow privacy layer exposes only stable frontend repor
 });
 
 
+test("Certified report transition helpers match source and stay internal",()=>{
+  const m=read("database/reference-compat/0044b_certified_report_transition_helpers.sql");
+  const i=read("database/tenant-template/install.sh");
+  const s=read("database/synthetic-school-lifecycle-smoke.sh");
+  assert.match(m,/create or replace function public\.can_submit_report/i);
+  assert.match(m,/create or replace function public\.allowed_report_transitions/i);
+  assert.match(m,/public\.can_submit_report\(target_report_id\)/);
+  assert.match(m,/current_status='approved' and public\.can_publish_report/);
+  assert.match(m,/revoke all on function public\.can_submit_report\(uuid\) from edusentia_worker_runtime/i);
+  assert.match(m,/revoke all on function public\.allowed_report_transitions\(uuid\) from edusentia_worker_runtime/i);
+  assert.match(i,/0044b_certified_report_transition_helpers\.sql/);
+  assert.match(s,/0044b_certified_report_transition_helpers\.sql/);
+});
+
+
 test("Certified report assignment scope prerequisites stay internal before 0044",()=>{
   const m=read("database/reference-compat/0043b_certified_report_assignment_scope.sql");
   const i=read("database/tenant-template/install.sh");
