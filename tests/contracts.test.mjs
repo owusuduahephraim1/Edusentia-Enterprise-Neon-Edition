@@ -347,8 +347,9 @@ test("provisioner bootstrap preserves explicit SET-only membership",()=>{
   assert.match(w,/PARITY_PROVISIONER_DATABASE_URL/);
   assert.match(w,/PROVISIONER_DATABASE_URL/);
   assert.match(w,/u\.username="edusentia_provisioner"/);
-  assert.match(t,/set role edusentia_provisioner/);
+  assert.match(t,/select current_user/);
   assert.match(t,/pg_get_userbyid\(datdba\)/);
+  assert.match(t,/edusentia_provisioner/);
   assert.doesNotMatch(t,/PGOPTIONS=.*role=edusentia_provisioner/);
 });
 
@@ -358,8 +359,8 @@ test("tenant template handoff uses provisioner after ownership transfer",()=>{
   const w=read(".github/workflows/parity-template-install.yml");
   assert.match(i,/alter database \\"\$TEMPLATE_DB\\" owner to edusentia_provisioner/);
   assert.match(i,/set role edusentia_provisioner/);
-  assert.match(w,/alter database \\"\$PARITY_TEMPLATE_DATABASE\\" owner to edusentia_provisioner/);
-  assert.match(w,/set role edusentia_provisioner/);
+  assert.match(w,/pg_get_userbyid\(datdba\).*PARITY_TEMPLATE_DATABASE/s);
+  assert.doesNotMatch(w,/alter database \\"\$PARITY_TEMPLATE_DATABASE\\" owner to/);
 });
 
 
@@ -367,7 +368,6 @@ test("provisioner-owned template retains deployment-only public schema migration
   const i=read("database/tenant-template/install.sh");
   const w=read(".github/workflows/parity-template-install.yml");
   assert.match(i,/grant usage,create on schema public to edusentia_runtime/i);
-  assert.match(w,/grant usage,create on schema public to edusentia_runtime/i);
   assert.doesNotMatch(i,/grant .*schema public to edusentia_worker_runtime/i);
   assert.doesNotMatch(w,/grant usage,create on schema public to edusentia_worker_runtime/i);
 });
@@ -404,4 +404,19 @@ test("parity smoke databases clone the minimal pgcrypto CI base",()=>{
   assert.match(schema,/owner edusentia_provisioner template/);
   assert.match(compat,/owner edusentia_provisioner template/);
   assert.match(script,/owner edusentia_provisioner template/);
+});
+
+
+test("parity tenant infrastructure gate stays provisioner-only",()=>{
+  const w=read(".github/workflows/parity-template-install.yml");
+  assert.match(w,/Parity Tenant Infrastructure Verify/);
+  assert.match(w,/select current_user/);
+  assert.match(w,/edusentia_provisioner/);
+  assert.match(w,/not datallowconn/);
+  assert.match(w,/datistemplate and not datallowconn/);
+  assert.match(w,/has_database_privilege\('edusentia_worker_runtime'/);
+  assert.match(w,/create database .*owner edusentia_provisioner template/);
+  assert.doesNotMatch(w,/PARITY_WORKER_DATABASE_URL/);
+  assert.doesNotMatch(w,/0041b_neon_notification_recipient_compat\.sql/);
+  assert.doesNotMatch(w,/platform_initialize_tenant/);
 });
