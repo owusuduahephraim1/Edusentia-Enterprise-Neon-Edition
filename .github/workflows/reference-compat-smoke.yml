@@ -37,7 +37,7 @@ jobs:
   certified-core:
     runs-on: ubuntu-latest
     env:
-      BOOTSTRAP_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,7 +81,7 @@ jobs:
           trap cleanup EXIT
           cleanup
           if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
-            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$DB\" template \"$CI_TEMPLATE_DATABASE\";"
+            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$DB\" owner edusentia_provisioner template \"$CI_TEMPLATE_DATABASE\";"
           else
             psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$DB\";"
           fi
