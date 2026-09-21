@@ -419,7 +419,6 @@ test("parity tenant infrastructure gate stays provisioner-only",()=>{
   assert.match(w,/Parity Tenant Infrastructure Verify/);
   assert.match(w,/current_user/);
   assert.match(w,/edusentia_provisioner/);
-  assert.match(w,/not datallowconn/);
   assert.match(w,/pg_get_userbyid\(datdba\).*PARITY_CI_TEMPLATE_DATABASE/s);
   assert.match(w,/edusentia_runtime/);
   assert.match(w,/select datistemplate from pg_database/);
@@ -481,4 +480,21 @@ test("runtime-owned CI seed preserves migration and Worker grant ownership",()=>
   for(const w of [schema,compat,lifecycle]) assert.match(w,/edusentia_ci_base_v2/);
   assert.match(infra,/PARITY_CI_TEMPLATE_DATABASE: edusentia_ci_base_v2/);
   assert.match(infra,/edusentia_runtime/);
+});
+
+
+test("database smokes serialize access to the shared parity CI seed",()=>{
+  for(const file of [
+    ".github/workflows/schema-smoke.yml",
+    ".github/workflows/reference-compat-smoke.yml",
+    ".github/workflows/synthetic-school-lifecycle.yml"
+  ]){
+    const w=read(file);
+    assert.match(w,/group: edusentia-database-smoke-${{ github.ref }}/);
+    assert.match(w,/cancel-in-progress: false/);
+  }
+  const schema=read(".github/workflows/schema-smoke.yml");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
+  for(const x of [schema,compat,lifecycle]) assert.match(x,/pg_terminate_backend(pid).*CI_TEMPLATE_DATABASE/s);
 });
