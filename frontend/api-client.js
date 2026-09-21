@@ -70,6 +70,8 @@
     adminUserManagement:(action,payload={})=>post("/api/compat/functions/admin-user-management",{action,payload}),
     directoryUserManagement:(action,payload={})=>post("/api/compat/functions/directory-user-management",{action,payload}),
     tenantAuthRecovery:(action,payload={})=>post("/api/compat/functions/tenant-auth-recovery",{action,...payload}),
+    scheduledBackup:(action,payload={})=>post("/api/compat/functions/scheduled-backup",{action,...payload}),
+    backupDownloadGateway:(backupId)=>post("/api/compat/functions/backup-download-gateway",{backup_id:backupId}),
     licenseStatus:()=>request("/api/license/status"),
     activateLicense:(code)=>post("/api/license/activate",{code}),
     mfaFactors:()=>request("/api/security/mfa/factors"),

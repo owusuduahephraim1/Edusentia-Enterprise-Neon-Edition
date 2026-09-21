@@ -15,6 +15,10 @@ export interface Env {
   PRODUCT_VERSION?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  BACKUP_ENCRYPTION_KEY?: string;
+  BACKUP_SIGNING_SECRET?: string;
+  BACKUP_MAX_OBJECTS?: string;
+  BACKUP_MAX_BYTES?: string;
   OBJECTS: R2Bucket;
 }
 export type SessionContext = {sessionId:string; userId:string; tenantId:string; tenantCode:string; tenantName:string; databaseName:string; role:string; assuranceLevel:number; email:string; displayName:string};
