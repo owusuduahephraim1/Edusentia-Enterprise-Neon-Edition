@@ -134,9 +134,10 @@ jobs:
           test "$(psql "$ADMIN_DATABASE_URL" -Atc "select current_user")" = "edusentia_runtime"
 
           BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" bash database/install-master.sh
-          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/runtime-role.sql
-          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
-          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/service-login-roles.sql
+
+          # Owner-only role grants are established once by production-owner-bootstrap.sh.
+          # Production deployment runs as edusentia_runtime and verifies those roles below
+          # instead of replaying owner-only GRANT statements.
           BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template" bash database/tenant-template/install.sh
 
           # Wrapper roles are created or revalidated by the controlled production bootstrap.
