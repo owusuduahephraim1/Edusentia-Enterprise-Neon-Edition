@@ -506,9 +506,11 @@ test("production deployment separates direct admin and pooled Worker routes with
   assert.match(w,/ADMIN_DATABASE_URL/);
   assert.match(w,/u\.hostname=u\.hostname\.replace\("-pooler\.","\."\)/);
   assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" bash database\/install-master\.sh/);
-  assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/runtime-role\.sql/);
-  assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/provisioner-role\.sql/);
-  assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/service-login-roles\.sql/);
+  assert.doesNotMatch(w,/psql "\$ADMIN_DATABASE_URL".*database\/runtime-role\.sql/);
+  assert.doesNotMatch(w,/psql "\$ADMIN_DATABASE_URL".*database\/provisioner-role\.sql/);
+  assert.doesNotMatch(w,/psql "\$ADMIN_DATABASE_URL".*database\/service-login-roles\.sql/);
+  assert.match(w,/Owner-only role grants are established once by production-owner-bootstrap\.sh/);
+  assert.match(w,/Production owner bootstrap readiness verified before code deployment/);
   assert.match(w,/database\/reference-compat\/\*\*/);
   assert.doesNotMatch(w,/secrets\.PRODUCTION_WORKER_DATABASE_URL/);
   assert.doesNotMatch(w,/secrets\.PRODUCTION_PROVISIONER_DATABASE_URL/);
