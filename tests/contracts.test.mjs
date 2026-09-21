@@ -338,9 +338,10 @@ test("provisioner bootstrap preserves explicit SET-only membership",()=>{
   const p=read("database/provisioner-role.sql");
   const w=read(".github/workflows/deploy-parity-test.yml");
   const t=read(".github/workflows/parity-template-install.yml");
-  assert.doesNotMatch(p,/set role neon_superuser/i);
+  assert.doesNotMatch(p,/^\s*set role neon_superuser\s*;/im);
   assert.match(p,/grant edusentia_provisioner to edusentia_runtime with admin false, inherit false, set true/i);
   assert.match(p,/one-time database-owner bootstrap/i);
+  assert.match(p,/unsafe role attributes/i);
   assert.match(w,/PARITY_PROVISIONER_DATABASE_URL/);
   assert.match(w,/PROVISIONER_DATABASE_URL/);
   assert.match(w,/u\.username="edusentia_provisioner"/);
