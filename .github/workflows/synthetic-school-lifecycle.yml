@@ -1,3 +1,4 @@
+# release revalidation: direct-role-isolated lifecycle
 name: Synthetic School Lifecycle Smoke
 
 on:
