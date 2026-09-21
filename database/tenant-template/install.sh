@@ -48,6 +48,7 @@ psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0043b_certi
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044_certified_report_workflow_privacy_integrity.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044b_certified_report_transition_helpers.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0045_certified_report_pdf_integrity_r2.sql
+psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0045b_neon_report_view_compat.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
 
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
