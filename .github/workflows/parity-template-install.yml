@@ -3,7 +3,7 @@ name: Parity Tenant Template Install
 on:
   push:
     branches: [reference-parity-r42]
-    paths: [".github/workflows/parity-template-install.yml"]
+    paths: [".github/workflows/parity-template-install.yml", "database/reference-compat/0044b_certified_report_transition_helpers.sql"]
   workflow_dispatch:
 
 permissions:
@@ -62,7 +62,7 @@ jobs:
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from app.schema_migrations")" = "25"
           echo "Parity branch target confirmed."
 
-      - name: Verify and lock certified tenant template
+      - name: Apply certified report transition helper hotfix and verify template
         shell: bash
         run: |
           set -euo pipefail
@@ -78,9 +78,10 @@ jobs:
             process.stdout.write(u.toString());
           ')"
           echo "::add-mask::$TEMPLATE_URL"
+          psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044b_certified_report_transition_helpers.sql
           test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
           test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
-          test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations")" = "37"
+          test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations")" = "38"
           test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
           test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
 
@@ -108,6 +109,9 @@ jobs:
             process.stdout.write(u.toString());
           ')"
           echo "::add-mask::$TENANT_URL"
+
+          psql "$TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044b_certified_report_transition_helpers.sql
+          test "$(psql "$TENANT_URL" -Atc "select count(*) from app.schema_migrations where version='0044b_certified_report_transition_helpers'")" = "1"
 
           if [ "$(psql "$TENANT_URL" -Atc "select count(*) from app.tenants where id='fff24cf5-ce88-4107-af80-eff8bba44d8c'::uuid")" = "0" ]; then
             psql "$TENANT_URL" -v ON_ERROR_STOP=1 -c "select app.platform_initialize_tenant(
