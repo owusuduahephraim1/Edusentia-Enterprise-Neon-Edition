@@ -3,3 +3,5 @@ APP_ORIGIN=https://owusuduahephraim1.github.io
 SESSION_PEPPER=replace-with-32-or-more-random-bytes
 BOOTSTRAP_ADMIN_SECRET=replace-with-one-time-bootstrap-secret
 TURNSTILE_SECRET=
+RESEND_API_KEY=
+EMAIL_FROM=

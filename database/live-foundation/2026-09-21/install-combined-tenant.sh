@@ -61,6 +61,7 @@ psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-comp
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0048g_certified_operational_rls_enforcement.sql"
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0048h_certified_release_identity.sql"
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0048i_historical_provider_bridges.sql"
+psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0048j_notification_worker_compat.sql"
 
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/tenant-template/runtime-role.sql"
 

@@ -3,7 +3,9 @@
   "name": "edusentia-enterprise-neon-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-20",
-  "observability": {"enabled": true},
+  "observability": {
+    "enabled": true
+  },
   "vars": {
     "APP_ORIGIN": "https://owusuduahephraim1.github.io",
     "APP_BASE_PATH": "/Edusentia-Enterprise-Neon-Edition",
@@ -12,5 +14,15 @@
     "PRODUCT_VERSION": "neon-v1.0.0-r42",
     "TENANT_TEMPLATE_DATABASE": "edusentia_tenant_template"
   },
-  "r2_buckets": [{"binding":"OBJECTS","bucket_name":"edusentia-enterprise-neon"}]
+  "r2_buckets": [
+    {
+      "binding": "OBJECTS",
+      "bucket_name": "edusentia-enterprise-neon"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  }
 }

@@ -13,6 +13,8 @@ export interface Env {
   PLATFORM_SESSION_COOKIE_NAME?: string;
   SESSION_TTL_SECONDS?: string;
   PRODUCT_VERSION?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
   OBJECTS: R2Bucket;
 }
 export type SessionContext = {sessionId:string; userId:string; tenantId:string; tenantCode:string; tenantName:string; databaseName:string; role:string; assuranceLevel:number; email:string; displayName:string};
