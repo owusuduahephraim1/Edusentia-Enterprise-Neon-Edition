@@ -61,7 +61,7 @@ apply_once "0048c_certified_backup_settings_compat" "database/reference-compat/0
 apply_once "0048d_certified_system_health_telemetry_compat" "database/reference-compat/0048d_certified_system_health_telemetry_compat.sql"
 apply_once "0048e_certified_system_health_notification_compat" "database/reference-compat/0048e_certified_system_health_notification_compat.sql"
 
-SYSTEM_HEALTH_MISSING_COLUMNS="$(psql "$DATABASE_URL" -X -qAt <<'SQL'
+SYSTEM_HEALTH_MISSING_COLUMNS="$(psql "$TARGET_URL" -X -qAt <<'SQL'
 with required(table_name,column_name) as (
   values
     ('backup_exports','completed_at'),('backup_exports','created_at'),('backup_exports','status'),
