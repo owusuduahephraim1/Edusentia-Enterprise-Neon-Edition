@@ -310,9 +310,13 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/select current_user/);
   assert.doesNotMatch(workflow,/schema_version from app\.release_identity/);
   assert.doesNotMatch(workflow,/platform\.release_gate\(\)/);
+  assert.match(workflow,/set role edusentia_worker_runtime/i);
   assert.match(workflow,/alter role edusentia_worker_runtime login password/i);
   assert.match(workflow,/WORKER_DB_PASSWORD/);
+  assert.match(workflow,/set role edusentia_provisioner/i);
   assert.match(workflow,/alter role edusentia_provisioner login password/i);
+  assert.match(workflow,/ep-shy-meadow-b5e4d9e4\.c-7\.us-east-2\.aws\.neon\.tech/);
+  assert.doesNotMatch(workflow,/ep-shy-meadow-b5e4d9e4-pooler/);
   assert.match(workflow,/edusentia-enterprise-neon-parity-test/);
 });
 
@@ -402,8 +406,11 @@ test("parity smoke databases clone the minimal pgcrypto CI base",()=>{
     assert.match(w,/secrets\.NEON_DATABASE_URL \|\| secrets\.DATABASE_URL/);
   }
   assert.match(schema,/owner edusentia_provisioner template/);
+  assert.match(schema,/grant connect,create,temp on database .* to edusentia_runtime/i);
   assert.match(compat,/owner edusentia_provisioner template/);
+  assert.match(compat,/grant connect,create,temp on database .* to edusentia_runtime/i);
   assert.match(script,/owner edusentia_provisioner template/);
+  assert.match(script,/grant connect,create,temp on database .* to edusentia_runtime/i);
 });
 
 
@@ -419,4 +426,31 @@ test("parity tenant infrastructure gate stays provisioner-only",()=>{
   assert.doesNotMatch(w,/PARITY_WORKER_DATABASE_URL/);
   assert.doesNotMatch(w,/0041b_neon_notification_recipient_compat\.sql/);
   assert.doesNotMatch(w,/platform_initialize_tenant/);
+});
+
+
+test("deployment runtime assumes Worker role with SET-only membership",()=>{
+  const r=read("database/runtime-role.sql");
+  const d=read(".github/workflows/deploy-parity-test.yml");
+  const infra=read(".github/workflows/parity-template-install.yml");
+  assert.match(r,/grant edusentia_worker_runtime to edusentia_runtime with admin false, inherit false, set true/i);
+  assert.match(r,/one-time database-owner bootstrap/i);
+  assert.match(d,/set role edusentia_worker_runtime/i);
+  assert.match(d,/set role edusentia_provisioner/i);
+  assert.match(infra,/pg_has_role\('edusentia_runtime','edusentia_worker_runtime','set'\)/);
+  assert.match(infra,/not exists\(select 1 from pg_auth_members/s);
+});
+
+test("parity administrative workflows avoid pooled Neon sessions",()=>{
+  for(const file of [
+    ".github/workflows/schema-smoke.yml",
+    ".github/workflows/reference-compat-smoke.yml",
+    ".github/workflows/synthetic-school-lifecycle.yml",
+    ".github/workflows/parity-template-install.yml",
+    ".github/workflows/deploy-parity-test.yml"
+  ]){
+    const w=read(file);
+    assert.match(w,/ep-shy-meadow-b5e4d9e4\.c-7\.us-east-2\.aws\.neon\.tech/);
+    assert.doesNotMatch(w,/ep-shy-meadow-b5e4d9e4-pooler/);
+  }
 });
