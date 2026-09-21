@@ -501,23 +501,26 @@ test("parity administrative workflows keep bootstrap operations on direct Neon s
 });
 
 
-test("production deployment separates direct admin and pooled Worker database URLs",()=>{
+test("production deployment separates direct admin and pooled Worker routes with rotatable wrappers",()=>{
   const w=read(".github/workflows/deploy-worker.yml");
   assert.match(w,/ADMIN_DATABASE_URL/);
   assert.match(w,/u\.hostname=u\.hostname\.replace\("-pooler\.","\."\)/);
   assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" bash database\/install-master\.sh/);
   assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/runtime-role\.sql/);
   assert.match(w,/psql "\$ADMIN_DATABASE_URL".*database\/provisioner-role\.sql/);
-  assert.match(w,/secrets\.PRODUCTION_WORKER_DATABASE_URL/);
-  assert.match(w,/secrets\.PRODUCTION_PROVISIONER_DATABASE_URL/);
+  assert.doesNotMatch(w,/secrets\.PRODUCTION_WORKER_DATABASE_URL/);
+  assert.doesNotMatch(w,/secrets\.PRODUCTION_PROVISIONER_DATABASE_URL/);
+  assert.match(w,/edusentia_worker_login/);
+  assert.match(w,/edusentia_provisioner_login/);
+  assert.match(w,/WORKER_LOGIN_PASSWORD="\$\(openssl rand -hex 32\)"/);
+  assert.match(w,/PROVISIONER_LOGIN_PASSWORD="\$\(openssl rand -hex 32\)"/);
   assert.match(w,/worker\.hostname\.includes\("-pooler\."\)/);
   assert.match(w,/provisioner\.hostname!==admin\.hostname/);
-  assert.match(w,/Production Worker and provisioner database identities verified/);
-  assert.match(w,/Production deployment requires complete dedicated service credentials/);
+  assert.match(w,/Production Worker and provisioner wrapper identities verified/);
+  assert.match(w,/controlled owner-level promotion bootstrap/);
   assert.match(w,/BOOTSTRAP_DATABASE_URL="\$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"/);
   assert.doesNotMatch(w,/alter role edusentia_worker_runtime login password/i);
   assert.doesNotMatch(w,/alter role edusentia_provisioner login password/i);
-  assert.doesNotMatch(w,/WORKER_DB_PASSWORD|PROVISIONER_DB_PASSWORD/);
 });
 
 
