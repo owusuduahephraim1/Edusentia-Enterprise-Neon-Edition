@@ -56,6 +56,7 @@ jobs:
           ')"
           echo "::add-mask::$PARITY_DATABASE_URL"
           echo "BOOTSTRAP_DATABASE_URL=$PARITY_DATABASE_URL" >> "$GITHUB_ENV"
+          echo "CI_TEMPLATE_DATABASE=edusentia_ci_base" >> "$GITHUB_ENV"
           PARITY_DB_NAME="$(psql "$PARITY_DATABASE_URL" -Atc "select current_database()")"
           PARITY_DB_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")"
           test "$PARITY_DB_NAME" = "edusentia"
