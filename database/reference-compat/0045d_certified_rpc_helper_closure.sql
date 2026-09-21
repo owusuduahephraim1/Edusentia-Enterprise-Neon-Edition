@@ -3,6 +3,119 @@
 -- Helper functions are internal to certified RPCs and remain unavailable as browser RPC operations.
 begin;
 
+-- Second-level certified helper closure discovered from the complete 172-operation graph.
+create or replace function public.prospectus_class_range_label(value text)
+returns text
+language sql
+immutable
+set search_path to 'public','extensions'
+as $prospectus_range$
+  select case value
+    when 'early_years' then 'Creche to Kindergarten'
+    when 'basic_1_6' then 'Basic 1 to Basic 6'
+    when 'basic_7_9' then 'Basic 7 to Basic 9'
+    else value
+  end
+$prospectus_range$;
+revoke all on function public.prospectus_class_range_label(text) from public;
+
+create or replace function public.current_id_card_principal_snapshot()
+returns jsonb
+language sql
+stable security definer
+set search_path to 'public','extensions'
+as $principal_snapshot$
+  select coalesce(
+    (
+      select jsonb_build_object(
+        'id',h.id,
+        'full_name',concat_ws(' ',h.first_name,nullif(h.middle_name,''),h.last_name),
+        'title','Principal',
+        'signature_path',coalesce(h.signature_path,'')
+      )
+      from public.headteachers h
+      where h.deleted_at is null
+        and h.active
+        and h.employment_status='active'
+      order by case when btrim(coalesce(h.signature_path,''))<>'' then 0 else 1 end,
+               h.updated_at desc,h.created_at desc
+      limit 1
+    ),
+    jsonb_build_object(
+      'full_name',coalesce((select head_name from public.school_settings limit 1),'Principal'),
+      'title','Principal',
+      'signature_path',''
+    )
+  )
+$principal_snapshot$;
+revoke all on function public.current_id_card_principal_snapshot() from public;
+
+create or replace function public.has_any_active_emergency_delegation(target_user_id uuid default auth.uid())
+returns boolean
+language sql
+stable security definer
+set search_path to 'public','extensions'
+as $active_delegation$
+  select exists(
+    select 1
+    from public.emergency_academic_delegations d
+    join public.profiles p on p.id=d.delegate_user_id and p.active
+    where d.delegate_user_id=target_user_id
+      and d.status='active'
+      and now()>=d.valid_from
+      and now()<d.valid_until
+  )
+$active_delegation$;
+revoke all on function public.has_any_active_emergency_delegation(uuid) from public;
+
+create or replace function public.can_create_report_scope(target_class_id uuid,target_term_id uuid)
+returns boolean
+language sql
+stable security definer
+set search_path to 'public','extensions'
+as $create_report_scope$
+  select public.can_manage_class_report_fields_scope(target_class_id,target_term_id)
+    or exists(
+      select 1
+      from public.class_subjects cs
+      where cs.class_id=target_class_id
+        and cs.active
+        and public.can_score_class_subject_scope(target_class_id,cs.subject_id,target_term_id)
+    )
+$create_report_scope$;
+revoke all on function public.can_create_report_scope(uuid,uuid) from public;
+
+create or replace function public.canonical_school_identity_prefix()
+returns text
+language plpgsql
+stable security definer
+set search_path to 'pg_catalog','public','app','extensions'
+as $school_identity$
+declare
+  prefix_value text;
+begin
+  select regexp_replace(
+           upper(coalesce(nullif(s.tenant_code,''),nullif(s.report_number_prefix,''),'SCH')),
+           '[^A-Z0-9]','','g'
+         )
+    into prefix_value
+  from public.school_settings s
+  order by s.created_at,s.id
+  limit 1;
+
+  if coalesce(prefix_value,'')='' then
+    select regexp_replace(upper(coalesce(nullif(t.code,''),'SCH')),'[^A-Z0-9]','','g')
+      into prefix_value
+    from app.tenants t
+    where t.id=app.current_tenant_id()
+    limit 1;
+  end if;
+
+  return left(coalesce(nullif(prefix_value,''),'SCH'),16);
+end
+$school_identity$;
+revoke all on function public.canonical_school_identity_prefix() from public;
+
 -- helper admin_validate_user_bundle(actor_id uuid, bundle jsonb, require_existing_user boolean)
 CREATE OR REPLACE FUNCTION public.admin_validate_user_bundle(actor_id uuid, bundle jsonb, require_existing_user boolean DEFAULT false)
  RETURNS jsonb
@@ -783,119 +896,6 @@ end
 $preview$;
 revoke all on function public.platform_preview_license_change(uuid) from public;
 
-
--- Second-level certified helper closure discovered from the complete 168-operation graph.
-create or replace function public.prospectus_class_range_label(value text)
-returns text
-language sql
-immutable
-set search_path to 'public','extensions'
-as $prospectus_range$
-  select case value
-    when 'early_years' then 'Creche to Kindergarten'
-    when 'basic_1_6' then 'Basic 1 to Basic 6'
-    when 'basic_7_9' then 'Basic 7 to Basic 9'
-    else value
-  end
-$prospectus_range$;
-revoke all on function public.prospectus_class_range_label(text) from public;
-
-create or replace function public.current_id_card_principal_snapshot()
-returns jsonb
-language sql
-stable security definer
-set search_path to 'public','extensions'
-as $principal_snapshot$
-  select coalesce(
-    (
-      select jsonb_build_object(
-        'id',h.id,
-        'full_name',concat_ws(' ',h.first_name,nullif(h.middle_name,''),h.last_name),
-        'title','Principal',
-        'signature_path',coalesce(h.signature_path,'')
-      )
-      from public.headteachers h
-      where h.deleted_at is null
-        and h.active
-        and h.employment_status='active'
-      order by case when btrim(coalesce(h.signature_path,''))<>'' then 0 else 1 end,
-               h.updated_at desc,h.created_at desc
-      limit 1
-    ),
-    jsonb_build_object(
-      'full_name',coalesce((select head_name from public.school_settings limit 1),'Principal'),
-      'title','Principal',
-      'signature_path',''
-    )
-  )
-$principal_snapshot$;
-revoke all on function public.current_id_card_principal_snapshot() from public;
-
-create or replace function public.has_any_active_emergency_delegation(target_user_id uuid default auth.uid())
-returns boolean
-language sql
-stable security definer
-set search_path to 'public','extensions'
-as $active_delegation$
-  select exists(
-    select 1
-    from public.emergency_academic_delegations d
-    join public.profiles p on p.id=d.delegate_user_id and p.active
-    where d.delegate_user_id=target_user_id
-      and d.status='active'
-      and now()>=d.valid_from
-      and now()<d.valid_until
-  )
-$active_delegation$;
-revoke all on function public.has_any_active_emergency_delegation(uuid) from public;
-
-create or replace function public.can_create_report_scope(target_class_id uuid,target_term_id uuid)
-returns boolean
-language sql
-stable security definer
-set search_path to 'public','extensions'
-as $create_report_scope$
-  select public.can_manage_class_report_fields_scope(target_class_id,target_term_id)
-    or exists(
-      select 1
-      from public.class_subjects cs
-      where cs.class_id=target_class_id
-        and cs.active
-        and public.can_score_class_subject_scope(target_class_id,cs.subject_id,target_term_id)
-    )
-$create_report_scope$;
-revoke all on function public.can_create_report_scope(uuid,uuid) from public;
-
-create or replace function public.canonical_school_identity_prefix()
-returns text
-language plpgsql
-stable security definer
-set search_path to 'pg_catalog','public','app','extensions'
-as $school_identity$
-declare
-  prefix_value text;
-begin
-  select regexp_replace(
-           upper(coalesce(nullif(s.tenant_code,''),nullif(s.report_number_prefix,''),'SCH')),
-           '[^A-Z0-9]','','g'
-         )
-    into prefix_value
-  from public.school_settings s
-  order by s.created_at,s.id
-  limit 1;
-
-  if coalesce(prefix_value,'')='' then
-    select regexp_replace(upper(coalesce(nullif(t.code,''),'SCH')),'[^A-Z0-9]','','g')
-      into prefix_value
-    from app.tenants t
-    where t.id=app.current_tenant_id()
-    limit 1;
-  end if;
-
-  return left(coalesce(nullif(prefix_value,''),'SCH'),16);
-end
-$school_identity$;
-revoke all on function public.canonical_school_identity_prefix() from public;
 
 insert into app.schema_migrations(version) values ('0045d_certified_rpc_helper_closure') on conflict do nothing;
 update app.release_identity set schema_version='0045d' where edition='Edusentia Enterprise Neon Edition';
