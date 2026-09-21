@@ -1,8 +1,7 @@
 -- Edusentia tenant foundation: public functions
--- Read-only schema snapshot from the live Edusentia Supabase tenant.
+-- Read-only schema snapshot from live Edusentia Supabase.
 -- Snapshot date: 2026-09-21. Contains schema only, no application data or secrets.
 SET search_path TO public, extensions, pg_catalog;
-
 SET check_function_bodies=off;
 
 CREATE OR REPLACE FUNCTION public.finance_portal_report_detail(target_report_id uuid)
@@ -25,6 +24,7 @@ begin
   'average',coalesce((select round(avg(sr.total_score),2) from public.subject_results sr where sr.report_id=target_report_id),0)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_post_adjustment(target_student_id uuid, target_account_id uuid, adjustment_type text, amount_value numeric, notes_text text)
  RETURNS uuid
@@ -34,6 +34,7 @@ CREATE OR REPLACE FUNCTION public.finance_post_adjustment(target_student_id uuid
 AS $function$
 declare txid uuid; debit numeric:=0; credit numeric:=0;
 begin perform public.finance_require_access('finance_fees',true); perform public.finance_require_capability('fee_adjust'); if adjustment_type not in ('waiver','discount','refund','adjustment_debit','adjustment_credit') then raise exception 'Adjustment type is invalid'; end if; if amount_value<=0 or btrim(coalesce(notes_text,''))='' then raise exception 'A positive amount and reason are required'; end if; if not exists(select 1 from public.finance_fee_accounts where id=target_account_id and student_id=target_student_id) then raise exception 'Student fee account was not found'; end if; if adjustment_type in ('refund','adjustment_debit') then debit:=amount_value; else credit:=amount_value; end if; insert into public.finance_fee_transactions(student_id,entry_type,debit_amount,credit_amount,transaction_date,notes,created_by) values(target_student_id,adjustment_type,debit,credit,current_date,btrim(notes_text),auth.uid()) returning id into txid; insert into public.finance_fee_allocations(transaction_id,account_id,amount) values(txid,target_account_id,amount_value); insert into public.audit_log(actor_id,table_name,record_id,action,new_data,reason) values(auth.uid(),'finance_fee_transactions',txid,'FEE_ADJUSTMENT_POSTED',jsonb_build_object('type',adjustment_type,'amount',amount_value,'account_id',target_account_id),notes_text); return txid; end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_protect_final_payroll()
  RETURNS trigger
@@ -45,6 +46,7 @@ begin
   if old.payment_status='paid' and (new.* is distinct from old.*) then raise exception 'Paid payroll items are locked; use a corrective run.' using errcode='42501'; end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_protect_invoice()
  RETURNS trigger
@@ -73,6 +75,7 @@ begin
   return new;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_record_payment(target_student_id uuid, target_account_id uuid, amount_value numeric, payment_method_text text, payment_reference_text text DEFAULT ''::text, payment_date_value date DEFAULT CURRENT_DATE, notes_text text DEFAULT ''::text)
  RETURNS jsonb
@@ -94,6 +97,7 @@ begin
  insert into public.audit_log(actor_id,table_name,record_id,action,new_data,reason) values(auth.uid(),'finance_fee_transactions',tx.id,'FEE_PAYMENT_POSTED',jsonb_build_object('student_id',target_student_id,'amount',amount_value,'receipt_no',receipt,'method',payment_method_text),'Fee payment posted');
  return jsonb_build_object('transaction_id',tx.id,'receipt_no',receipt,'amount',amount_value,'allocated',allocated,'statement',public.finance_student_statement(target_student_id));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_require_access(feature_code text, require_write boolean DEFAULT false, allowed_roles text[] DEFAULT ARRAY['accountant'::text, 'system_admin'::text])
  RETURNS text
@@ -145,6 +149,7 @@ begin
   return r;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_require_capability(capability text)
  RETURNS void
@@ -153,6 +158,7 @@ CREATE OR REPLACE FUNCTION public.finance_require_capability(capability text)
  SET search_path TO 'public', 'extensions'
 AS $function$
 begin if not public.finance_staff_capability(capability) then raise exception 'Your Accounts Office permission does not allow this action' using errcode='42501'; end if; end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_require_payroll_access(require_write boolean DEFAULT false)
  RETURNS void
@@ -160,6 +166,7 @@ CREATE OR REPLACE FUNCTION public.finance_require_payroll_access(require_write b
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ begin perform public.finance_require_access('payroll',require_write); perform public.finance_require_capability('payroll'); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_reverse_payment(target_transaction_id uuid, reason_text text)
  RETURNS jsonb
@@ -169,6 +176,7 @@ CREATE OR REPLACE FUNCTION public.finance_reverse_payment(target_transaction_id 
 AS $function$
 declare original public.finance_fee_transactions%rowtype; rev public.finance_fee_transactions%rowtype; a record;
 begin perform public.finance_require_access('finance_fees',true); perform public.finance_require_capability('fee_adjust'); if btrim(coalesce(reason_text,''))='' then raise exception 'A reversal reason is required'; end if; select * into original from public.finance_fee_transactions where id=target_transaction_id and entry_type='payment'; if original.id is null then raise exception 'Posted payment was not found'; end if; if exists(select 1 from public.finance_fee_transactions where reversal_of_id=original.id) then raise exception 'This payment has already been reversed'; end if; insert into public.finance_fee_transactions(student_id,entry_type,debit_amount,payment_method,payment_reference,reversal_of_id,transaction_date,notes,created_by) values(original.student_id,'payment_reversal',original.credit_amount,original.payment_method,original.payment_reference,original.id,current_date,btrim(reason_text),auth.uid()) returning * into rev; for a in select account_id,amount from public.finance_fee_allocations where transaction_id=original.id loop insert into public.finance_fee_allocations(transaction_id,account_id,amount) values(rev.id,a.account_id,a.amount); end loop; insert into public.audit_log(actor_id,table_name,record_id,action,old_data,new_data,reason) values(auth.uid(),'finance_fee_transactions',original.id,'FEE_PAYMENT_REVERSED',to_jsonb(original),to_jsonb(rev),reason_text); return jsonb_build_object('reversal_id',rev.id,'reversed_transaction_id',original.id,'statement',public.finance_student_statement(original.student_id)); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_save_accounts_staff(payload jsonb)
  RETURNS jsonb
@@ -189,6 +197,7 @@ begin
  end if;
  return to_jsonb(r);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_save_fee_schedule(payload jsonb)
  RETURNS jsonb
@@ -309,6 +318,7 @@ begin
  if r.active then synced:=public.finance_sync_fee_accounts(r.id); end if;
  return to_jsonb(r)||jsonb_build_object('accounts_synchronized',synced);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_save_hold_policy(payload jsonb)
  RETURNS jsonb
@@ -316,6 +326,7 @@ CREATE OR REPLACE FUNCTION public.finance_save_hold_policy(payload jsonb)
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ declare r public.finance_hold_policy%rowtype; begin perform public.finance_require_access('financial_holds',true); perform public.finance_require_capability('financial_hold'); update public.finance_hold_policy set enabled=coalesce((payload->>'enabled')::boolean,enabled),minimum_outstanding=coalesce((payload->>'minimum_outstanding')::numeric,minimum_outstanding),grace_days=coalesce((payload->>'grace_days')::int,grace_days),block_grade_details=coalesce((payload->>'block_grade_details')::boolean,block_grade_details),block_report_pdf=coalesce((payload->>'block_report_pdf')::boolean,block_report_pdf),block_transcript=coalesce((payload->>'block_transcript')::boolean,block_transcript),block_certificate=coalesce((payload->>'block_certificate')::boolean,block_certificate),updated_by=auth.uid() where id=1 returning * into r; return to_jsonb(r); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_save_payroll_profile(payload jsonb)
  RETURNS jsonb
@@ -336,6 +347,7 @@ begin
  else update public.finance_payroll_profiles set salary_grade_id=gradeid,payroll_number=coalesce(nullif(btrim(payload->>'payroll_number'),''),payroll_number),basic_salary_override=override_amt,ssnit_number=btrim(coalesce(payload->>'ssnit_number','')),tax_id=btrim(coalesce(payload->>'tax_id','')),active=coalesce((payload->>'active')::boolean,active) where id=rid and teacher_id=teacherid returning * into r; end if;
  if r.id is null then raise exception 'Payroll profile was not found'; end if; return to_jsonb(r);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_save_payroll_rule(payload jsonb)
  RETURNS jsonb
@@ -353,6 +365,7 @@ begin
  else update public.finance_payroll_rules set rule_code=btrim(payload->>'rule_code'),rule_type=typ,name=btrim(payload->>'name'),rate=ratev,fixed_amount=fixedv,rule_json=coalesce(payload->'rule_json',rule_json),effective_from=eff,effective_to=endd,active=coalesce((payload->>'active')::boolean,active) where id=rid returning * into r; end if;
  return to_jsonb(r);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_save_salary_grade(payload jsonb)
  RETURNS jsonb
@@ -368,6 +381,7 @@ begin
  else update public.finance_salary_grades set code=btrim(payload->>'code'),name=btrim(payload->>'name'),basic_salary=amt,active=coalesce((payload->>'active')::boolean,active) where id=rid returning * into r; end if;
  return to_jsonb(r);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_save_teacher_loan(payload jsonb)
  RETURNS jsonb
@@ -385,6 +399,7 @@ begin
    update public.finance_teacher_loans set principal_amount=principal,monthly_deduction=monthly,start_date=public.safe_date(payload->>'start_date'),status=coalesce(nullif(payload->>'status',''),status),notes=btrim(coalesce(payload->>'notes','')) where id=rid and teacher_id=tid returning * into r; end if;
  return to_jsonb(r)||jsonb_build_object('remaining_balance',public.finance_loan_balance(r.id));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_session_capabilities()
  RETURNS jsonb
@@ -407,6 +422,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_set_hold_override(target_student_id uuid, mode_text text, reason_text text, ends_at_value timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS jsonb
@@ -414,6 +430,7 @@ CREATE OR REPLACE FUNCTION public.finance_set_hold_override(target_student_id uu
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ declare r public.finance_hold_overrides%rowtype; begin perform public.finance_require_access('financial_holds',true); perform public.finance_require_capability('financial_hold'); if mode_text not in ('force_lock','force_unlock') or btrim(coalesce(reason_text,''))='' then raise exception 'Lock/unlock action and reason are required'; end if; update public.finance_hold_overrides set active=false,updated_at=now() where student_id=target_student_id and active; insert into public.finance_hold_overrides(student_id,mode,reason,ends_at,created_by) values(target_student_id,mode_text,btrim(reason_text),ends_at_value,auth.uid()) returning * into r; return public.finance_student_hold_status(target_student_id)||jsonb_build_object('override_id',r.id); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_staff_capability(capability text)
  RETURNS boolean
@@ -442,6 +459,7 @@ begin
   end;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_student_hold_status(target_student_id uuid)
  RETURNS jsonb
@@ -468,6 +486,7 @@ begin
     'block_grade_details',locked and coalesce(p.block_grade_details,true),'block_report_pdf',locked and coalesce(p.block_report_pdf,true),
     'block_transcript',locked and coalesce(p.block_transcript,false),'block_certificate',locked and coalesce(p.block_certificate,false));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_student_outstanding(target_student_id uuid)
  RETURNS numeric
@@ -477,6 +496,7 @@ CREATE OR REPLACE FUNCTION public.finance_student_outstanding(target_student_id 
 AS $function$
  select coalesce(sum(greatest(balance,0)),0)::numeric from public.finance_fee_account_balances where student_id=target_student_id
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_student_statement(target_student_id uuid)
  RETURNS jsonb
@@ -516,6 +536,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_sync_enrollment_fee_accounts()
  RETURNS trigger
@@ -534,6 +555,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_sync_fee_accounts(target_schedule_id uuid)
  RETURNS integer
@@ -567,6 +589,7 @@ begin
  get diagnostics affected_count=row_count;
  return affected_count;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_sync_hr_staff_link()
  RETURNS trigger
@@ -577,6 +600,7 @@ begin
   if new.teacher_id is not null then select id into new.hr_staff_member_id from public.hr_staff_members where source_type='teacher' and source_id=new.teacher_id; end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_sync_invoice_from_account()
  RETURNS trigger
@@ -619,6 +643,7 @@ begin
   return new;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_teacher_salary_history()
  RETURNS jsonb
@@ -635,6 +660,7 @@ begin
  return jsonb_build_object('teacher',(select jsonb_build_object('id',t.id,'full_name',concat_ws(' ',t.first_name,nullif(t.middle_name,''),t.last_name),'staff_no',t.staff_no,'payroll_number',p.payroll_number) from public.teachers t left join public.finance_payroll_profiles p on p.teacher_id=t.id where t.id=tid),
  'payments',coalesce((select jsonb_agg(to_jsonb(i)||jsonb_build_object('year',r.payroll_year,'month',r.payroll_month,'pay_date',r.pay_date,'lines',coalesce((select jsonb_agg(to_jsonb(l) order by l.line_type,l.description) from public.finance_payroll_item_lines l where l.payroll_item_id=i.id),'[]'::jsonb)) order by r.payroll_year desc,r.payroll_month desc) from public.finance_payroll_items i join public.finance_payroll_runs r on r.id=i.run_id where i.teacher_id=tid and i.payment_status='paid'),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.freeze_report_grading_guide()
  RETURNS trigger
@@ -653,6 +679,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.generate_nip_user_email(actor_id uuid, requested_base text, target_user_id uuid DEFAULT NULL::uuid)
  RETURNS text
@@ -699,6 +726,7 @@ begin
   return candidate;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.generate_report_number(target_report_id uuid)
  RETURNS text
@@ -715,6 +743,7 @@ begin
   select count(*)+1 into seq from public.student_reports where report_number is not null;
   return upper(prefix)||'-'||coalesce(nullif(yname,''),to_char(current_date,'YYYY'))||'-'||lpad(seq::text,6,'0');
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.generate_school_identifier(identifier_kind text)
  RETURNS text
@@ -766,6 +795,7 @@ begin
   return candidate;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.generate_staff_id_card_number(target_academic_year_id uuid)
  RETURNS text
@@ -775,6 +805,7 @@ CREATE OR REPLACE FUNCTION public.generate_staff_id_card_number(target_academic_
 AS $function$
 declare prefix text;year_code text;candidate text;seq bigint;attempt integer:=0;
 begin select upper(regexp_replace(coalesce(nullif(report_number_prefix,''),'RCE'),'[^0-9A-Za-z]','','g')) into prefix from public.school_settings limit 1;select regexp_replace(name::text,'[^0-9A-Za-z]','','g') into year_code from public.academic_years where id=target_academic_year_id and deleted_at is null;if year_code is null then raise exception 'Academic year not found';end if;loop attempt:=attempt+1;if attempt>1000 then raise exception 'Unable to allocate a unique staff ID card number';end if;seq:=nextval('public.staff_id_card_number_seq');candidate:=coalesce(nullif(prefix,''),'RCE')||'-STAFF-'||year_code||'-'||lpad(seq::text,6,'0');exit when not exists(select 1 from public.staff_id_cards where card_number=candidate);end loop;return candidate;end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.generate_student_id_card_number(target_academic_year_id uuid)
  RETURNS text
@@ -782,6 +813,7 @@ CREATE OR REPLACE FUNCTION public.generate_student_id_card_number(target_academi
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ declare prefix text;year_code text;candidate text;seq bigint;attempt integer:=0; begin select upper(regexp_replace(coalesce(nullif(report_number_prefix,''),'RCE'),'[^0-9A-Za-z]','','g')) into prefix from public.school_settings limit 1; select regexp_replace(name::text,'[^0-9A-Za-z]','','g') into year_code from public.academic_years where id=target_academic_year_id and deleted_at is null; if year_code is null then raise exception 'Academic year not found';end if;year_code:=coalesce(nullif(year_code,''),upper(substr(replace(target_academic_year_id::text,'-',''),1,8))); loop attempt:=attempt+1;if attempt>1000 then raise exception 'Unable to allocate a unique ID card number';end if; seq:=nextval('public.student_id_card_number_seq');candidate:=coalesce(nullif(prefix,''),'RCE')||'-ID-'||year_code||'-'||lpad(seq::text,6,'0'); exit when not exists(select 1 from public.student_id_cards where card_number=candidate); end loop; return candidate; end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.generate_subject_code(subject_name text, exclude_subject_id uuid DEFAULT NULL::uuid)
  RETURNS text
@@ -829,6 +861,7 @@ begin
     if attempt>=250 then raise exception 'A unique subject code could not be generated'; end if;
   end loop;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_academic_calendar_context()
  RETURNS jsonb
@@ -943,6 +976,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_academic_configuration()
  RETURNS jsonb
@@ -987,6 +1021,7 @@ begin
       where t.deleted_at is null and t.active and t.employment_status='active'),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_bootstrap_data()
  RETURNS jsonb
@@ -1020,6 +1055,7 @@ begin
     'topics',case when v_current_role='platform_super_admin' then '[]'::jsonb else to_jsonb(public.my_realtime_topics()) end
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_certificate_batch(target_batch_id uuid)
  RETURNS jsonb
@@ -1038,6 +1074,7 @@ begin
     'school',(select to_jsonb(s) from public.school_settings s limit 1)
   ) from public.certificate_batches b join public.academic_years ay on ay.id=b.academic_year_id left join public.terms t on t.id=b.term_id left join public.classes c on c.id=b.class_id left join public.teacher_award_categories ac on ac.id=b.teacher_award_category_id join public.certificate_templates ct on ct.id=b.template_id left join public.profiles pp on pp.id=b.prepared_by left join public.profiles pa on pa.id=b.approved_by left join public.profiles pi on pi.id=b.issued_by where b.id=target_batch_id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_certificate_console(target_academic_year_id uuid DEFAULT NULL::uuid, target_certificate_type text DEFAULT NULL::text)
  RETURNS jsonb
@@ -1070,6 +1107,7 @@ begin
     ),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_class_attendance_register(target_term_id uuid, target_class_id uuid, target_date date)
  RETURNS jsonb
@@ -1113,6 +1151,7 @@ begin
     ),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_class_timetable_console(target_academic_year_id uuid, target_class_id uuid)
  RETURNS jsonb
@@ -1166,6 +1205,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_compliance_console()
  RETURNS jsonb
@@ -1201,6 +1241,7 @@ begin
     'open_high_security_events',(select count(*) from public.security_events where status='open' and severity in ('high','critical'))
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_current_principal_signature()
  RETURNS jsonb
@@ -1241,6 +1282,7 @@ begin
     )
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_dashboard_metrics(target_term_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -1286,6 +1328,7 @@ begin
     ) q),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_emergency_delegation_console()
  RETURNS jsonb
@@ -1343,6 +1386,7 @@ begin
     ) q),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_headteacher_record(target_headteacher_id uuid)
  RETURNS jsonb
@@ -1368,6 +1412,7 @@ begin
     where h.id=target_headteacher_id
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_id_card_console(target_academic_year_id uuid DEFAULT NULL::uuid, target_class_id uuid DEFAULT NULL::uuid, target_status text DEFAULT NULL::text)
  RETURNS jsonb
@@ -1375,6 +1420,7 @@ CREATE OR REPLACE FUNCTION public.get_id_card_console(target_academic_year_id uu
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ declare year_id uuid:=target_academic_year_id;settings_row jsonb;cards_json jsonb;stats_json jsonb; begin if not public.is_system_admin() then raise exception 'Only the System Administrator can manage student ID cards' using errcode='42501';end if;perform public.require_license_feature('id_cards');if not public.license_read_allowed() then raise exception 'LICENSE_READ_RESTRICTED: The current licence does not permit ID card access' using errcode='42501';end if; if year_id is null then select id into year_id from public.academic_years where is_active and deleted_at is null order by start_date desc nulls last,created_at desc limit 1;end if; select to_jsonb(x) into settings_row from public.id_card_settings x limit 1; select coalesce(jsonb_agg(to_jsonb(q) order by q.issued_at desc),'[]'::jsonb) into cards_json from (select c.id,c.student_id,c.enrollment_id,c.academic_year_id,c.class_id,c.card_number,c.verification_token,c.revision_no,c.supersedes_card_id,c.status,public.id_card_effective_status(c.status,c.expires_on) computed_status,c.issue_date,c.expires_on,c.snapshot,c.issued_at,c.revoked_at,c.revocation_reason,c.replacement_reason,c.snapshot#>>'{student,full_name}' student_name,c.snapshot#>>'{student,admission_no}' admission_no,c.snapshot#>>'{academic,class_name}' class_name,c.snapshot#>>'{academic,academic_year_name}' academic_year_name from public.student_id_cards c where (year_id is null or c.academic_year_id=year_id) and (target_class_id is null or c.class_id=target_class_id) and (target_status is null or target_status='' or public.id_card_effective_status(c.status,c.expires_on)=target_status) order by c.issued_at desc limit 1500) q; select jsonb_build_object('total',count(*),'active',count(*) filter(where public.id_card_effective_status(status,expires_on)='active'),'expired',count(*) filter(where public.id_card_effective_status(status,expires_on)='expired'),'revoked',count(*) filter(where status='revoked'),'replaced',count(*) filter(where status='replaced')) into stats_json from public.student_id_cards c where (year_id is null or c.academic_year_id=year_id) and (target_class_id is null or c.class_id=target_class_id); return jsonb_build_object('generated_at',now(),'settings',coalesce(settings_row,'{}'::jsonb),'academic_year_id',year_id,'stats',stats_json,'cards',cards_json,'feature_enabled',true); end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_my_emergency_academic_delegations(target_class_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -1401,6 +1447,7 @@ AS $function$
       and (target_term_id is null or d.term_id=target_term_id)
   ) q
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_my_headteacher_signature()
  RETURNS jsonb
@@ -1415,6 +1462,7 @@ begin
   into result from public.headteachers h where h.profile_id=auth.uid() and h.deleted_at is null and h.active order by h.updated_at desc limit 1;
   return coalesce(result,jsonb_build_object('linked',false,'full_name',(select p.full_name from public.profiles p where p.id=auth.uid()),'signature_path',''));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_my_student_portal()
  RETURNS jsonb
@@ -1433,6 +1481,7 @@ begin
   'financial_hold',h,'fee_statement',public.finance_student_statement(sid),
   'reports',coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'report_number',r.report_number,'term_name',t.name,'academic_year_name',y.name,'published_at',r.published_at,'locked',coalesce((h->>'block_grade_details')::boolean,false),'average',case when coalesce((h->>'block_grade_details')::boolean,false) then null else coalesce((select round(avg(sr.total_score),2) from public.subject_results sr where sr.report_id=r.id),0) end,'publication',case when coalesce((h->>'block_report_pdf')::boolean,false) then null else (select jsonb_build_object('id',rp.id,'storage_path',rp.storage_path,'checksum',rp.checksum,'page_count',rp.page_count,'published_at',rp.published_at) from public.report_publications rp where rp.report_id=r.id and rp.revoked_at is null order by rp.published_at desc limit 1) end) order by y.start_date desc nulls last,t.sequence desc) from public.enrollments e join public.student_reports r on r.enrollment_id=e.id and r.status='published' and r.deleted_at is null join public.terms t on t.id=r.term_id join public.academic_years y on y.id=t.academic_year_id where e.student_id=sid and e.deleted_at is null),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_my_student_portal_v2()
  RETURNS jsonb
@@ -1681,6 +1730,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_my_teacher_profile()
  RETURNS jsonb
@@ -1701,6 +1751,7 @@ begin
     'assigned_class_count',(select count(distinct x.class_id) from (select c.id class_id from public.classes c where c.class_teacher_id=t.profile_id and c.deleted_at is null union select cs.class_id from public.class_subjects cs where cs.teacher_id=t.profile_id and cs.active) x)
   ) from public.teachers t left join auth.users au on au.id=t.profile_id where t.id=tid);
 end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_platform_license_console()
  RETURNS jsonb
@@ -1726,6 +1777,7 @@ begin
     'archives',coalesce((select jsonb_agg(to_jsonb(a) order by a.created_at desc) from public.platform_audit_archives a where a.archive_scope='licensing'),'[]'::jsonb),
     'platform_admins',coalesce((select jsonb_agg(jsonb_build_object('id',p.id,'full_name',p.full_name,'email',u.email,'active',p.active,'mfa_required',p.mfa_required,'last_seen_at',p.last_seen_at,'created_at',p.created_at) order by lower(p.full_name)) from public.profiles p left join auth.users u on u.id=p.id where public.current_app_role_for(p.role)::text='platform_super_admin'),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_recovery_console()
  RETURNS jsonb
@@ -1742,6 +1794,7 @@ begin
     'latest_failed',(select max(completed_at) from public.recovery_test_runs where status='failed')
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_report_correction_console(target_term_id uuid DEFAULT NULL::uuid, target_class_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -1772,6 +1825,7 @@ begin
     'pending_count',(select count(*) from public.report_correction_requests q join public.student_reports r on r.id=q.report_id join public.enrollments e on e.id=r.enrollment_id where q.status='pending' and (target_term_id is null or r.term_id=target_term_id) and (target_class_id is null or e.class_id=target_class_id) and (public.current_app_role() in ('system_admin','principal') or public.can_access_class(e.class_id,false)))
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_report_editor(target_report_id uuid DEFAULT NULL::uuid, target_enrollment_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -1875,6 +1929,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_report_grading_guide(target_report_id uuid DEFAULT NULL::uuid, target_enrollment_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -1916,6 +1971,7 @@ begin
   ) then raise exception 'Term and enrolment academic year do not match'; end if;
   return public.resolve_grading_guide(v_year_id,v_class_id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_report_headteacher_signature(target_report_id uuid)
  RETURNS jsonb
@@ -1947,6 +2003,7 @@ begin
   ));
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_report_revisions(target_report_id uuid)
  RETURNS jsonb
@@ -1966,6 +2023,7 @@ begin
   where rr.report_id=target_report_id),'[]'::jsonb);
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_role_dashboard(target_term_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -2030,6 +2088,7 @@ begin
     ) q),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_role_workspace()
  RETURNS jsonb
@@ -2064,6 +2123,7 @@ begin
     ) q),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_school_license_capacity_console()
  RETURNS jsonb
@@ -2071,6 +2131,7 @@ CREATE OR REPLACE FUNCTION public.get_school_license_capacity_console()
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'storage', 'pg_catalog', 'extensions'
 AS $function$ declare actor_role text:=coalesce(public.current_app_role()::text,'');snapshot jsonb;entitlement jsonb;plan_data jsonb;students_count bigint:=0;teachers_count bigint:=0;admins_count bigint:=0;guardians_count bigint:=0;published_reports_count bigint:=0;storage_bytes bigint:=0;storage_mb numeric:=0;storage_breakdown jsonb:='[]'::jsonb;verification_rows jsonb:='[]'::jsonb; begin if actor_role<>'system_admin' then raise exception 'School System Administrator access required' using errcode='42501';end if;snapshot:=public.license_snapshot_for_role('system_admin');entitlement:=public.license_effective_entitlement();plan_data:=coalesce(entitlement->'plan',snapshot->'plan','{}'::jsonb);select count(*) into students_count from public.students where status='active' and deleted_at is null;select count(*) into teachers_count from public.teachers where active and deleted_at is null;select count(*) into admins_count from public.profiles where active and public.current_app_role_for(role)::text='system_admin';select count(*) into guardians_count from public.profiles where active and public.current_app_role_for(role)::text='parent_guardian';select count(*) into published_reports_count from public.student_reports where status='published';select coalesce(sum(case when coalesce(metadata->>'size','')~'^\d+$' then (metadata->>'size')::bigint else 0 end),0) into storage_bytes from storage.objects where bucket_id in ('student-photos','staff-photos','school-branding','report-pdfs','system-backups','headteacher-signatures','report-card-templates','certificate-templates','certificate-pdfs');storage_mb:=round(storage_bytes/1048576.0,2);select coalesce(jsonb_agg(jsonb_build_object('bucket_id',bucket_id,'object_count',object_count,'bytes',bucket_bytes,'storage_mb',round(bucket_bytes/1048576.0,2)) order by bucket_id),'[]'::jsonb) into storage_breakdown from (select bucket_id,count(*)::bigint object_count,coalesce(sum(case when coalesce(metadata->>'size','')~'^\d+$' then (metadata->>'size')::bigint else 0 end),0)::bigint bucket_bytes from storage.objects where bucket_id in ('student-photos','staff-photos','school-branding','report-pdfs','system-backups','headteacher-signatures','report-card-templates','certificate-templates','certificate-pdfs') group by bucket_id)bucket_usage;select coalesce(jsonb_agg(jsonb_build_object('created_at',created_at,'computed_status',computed_status,'access_mode',access_mode,'verification_source',verification_source) order by created_at desc),'[]'::jsonb) into verification_rows from (select created_at,computed_status,access_mode,verification_source from public.license_verification_logs order by created_at desc limit 20)verification_history; return jsonb_build_object('read_only',true,'generated_at',now(),'school',(select jsonb_build_object('id',id,'school_name',school_name,'logo_url',logo_url,'email',email,'phone',phone) from public.school_settings limit 1),'snapshot',snapshot,'plan',plan_data,'capacity',jsonb_build_array(jsonb_build_object('key','students','label','Active students','unit','records','used',students_count,'limit',nullif(plan_data->>'max_students','')::bigint),jsonb_build_object('key','teachers','label','Active teachers','unit','records','used',teachers_count,'limit',nullif(plan_data->>'max_teachers','')::bigint),jsonb_build_object('key','system_admins','label','System Administrators','unit','accounts','used',admins_count,'limit',nullif(plan_data->>'max_system_admins','')::bigint),jsonb_build_object('key','guardians','label','Guardians','unit','accounts','used',guardians_count,'limit',nullif(plan_data->>'max_guardians','')::bigint),jsonb_build_object('key','storage','label','School Storage','unit','MB','used',storage_mb,'limit',nullif(plan_data->>'max_storage_mb','')::numeric)),'usage',jsonb_build_object('active_students',students_count,'active_teachers',teachers_count,'active_system_admins',admins_count,'active_guardians',guardians_count,'published_reports',published_reports_count,'storage_bytes',storage_bytes,'storage_mb',storage_mb),'storage_buckets',storage_breakdown,'feature_flags',coalesce(plan_data->'feature_flags','{}'::jsonb),'verification_history',verification_rows); end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_school_prospectus_console(target_academic_year_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -2085,6 +2146,7 @@ begin
  select coalesce(jsonb_agg(public.build_school_prospectus_snapshot(p.id)||jsonb_build_object('revision_history',coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'revision_no',r.revision_no,'reason',r.reason,'published_at',r.published_at) order by r.revision_no desc) from public.school_prospectus_revisions r where r.prospectus_id=p.id),'[]'::jsonb)) order by p.class_range),'[]'::jsonb) into rows from public.school_prospectuses p where p.academic_year_id=yearid;
  return jsonb_build_object('academic_year_id',yearid,'prospectuses',rows,'can_manage',true,'generated_at',now());
 end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_staff_id_card_console(target_staff_type text DEFAULT NULL::text, target_status text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2099,6 +2161,7 @@ begin
   select jsonb_build_object('total',count(*),'active',count(*) filter(where public.id_card_effective_status(status,expires_on)='active'),'expired',count(*) filter(where public.id_card_effective_status(status,expires_on)='expired'),'revoked',count(*) filter(where status='revoked'),'replaced',count(*) filter(where status='replaced')) into stats_json from public.staff_id_cards c where kind='' or c.staff_type=kind;
   return jsonb_build_object('generated_at',now(),'settings',coalesce(settings_row,'{}'::jsonb),'stats',stats_json,'cards',cards_json,'feature_enabled',true);
 end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_student_academic_history(target_student_id uuid)
  RETURNS jsonb
@@ -2139,6 +2202,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_student_record(target_student_id uuid)
  RETURNS jsonb
@@ -2173,6 +2237,7 @@ begin
     ) q),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_student_record_v5(target_student_id uuid)
  RETURNS jsonb
@@ -2208,6 +2273,7 @@ begin
     ) q),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_teacher_record(target_teacher_id uuid)
  RETURNS jsonb
@@ -2219,6 +2285,7 @@ begin
   if not public.can_manage_teachers() and not exists(select 1 from public.teachers t where t.id=target_teacher_id and t.profile_id=auth.uid()) then raise exception 'Access denied' using errcode='42501';end if;
   return (select jsonb_build_object('teacher',to_jsonb(t)||jsonb_build_object('full_name',concat_ws(' ',t.first_name,nullif(t.middle_name,''),t.last_name),'profile_email',au.email,'profile_name',p.full_name,'profile_role',case when p.id is null then null else public.current_app_role_for(p.role) end),'classes',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'name',c.name) order by c.level_order,c.name) from public.classes c where c.class_teacher_id=t.profile_id and c.deleted_at is null),'[]'::jsonb),'subjects',coalesce((select jsonb_agg(jsonb_build_object('class_id',c.id,'class_name',c.name,'subject_id',s.id,'subject_name',s.name) order by c.level_order,c.name,s.display_order,s.name) from public.class_subjects cs join public.classes c on c.id=cs.class_id join public.subjects s on s.id=cs.subject_id where cs.teacher_id=t.profile_id and cs.active and c.deleted_at is null and s.deleted_at is null),'[]'::jsonb)) from public.teachers t left join public.profiles p on p.id=t.profile_id left join auth.users au on au.id=t.profile_id where t.id=target_teacher_id);
 end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.grade_for_mark(mark numeric, target_academic_year_id uuid, target_class_id uuid, target_subject_id uuid)
  RETURNS TABLE(grade text, remark text, grade_point numeric)
@@ -2239,6 +2306,7 @@ AS $function$
     g.display_order
   limit 1
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
  RETURNS trigger
@@ -2270,6 +2338,7 @@ begin
   ) on conflict(id) do nothing;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.has_active_emergency_delegation(target_class_id uuid, target_subject_id uuid, target_term_id uuid, require_score_entry boolean DEFAULT false, require_class_fields boolean DEFAULT false, target_user_id uuid DEFAULT auth.uid())
  RETURNS boolean
@@ -2282,6 +2351,7 @@ AS $function$
     require_score_entry,require_class_fields,target_user_id
   ))>0
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.has_any_active_emergency_delegation(target_user_id uuid DEFAULT auth.uid())
  RETURNS boolean
@@ -2299,6 +2369,7 @@ AS $function$
       and now()<d.valid_until
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.has_approved_report_correction(target_report_id uuid)
  RETURNS boolean
@@ -2312,6 +2383,7 @@ AS $function$
       and r.reviewed_at>=now()-interval '180 days'
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.has_role(allowed text[])
  RETURNS boolean
@@ -2321,6 +2393,7 @@ CREATE OR REPLACE FUNCTION public.has_role(allowed text[])
 AS $function$
   select coalesce(public.current_app_role()::text=any(allowed),false)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_dashboard()
  RETURNS jsonb
@@ -2338,6 +2411,7 @@ begin
   'immunizations_due',(select count(*) from public.health_immunizations where status in ('due','overdue') or (next_due_date is not null and next_due_date<=current_date))
  ));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_my_children_emergency_summary()
  RETURNS jsonb
@@ -2353,6 +2427,7 @@ begin
   where g.auth_user_id=auth.uid() and g.can_view_reports and s.deleted_at is null
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_record_medication(payload jsonb)
  RETURNS uuid
@@ -2367,6 +2442,7 @@ begin
  values(nullif(payload->>'visit_id','')::uuid,(payload->>'student_id')::uuid,btrim(payload->>'medication_name'),btrim(payload->>'dosage'),nullif(payload->>'route',''),nullif(payload->>'reason',''),coalesce(nullif(payload->>'administered_at','')::timestamptz,now()),nullif(payload->>'consent_reference',''),nullif(payload->>'administered_by_hr_staff_id','')::uuid,auth.uid()) returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_save_immunization(payload jsonb)
  RETURNS uuid
@@ -2382,6 +2458,7 @@ begin
  else update public.health_immunizations set vaccine_name=coalesce(nullif(btrim(payload->>'vaccine_name'),''),vaccine_name),dose_label=case when payload ? 'dose_label' then nullif(payload->>'dose_label','') else dose_label end,administered_date=case when payload ? 'administered_date' then nullif(payload->>'administered_date','')::date else administered_date end,next_due_date=case when payload ? 'next_due_date' then nullif(payload->>'next_due_date','')::date else next_due_date end,provider=case when payload ? 'provider' then nullif(payload->>'provider','') else provider end,evidence_reference=case when payload ? 'evidence_reference' then nullif(payload->>'evidence_reference','') else evidence_reference end,status=coalesce(nullif(payload->>'status',''),status),notes=case when payload ? 'notes' then nullif(payload->>'notes','') else notes end where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_save_profile(payload jsonb)
  RETURNS uuid
@@ -2399,6 +2476,7 @@ begin
  returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_save_visit(payload jsonb)
  RETURNS uuid
@@ -2419,6 +2497,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('health','clinic_visit_saved','health_visit',v_id,auth.uid(),'{}');
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_student_profile(target_student_id uuid)
  RETURNS jsonb
@@ -2440,6 +2519,7 @@ begin
   'immunizations',coalesce((select jsonb_agg(to_jsonb(i) order by i.administered_date desc nulls last,i.created_at desc) from public.health_immunizations i where i.student_id=target_student_id),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.health_visit_register(search_text text DEFAULT NULL::text, date_from date DEFAULT NULL::date, date_to date DEFAULT NULL::date)
  RETURNS jsonb
@@ -2457,6 +2537,7 @@ begin
   order by v.visited_at desc limit 300
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_allocate_student(payload jsonb)
  RETURNS uuid
@@ -2479,6 +2560,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('hostel','student_allocated','hostel_allocation',v_id,auth.uid(),jsonb_build_object('student_id',payload->>'student_id','bed_id',payload->>'bed_id'));
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_allocation_register(search_text text DEFAULT NULL::text, status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2494,6 +2576,7 @@ begin
   where (status_filter is null or a.status=status_filter) and (search_text is null or concat_ws(' ',s.admission_no,s.first_name,s.middle_name,s.last_name,h.house_name,r.room_code,b.bed_code) ilike '%'||search_text||'%')
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_dashboard()
  RETURNS jsonb
@@ -2513,6 +2596,7 @@ begin
   'open_incidents',(select count(*) from public.hostel_incidents where status in ('open','under_review','referred'))
  ));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_end_allocation(target_allocation_id uuid, end_reason text DEFAULT NULL::text)
  RETURNS void
@@ -2529,6 +2613,7 @@ begin
  update public.hostel_beds set status='available' where id=v_bed and status='occupied';
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('hostel','allocation_ended','hostel_allocation',target_allocation_id,auth.uid(),jsonb_build_object('reason',end_reason));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_incident_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2540,6 +2625,7 @@ begin
  perform public.student_services_require_access('hostel','read');
  return coalesce((select jsonb_agg(to_jsonb(q) order by q.occurred_at desc) from (select i.*,s.admission_no,concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name from public.hostel_incidents i join public.students s on s.id=i.student_id where status_filter is null or i.status=status_filter)q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_movement_register(target_allocation_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -2551,6 +2637,7 @@ begin
  perform public.student_services_require_access('hostel','read');
  return coalesce((select jsonb_agg(to_jsonb(q) order by q.occurred_at desc) from (select m.*,s.admission_no,concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) student_name from public.hostel_movements m join public.students s on s.id=m.student_id where target_allocation_id is null or m.allocation_id=target_allocation_id order by m.occurred_at desc limit 300)q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_my_children_boarding()
  RETURNS jsonb
@@ -2567,6 +2654,7 @@ begin
   where g.auth_user_id=auth.uid() and g.can_view_reports
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_record_movement(payload jsonb)
  RETURNS uuid
@@ -2583,6 +2671,7 @@ begin
  values((payload->>'allocation_id')::uuid,v_student,payload->>'movement_type',coalesce(nullif(payload->>'occurred_at','')::timestamptz,now()),nullif(payload->>'expected_return_at','')::timestamptz,nullif(payload->>'actual_return_at','')::timestamptz,nullif(payload->>'destination',''),nullif(payload->>'guardian_or_escort',''),nullif(payload->>'guardian_contact',''),nullif(payload->>'reason',''),auth.uid()) returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_register()
  RETURNS jsonb
@@ -2598,6 +2687,7 @@ begin
   'beds',coalesce((select jsonb_agg(to_jsonb(q) order by q.house_name,q.room_code,q.bed_code) from (select b.*,r.room_code,h.house_name,exists(select 1 from public.hostel_allocations a where a.bed_id=b.id and a.status='active') occupied from public.hostel_beds b join public.hostel_rooms r on r.id=b.room_id join public.hostel_houses h on h.id=r.house_id)q),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_resolve_incident(target_incident_id uuid, resolution_notes text, new_status text DEFAULT 'resolved'::text)
  RETURNS void
@@ -2611,6 +2701,7 @@ begin
  update public.hostel_incidents i set status=$3,resolution_notes=nullif($2,''),resolved_by=auth.uid(),resolved_at=case when $3 in ('resolved','cancelled') then now() else null end where i.id=$1 and i.status not in ('resolved','cancelled');
  if not found then raise exception 'Hostel incident is finalized or unavailable'; end if;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_save_bed(payload jsonb)
  RETURNS uuid
@@ -2626,6 +2717,7 @@ begin
  else update public.hostel_beds set status=coalesce(nullif(payload->>'status',''),status),notes=case when payload ? 'notes' then nullif(payload->>'notes','') else notes end where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_save_house(payload jsonb)
  RETURNS uuid
@@ -2641,6 +2733,7 @@ begin
  else update public.hostel_houses set house_name=coalesce(nullif(btrim(payload->>'house_name'),''),house_name),gender_policy=coalesce(nullif(payload->>'gender_policy',''),gender_policy),capacity=case when payload ? 'capacity' then nullif(payload->>'capacity','')::integer else capacity end,house_parent_hr_staff_id=case when payload ? 'house_parent_hr_staff_id' then nullif(payload->>'house_parent_hr_staff_id','')::uuid else house_parent_hr_staff_id end,active=coalesce((payload->>'active')::boolean,active),notes=case when payload ? 'notes' then nullif(payload->>'notes','') else notes end where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_save_incident(payload jsonb)
  RETURNS uuid
@@ -2655,6 +2748,7 @@ begin
  values(nullif(payload->>'allocation_id','')::uuid,(payload->>'student_id')::uuid,coalesce(nullif(payload->>'occurred_at','')::timestamptz,now()),btrim(payload->>'incident_type'),coalesce(nullif(payload->>'severity',''),'medium'),btrim(payload->>'summary'),nullif(payload->>'details',''),coalesce((payload->>'guardian_notified')::boolean,false),case when coalesce((payload->>'guardian_notified')::boolean,false) then now() end,auth.uid()) returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hostel_save_room(payload jsonb)
  RETURNS uuid
@@ -2670,6 +2764,7 @@ begin
  else update public.hostel_rooms set room_name=case when payload ? 'room_name' then nullif(payload->>'room_name','') else room_name end,floor_label=case when payload ? 'floor_label' then nullif(payload->>'floor_label','') else floor_label end,capacity=coalesce(nullif(payload->>'capacity','')::integer,capacity),active=coalesce((payload->>'active')::boolean,active),notes=case when payload ? 'notes' then nullif(payload->>'notes','') else notes end where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_block_delete()
  RETURNS trigger
@@ -2681,6 +2776,7 @@ begin
   if current_setting('app.hr_allow_hard_delete',true)='on' then return old; end if;
   raise exception 'HR history cannot be hard deleted; use lifecycle status or cancellation instead' using errcode='42501';
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_cancel_leave(target_request_id uuid, cancellation_reason text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2695,6 +2791,7 @@ begin
   if v_row.id is null then raise exception 'Leave request cannot be cancelled'; end if;
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_decide_leave(target_request_id uuid, decision text, decision_reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2711,6 +2808,7 @@ begin
   insert into public.hr_employment_events(staff_id,event_type,event_date,details,created_by) values(v_row.staff_id,'leave_'||decision,current_date,jsonb_build_object('leave_request_id',v_row.id,'start_date',v_row.start_date,'end_date',v_row.end_date,'decided_by_role',v_role,'reason',decision_reason_text),auth.uid());
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_generate_staff_no()
  RETURNS text
@@ -2736,6 +2834,7 @@ begin
   end loop;
   return candidate;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_leave_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2747,6 +2846,7 @@ begin
   perform public.hr_require_access(false,array['system_admin','principal']);
   return coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'staff_id',l.staff_id,'staff_no',s.staff_no,'staff_name',btrim(concat_ws(' ',s.first_name,nullif(s.middle_name,''),nullif(s.last_name,''))),'department',s.department,'job_title',s.job_title,'leave_type',l.leave_type,'start_date',l.start_date,'end_date',l.end_date,'days',l.days,'reason',l.reason,'status',l.status,'submitted_at',l.submitted_at,'decided_at',l.decided_at,'decision_reason',l.decision_reason) order by case when l.status='pending' then 0 else 1 end,l.start_date desc) from public.hr_leave_requests l join public.hr_staff_members s on s.id=l.staff_id where s.deleted_at is null and (coalesce(nullif(status_filter,''),'')='' or l.status=status_filter)),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_my_profile()
  RETURNS jsonb
@@ -2762,6 +2862,7 @@ begin
   if v_id is null then return null; end if;
   return jsonb_build_object('staff',(select to_jsonb(s)||jsonb_build_object('full_name',btrim(concat_ws(' ',s.first_name,nullif(s.middle_name,''),nullif(s.last_name,'')))) from public.hr_staff_members s where s.id=v_id),'qualifications',coalesce((select jsonb_agg(to_jsonb(q) order by q.awarded_on desc nulls last) from public.hr_staff_qualifications q where q.staff_id=v_id),'[]'::jsonb),'leave',coalesce((select jsonb_agg(to_jsonb(l) order by l.start_date desc) from public.hr_leave_requests l where l.staff_id=v_id),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_record_staff_lifecycle()
  RETURNS trigger
@@ -2785,6 +2886,7 @@ begin
   end if;
   return null;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_require_access(require_write boolean DEFAULT false, allowed_roles text[] DEFAULT ARRAY['system_admin'::text, 'principal'::text])
  RETURNS text
@@ -2806,6 +2908,7 @@ begin
   if public.current_aal()<>'aal2' then raise exception 'Multi-factor authentication is required for Staff & HR' using errcode='42501'; end if;
   return v_role;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_save_document(payload jsonb)
  RETURNS jsonb
@@ -2826,6 +2929,7 @@ begin
   end if;
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_save_qualification(payload jsonb)
  RETURNS jsonb
@@ -2846,6 +2950,7 @@ begin
   end if;
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_save_staff(payload jsonb)
  RETURNS jsonb
@@ -2887,6 +2992,7 @@ begin
   end if;
   return to_jsonb(v_row)||jsonb_build_object('full_name',btrim(concat_ws(' ',v_row.first_name,nullif(v_row.middle_name,''),nullif(v_row.last_name,''))));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_staff_detail(target_staff_id uuid)
  RETURNS jsonb
@@ -2908,6 +3014,7 @@ begin
     'payroll',coalesce((select jsonb_agg(jsonb_build_object('id',p.id,'payroll_number',p.payroll_number::text,'active',p.active,'salary_grade_id',p.salary_grade_id,'basic_salary_override',p.basic_salary_override)) from public.finance_payroll_profiles p where p.hr_staff_member_id=target_staff_id),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_staff_directory(search_text text DEFAULT NULL::text, status_filter text DEFAULT NULL::text, department_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2944,6 +3051,7 @@ begin
     'departments',coalesce((select jsonb_agg(x.department order by x.department) from (select distinct department from public.hr_staff_members where deleted_at is null and coalesce(department,'')<>'') x),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_submit_leave_for_staff(target_staff_id uuid, leave_kind text, start_on date, end_on date, reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2960,6 +3068,7 @@ begin
   values(target_staff_id,leave_kind,start_on,end_on,v_days,reason_text,'pending',auth.uid()) returning * into v_row;
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_submit_my_leave(leave_kind text, start_on date, end_on date, reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -2978,6 +3087,7 @@ begin
   insert into public.hr_leave_requests(staff_id,leave_type,start_date,end_date,days,reason,status,submitted_by) values(v_staff,leave_kind,start_on,end_on,v_days,reason_text,'pending',auth.uid()) returning * into v_row;
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_sync_staff_from_source()
  RETURNS trigger
@@ -3073,6 +3183,7 @@ begin
 
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.hr_touch_updated_at()
  RETURNS trigger
@@ -3080,6 +3191,7 @@ CREATE OR REPLACE FUNCTION public.hr_touch_updated_at()
  SET search_path TO 'public', 'pg_catalog'
 AS $function$
 begin new.updated_at:=now(); return new; end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.id_card_effective_status(target_status text, target_expires_on date)
  RETURNS text
@@ -3087,6 +3199,7 @@ CREATE OR REPLACE FUNCTION public.id_card_effective_status(target_status text, t
  STABLE
  SET search_path TO 'public', 'extensions'
 AS $function$ select case when target_status='active' and target_expires_on<current_date then 'expired' else target_status end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.id_card_photo_path_is_referenced(target_student_id uuid, target_photo_path text)
  RETURNS boolean
@@ -3094,6 +3207,7 @@ CREATE OR REPLACE FUNCTION public.id_card_photo_path_is_referenced(target_studen
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ declare clean_path text:=btrim(coalesce(target_photo_path,'')); begin if auth.uid() is null or not public.can_manage_student(target_student_id) then return true;end if; if target_student_id is null or clean_path='' then return true;end if; return exists(select 1 from public.student_id_cards where student_id=target_student_id and snapshot#>>'{student,photo_url}'=clean_path); end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.id_card_photo_reference_count(target_student_id uuid, target_photo_path text)
  RETURNS integer
@@ -3101,6 +3215,7 @@ CREATE OR REPLACE FUNCTION public.id_card_photo_reference_count(target_student_i
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ declare result integer:=0;clean_path text:=btrim(coalesce(target_photo_path,'')); begin if auth.uid() is null or not public.can_manage_student(target_student_id) then raise exception 'Access denied' using errcode='42501';end if; if clean_path='' then return 0;end if; select count(*)::integer into result from public.student_id_cards where student_id=target_student_id and snapshot#>>'{student,photo_url}'=clean_path; return coalesce(result,0); end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.id_card_principal_signature_path_is_referenced(target_signature_path text)
  RETURNS boolean
@@ -3113,6 +3228,7 @@ AS $function$
   or exists(select 1 from public.staff_id_cards c where c.snapshot#>>'{principal,signature_path}'=target_signature_path)
  )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.institution_academic_model()
  RETURNS jsonb
@@ -3128,6 +3244,7 @@ AS $function$
   order by s.created_at
   limit 1
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_access_snapshot()
  RETURNS jsonb
@@ -3158,6 +3275,7 @@ begin
     'settings', v_role='system_admin'
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_adjust_stock(target_item_id uuid, target_location_id uuid, quantity_change numeric, reason_text text)
  RETURNS jsonb
@@ -3167,6 +3285,7 @@ CREATE OR REPLACE FUNCTION public.inventory_adjust_stock(target_item_id uuid, ta
 AS $function$
 declare v_id uuid;
 begin perform public.inventory_require_access('stock',true); if coalesce(btrim(reason_text),'')='' then raise exception 'Adjustment reason is required'; end if; v_id:=public.inventory_record_stock_movement(target_item_id,target_location_id,case when quantity_change>0 then 'adjust_in' else 'adjust_out' end,quantity_change,null,'manual_adjustment',null,null,null,null,reason_text,reason_text); return jsonb_build_object('movement_id',v_id,'balance',public.inventory_current_stock(target_item_id,target_location_id)); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_asset_assignment_register(active_only boolean DEFAULT false)
  RETURNS jsonb
@@ -3183,6 +3302,7 @@ begin
     left join public.inventory_locations l on l.id=aa.assigned_location_id
     where (not active_only or aa.returned_at is null)),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_asset_maintenance_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3196,6 +3316,7 @@ begin
     from public.inventory_asset_maintenance m join public.inventory_assets a on a.id=m.asset_id left join public.inventory_suppliers s on s.id=m.vendor_id
     where coalesce(nullif(status_filter,''),'')='' or m.status=status_filter),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_asset_writeoff_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3209,6 +3330,7 @@ begin
     from public.inventory_asset_writeoffs w join public.inventory_assets a on a.id=w.asset_id
     where coalesce(nullif(status_filter,''),'')='' or w.status=status_filter),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_assets_register(search_text text DEFAULT NULL::text, status_filter text DEFAULT NULL::text, location_filter uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -3217,6 +3339,7 @@ CREATE OR REPLACE FUNCTION public.inventory_assets_register(search_text text DEF
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$
 begin perform public.inventory_require_access('view',false); return coalesce((select jsonb_agg(jsonb_build_object('id',a.id,'asset_tag',a.asset_tag,'asset_name',a.asset_name,'item_id',a.item_id,'category',a.category,'serial_number',a.serial_number,'model',a.model,'manufacturer',a.manufacturer,'supplier_id',a.supplier_id,'supplier_name',s.supplier_name,'purchase_date',a.purchase_date,'purchase_cost',a.purchase_cost,'warranty_expires_on',a.warranty_expires_on,'current_location_id',a.current_location_id,'location_name',l.name,'asset_status',a.asset_status,'asset_condition',a.asset_condition,'next_maintenance_on',a.next_maintenance_on,'active',a.active,'assigned_to',case when aa.id is null then null else btrim(concat_ws(' ',h.first_name,nullif(h.middle_name,''),nullif(h.last_name,''))) end,'assigned_staff_id',aa.staff_id) order by a.active desc,a.asset_name,a.asset_tag) from public.inventory_assets a left join public.inventory_suppliers s on s.id=a.supplier_id left join public.inventory_locations l on l.id=a.current_location_id left join public.inventory_asset_assignments aa on aa.asset_id=a.id and aa.returned_at is null left join public.hr_staff_members h on h.id=aa.staff_id where (coalesce(nullif(search_text,''),'')='' or a.asset_tag ilike '%'||search_text||'%' or a.asset_name ilike '%'||search_text||'%' or coalesce(a.serial_number,'') ilike '%'||search_text||'%') and (coalesce(nullif(status_filter,''),'')='' or a.asset_status=status_filter) and (location_filter is null or a.current_location_id=location_filter)),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_assign_asset(target_asset_id uuid, target_staff_id uuid, target_location_id uuid DEFAULT NULL::uuid, due_date_value date DEFAULT NULL::date, purpose_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3226,6 +3349,7 @@ CREATE OR REPLACE FUNCTION public.inventory_assign_asset(target_asset_id uuid, t
 AS $function$
 declare v_assignment public.inventory_asset_assignments;
 begin perform public.inventory_require_access('assets',true); if not exists(select 1 from public.hr_staff_members where id=target_staff_id and active and deleted_at is null) then raise exception 'Active staff member not found'; end if; perform pg_advisory_xact_lock(hashtextextended(target_asset_id::text,0)); if not exists(select 1 from public.inventory_assets where id=target_asset_id and active and asset_status='available') then raise exception 'Asset is not available for assignment'; end if; insert into public.inventory_asset_assignments(asset_id,staff_id,assigned_location_id,due_on,purpose,assignment_condition,assigned_by) select a.id,target_staff_id,target_location_id,due_date_value,purpose_text,a.asset_condition,auth.uid() from public.inventory_assets a where a.id=target_asset_id returning * into v_assignment; update public.inventory_assets set asset_status='assigned',current_location_id=coalesce(target_location_id,current_location_id) where id=target_asset_id; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('asset_assigned','asset',target_asset_id,jsonb_build_object('staff_id',target_staff_id,'assignment_id',v_assignment.id,'due_on',due_date_value),auth.uid()); return to_jsonb(v_assignment); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_block_delete()
  RETURNS trigger
@@ -3237,6 +3361,7 @@ begin
   if current_setting('app.inventory_allow_hard_delete',true)='on' then return old; end if;
   raise exception 'Inventory and asset history cannot be hard deleted; use lifecycle status instead' using errcode='42501';
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_catalog(search_text text DEFAULT NULL::text, item_type_filter text DEFAULT NULL::text, category_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3248,6 +3373,7 @@ begin
   perform public.inventory_require_access('view',false);
   return coalesce((select jsonb_agg(jsonb_build_object('id',i.id,'item_code',i.item_code,'item_name',i.item_name,'item_type',i.item_type,'category',i.category,'unit_of_measure',i.unit_of_measure,'description',i.description,'reorder_level',i.reorder_level,'reorder_quantity',i.reorder_quantity,'estimated_unit_cost',i.estimated_unit_cost,'preferred_supplier_id',i.preferred_supplier_id,'preferred_supplier',s.supplier_name,'active',i.active,'total_stock',case when i.item_type='consumable' then (select coalesce(sum(m.quantity_delta),0) from public.inventory_stock_movements m where m.item_id=i.id and m.voided_at is null) else null end) order by i.active desc,i.item_name) from public.inventory_items i left join public.inventory_suppliers s on s.id=i.preferred_supplier_id where (coalesce(nullif(search_text,''),'')='' or i.item_code ilike '%'||search_text||'%' or i.item_name ilike '%'||search_text||'%' or coalesce(i.category,'') ilike '%'||search_text||'%') and (coalesce(nullif(item_type_filter,''),'')='' or i.item_type=item_type_filter) and (coalesce(nullif(category_filter,''),'')='' or coalesce(i.category,'')=category_filter)),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_complete_asset_maintenance(target_maintenance_id uuid, outcome_text text, next_due_date date DEFAULT NULL::date, cost_value numeric DEFAULT NULL::numeric)
  RETURNS jsonb
@@ -3257,6 +3383,7 @@ CREATE OR REPLACE FUNCTION public.inventory_complete_asset_maintenance(target_ma
 AS $function$
 declare v_row public.inventory_asset_maintenance;
 begin perform public.inventory_require_access('assets',true); update public.inventory_asset_maintenance set completed_on=current_date,outcome=coalesce(nullif(btrim(outcome_text),''),'Completed'),next_due_on=next_due_date,cost=coalesce(cost_value,cost),status='completed',completed_by=auth.uid() where id=target_maintenance_id and status='open' returning * into v_row; if v_row.id is null then raise exception 'Open maintenance record not found'; end if; update public.inventory_assets set asset_status='available',next_maintenance_on=coalesce(next_due_date,next_maintenance_on) where id=v_row.asset_id and asset_status='maintenance'; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('asset_maintenance_completed','asset',v_row.asset_id,jsonb_build_object('maintenance_id',v_row.id,'next_due_on',next_due_date),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_create_purchase_order(payload jsonb)
  RETURNS jsonb
@@ -3283,6 +3410,7 @@ begin
   insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('purchase_order_created','purchase_order',v_po.id,jsonb_build_object('po_no',v_po.po_no,'request_id',v_request,'supplier_id',v_supplier,'line_count',v_count),auth.uid());
   return public.inventory_purchase_order_detail(v_po.id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_create_purchase_request(payload jsonb)
  RETURNS jsonb
@@ -3308,6 +3436,7 @@ begin
   insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('purchase_request_submitted','purchase_request',v_request.id,jsonb_build_object('request_no',v_request.request_no,'line_count',v_count),auth.uid());
   return public.inventory_purchase_request_detail(v_request.id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_current_stock(target_item_id uuid, target_location_id uuid)
  RETURNS numeric
@@ -3317,6 +3446,7 @@ CREATE OR REPLACE FUNCTION public.inventory_current_stock(target_item_id uuid, t
 AS $function$
   select coalesce(sum(quantity_delta),0)::numeric from public.inventory_stock_movements where item_id=target_item_id and location_id=target_location_id and voided_at is null
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_dashboard()
  RETURNS jsonb
@@ -3326,6 +3456,7 @@ CREATE OR REPLACE FUNCTION public.inventory_dashboard()
 AS $function$
 declare v_access jsonb;
 begin v_access:=public.inventory_require_access('view',false); return jsonb_build_object('access',v_access,'metrics',jsonb_build_object('active_items',(select count(*) from public.inventory_items where active),'consumables',(select count(*) from public.inventory_items where active and item_type='consumable'),'assets',(select count(*) from public.inventory_assets where active),'assigned_assets',(select count(*) from public.inventory_assets where active and asset_status='assigned'),'maintenance_assets',(select count(*) from public.inventory_assets where active and asset_status='maintenance'),'pending_item_requests',(select count(*) from public.inventory_item_requests where status='pending'),'pending_writeoffs',(select count(*) from public.inventory_asset_writeoffs where status='pending'),'purchase_requests_pending',(select count(*) from public.inventory_purchase_requests where status='submitted'),'purchase_orders_pending',(select count(*) from public.inventory_purchase_orders where status='draft'),'purchase_orders_open',(select count(*) from public.inventory_purchase_orders where status in ('approved','partially_received')),'goods_receipts',(select count(*) from public.inventory_goods_receipts),'low_stock_items',(select count(*) from public.inventory_items i where i.active and i.item_type='consumable' and (select coalesce(sum(m.quantity_delta),0) from public.inventory_stock_movements m where m.item_id=i.id and m.voided_at is null)<=i.reorder_level)),'recent_events',coalesce((select jsonb_agg(to_jsonb(e) order by e.occurred_at desc) from (select * from public.inventory_events order by occurred_at desc limit 20)e),'[]'::jsonb)); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_decide_asset_writeoff(target_writeoff_id uuid, decision text, decision_reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3335,6 +3466,7 @@ CREATE OR REPLACE FUNCTION public.inventory_decide_asset_writeoff(target_writeof
 AS $function$
 declare v_row public.inventory_asset_writeoffs;
 begin perform public.inventory_require_access('approve',true); if decision not in ('approved','rejected') then raise exception 'Decision must be approved or rejected'; end if; update public.inventory_asset_writeoffs set status=decision,decided_by=auth.uid(),decided_at=now(),decision_reason=nullif(btrim(decision_reason_text),'') where id=target_writeoff_id and status='pending' returning * into v_row; if v_row.id is null then raise exception 'Pending write-off request not found'; end if; if decision='approved' then update public.inventory_assets set asset_status='disposed',active=false,disposed_on=current_date where id=v_row.asset_id and active; end if; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('asset_writeoff_'||decision,'asset',v_row.asset_id,jsonb_build_object('writeoff_id',v_row.id,'writeoff_no',v_row.writeoff_no,'reason',decision_reason_text),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_decide_item_request(target_request_id uuid, decision text, decision_reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3344,6 +3476,7 @@ CREATE OR REPLACE FUNCTION public.inventory_decide_item_request(target_request_i
 AS $function$
 declare v_row public.inventory_item_requests;
 begin perform public.inventory_require_access('stock',true); if decision not in ('approved','rejected') then raise exception 'Decision must be approved or rejected'; end if; update public.inventory_item_requests set status=decision,decided_by=auth.uid(),decided_at=now(),decision_reason=nullif(btrim(decision_reason_text),'') where id=target_request_id and status='pending' returning * into v_row; if v_row.id is null then raise exception 'Pending item request not found'; end if; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('item_request_'||decision,'item_request',v_row.id,jsonb_build_object('request_no',v_row.request_no,'reason',decision_reason_text),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_decide_purchase_order(target_po_id uuid, decision text, decision_reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3353,6 +3486,7 @@ CREATE OR REPLACE FUNCTION public.inventory_decide_purchase_order(target_po_id u
 AS $function$
 declare v_po public.inventory_purchase_orders;
 begin perform public.inventory_require_access('approve',true); if decision not in ('approved','rejected') then raise exception 'Decision must be approved or rejected'; end if; update public.inventory_purchase_orders set status=decision,approved_by=auth.uid(),approved_at=now(),decision_reason=nullif(btrim(decision_reason_text),'') where id=target_po_id and status='draft' returning * into v_po; if v_po.id is null then raise exception 'Draft purchase order not found'; end if; if decision='approved' then update public.inventory_purchase_requests set status='converted',updated_at=now() where id=v_po.request_id and status='approved'; end if; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('purchase_order_'||decision,'purchase_order',v_po.id,jsonb_build_object('po_no',v_po.po_no,'reason',decision_reason_text),auth.uid()); return public.inventory_purchase_order_detail(v_po.id); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_decide_purchase_request(target_request_id uuid, decision text, decision_reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3362,6 +3496,7 @@ CREATE OR REPLACE FUNCTION public.inventory_decide_purchase_request(target_reque
 AS $function$
 declare v_row public.inventory_purchase_requests;
 begin perform public.inventory_require_access('approve',true); if decision not in ('approved','rejected') then raise exception 'Decision must be approved or rejected'; end if; update public.inventory_purchase_requests set status=decision,decided_by=auth.uid(),decided_at=now(),decision_reason=nullif(btrim(decision_reason_text),'') where id=target_request_id and status='submitted' returning * into v_row; if v_row.id is null then raise exception 'Submitted purchase request not found'; end if; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('purchase_request_'||decision,'purchase_request',v_row.id,jsonb_build_object('request_no',v_row.request_no,'reason',decision_reason_text),auth.uid()); return public.inventory_purchase_request_detail(v_row.id); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_fulfill_item_request(target_request_id uuid, target_location_id uuid, notes_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3371,6 +3506,7 @@ CREATE OR REPLACE FUNCTION public.inventory_fulfill_item_request(target_request_
 AS $function$
 declare v_row public.inventory_item_requests; v_movement uuid;
 begin perform public.inventory_require_access('stock',true); select * into v_row from public.inventory_item_requests where id=target_request_id and status='approved' for update; if v_row.id is null then raise exception 'Approved item request not found'; end if; v_movement:=public.inventory_record_stock_movement(v_row.item_id,target_location_id,'issue',-v_row.quantity,null,'item_request',v_row.id,v_row.request_no,null,v_row.staff_id,v_row.purpose,notes_text); update public.inventory_item_requests set status='fulfilled',fulfilled_movement_id=v_movement,fulfilled_by=auth.uid(),fulfilled_at=now() where id=v_row.id returning * into v_row; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('item_request_fulfilled','item_request',v_row.id,jsonb_build_object('request_no',v_row.request_no,'movement_id',v_movement,'location_id',target_location_id),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_generate_code(code_kind text)
  RETURNS text
@@ -3387,6 +3523,7 @@ begin
   elsif code_kind='writeoff' then v_n:=nextval('public.inventory_writeoff_no_seq'); return v_root||'-WOF-'||to_char(current_date,'YYYY')||'-'||lpad(v_n::text,6,'0');
   else raise exception 'Unknown inventory code kind'; end if;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_generate_procurement_no(code_kind text)
  RETURNS text
@@ -3401,6 +3538,7 @@ begin
   elsif code_kind='grn' then v_n:=nextval('public.inventory_grn_no_seq'); return v_root||'-GRN-'||to_char(current_date,'YYYY')||'-'||lpad(v_n::text,6,'0');
   else raise exception 'Unknown procurement number kind'; end if;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_goods_receipt_detail(target_grn_id uuid)
  RETURNS jsonb
@@ -3410,6 +3548,7 @@ CREATE OR REPLACE FUNCTION public.inventory_goods_receipt_detail(target_grn_id u
 AS $function$
 declare v_header jsonb;
 begin perform public.inventory_require_access('view',false); select jsonb_build_object('id',g.id,'grn_no',g.grn_no,'purchase_order_id',g.purchase_order_id,'po_no',po.po_no,'supplier_id',po.supplier_id,'supplier_name',s.supplier_name,'supplier_delivery_ref',g.supplier_delivery_ref,'received_on',g.received_on,'received_by',g.received_by,'notes',g.notes) into v_header from public.inventory_goods_receipts g join public.inventory_purchase_orders po on po.id=g.purchase_order_id join public.inventory_suppliers s on s.id=po.supplier_id where g.id=target_grn_id; if v_header is null then raise exception 'Goods receipt not found'; end if; return jsonb_build_object('header',v_header,'lines',coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'purchase_order_line_id',l.purchase_order_line_id,'item_id',l.item_id,'item_code',i.item_code,'item_name',i.item_name,'item_type',i.item_type,'quantity_received',l.quantity_received,'unit_of_measure',i.unit_of_measure,'unit_cost',l.unit_cost,'line_total',l.quantity_received*l.unit_cost,'location_id',l.location_id,'location_name',loc.name,'stock_movement_id',l.stock_movement_id,'asset_ids',to_jsonb(l.asset_ids),'notes',l.notes) order by i.item_name) from public.inventory_goods_receipt_lines l join public.inventory_items i on i.id=l.item_id left join public.inventory_locations loc on loc.id=l.location_id where l.goods_receipt_id=target_grn_id),'[]'::jsonb)); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_goods_receipt_register()
  RETURNS jsonb
@@ -3418,6 +3557,7 @@ CREATE OR REPLACE FUNCTION public.inventory_goods_receipt_register()
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$
 begin perform public.inventory_require_access('view',false); return coalesce((select jsonb_agg(jsonb_build_object('id',g.id,'grn_no',g.grn_no,'purchase_order_id',g.purchase_order_id,'po_no',po.po_no,'supplier_name',s.supplier_name,'supplier_delivery_ref',g.supplier_delivery_ref,'received_on',g.received_on,'total',coalesce((select sum(l.quantity_received*l.unit_cost) from public.inventory_goods_receipt_lines l where l.goods_receipt_id=g.id),0)) order by g.received_on desc,g.created_at desc) from public.inventory_goods_receipts g join public.inventory_purchase_orders po on po.id=g.purchase_order_id join public.inventory_suppliers s on s.id=po.supplier_id),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_identifier_root()
  RETURNS text
@@ -3430,6 +3570,7 @@ begin
   select coalesce(nullif(regexp_replace(upper(identifier_root),'[^A-Z0-9]','','g'),''),nullif(regexp_replace(upper(school_name),'[^A-Z]','','g'),''),'SCH') into v_root from public.school_settings limit 1;
   return left(coalesce(v_root,'SCH'),8);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_issue_stock(target_item_id uuid, target_location_id uuid, quantity numeric, recipient_staff_uuid uuid DEFAULT NULL::uuid, purpose_text text DEFAULT NULL::text, notes_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3439,6 +3580,7 @@ CREATE OR REPLACE FUNCTION public.inventory_issue_stock(target_item_id uuid, tar
 AS $function$
 declare v_id uuid;
 begin perform public.inventory_require_access('stock',true); if quantity<=0 then raise exception 'Issue quantity must be positive'; end if; if recipient_staff_uuid is not null and not exists(select 1 from public.hr_staff_members where id=recipient_staff_uuid and active and deleted_at is null) then raise exception 'Active staff recipient not found'; end if; v_id:=public.inventory_record_stock_movement(target_item_id,target_location_id,'issue',-quantity,null,'manual_issue',null,null,null,recipient_staff_uuid,purpose_text,notes_text); return jsonb_build_object('movement_id',v_id,'balance',public.inventory_current_stock(target_item_id,target_location_id)); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_item_request_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3447,6 +3589,7 @@ CREATE OR REPLACE FUNCTION public.inventory_item_request_register(status_filter 
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$
 begin perform public.inventory_require_access('stock',false); return coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'request_no',r.request_no,'staff_id',r.staff_id,'staff_no',h.staff_no,'staff_name',btrim(concat_ws(' ',h.first_name,nullif(h.middle_name,''),nullif(h.last_name,''))),'department',h.department,'item_id',r.item_id,'item_code',i.item_code,'item_name',i.item_name,'quantity',r.quantity,'unit_of_measure',i.unit_of_measure,'purpose',r.purpose,'preferred_location_id',r.preferred_location_id,'preferred_location',l.name,'status',r.status,'requested_at',r.requested_at,'decision_reason',r.decision_reason,'fulfilled_at',r.fulfilled_at) order by case r.status when 'pending' then 0 when 'approved' then 1 else 2 end,r.requested_at desc) from public.inventory_item_requests r join public.hr_staff_members h on h.id=r.staff_id join public.inventory_items i on i.id=r.item_id left join public.inventory_locations l on l.id=r.preferred_location_id where coalesce(nullif(status_filter,''),'')='' or r.status=status_filter),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_locations_register()
  RETURNS jsonb
@@ -3454,6 +3597,7 @@ CREATE OR REPLACE FUNCTION public.inventory_locations_register()
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$ begin perform public.inventory_require_access('view',false); return coalesce((select jsonb_agg(to_jsonb(l) order by l.active desc,l.name) from public.inventory_locations l),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_my_account()
  RETURNS jsonb
@@ -3463,6 +3607,7 @@ CREATE OR REPLACE FUNCTION public.inventory_my_account()
 AS $function$
 declare v_staff uuid; v_license jsonb;
 begin if auth.uid() is null then raise exception 'Authentication required' using errcode='42501'; end if; v_license:=public.license_access_for_actor(auth.uid()); if not coalesce((v_license->>'read_allowed')::boolean,false) then raise exception 'Inventory access unavailable' using errcode='42501'; end if; select id into v_staff from public.hr_staff_members where profile_id=auth.uid() and active and deleted_at is null; if v_staff is null then return null; end if; return jsonb_build_object('staff_id',v_staff,'requests',coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'request_no',r.request_no,'item_name',i.item_name,'quantity',r.quantity,'unit_of_measure',i.unit_of_measure,'purpose',r.purpose,'status',r.status,'requested_at',r.requested_at,'decision_reason',r.decision_reason,'fulfilled_at',r.fulfilled_at) order by r.requested_at desc) from public.inventory_item_requests r join public.inventory_items i on i.id=r.item_id where r.staff_id=v_staff),'[]'::jsonb),'assets',coalesce((select jsonb_agg(jsonb_build_object('assignment_id',aa.id,'asset_id',a.id,'asset_tag',a.asset_tag,'asset_name',a.asset_name,'asset_condition',a.asset_condition,'assigned_on',aa.assigned_on,'due_on',aa.due_on,'purpose',aa.purpose,'location',l.name) order by aa.assigned_on desc) from public.inventory_asset_assignments aa join public.inventory_assets a on a.id=aa.asset_id left join public.inventory_locations l on l.id=aa.assigned_location_id where aa.staff_id=v_staff and aa.returned_at is null),'[]'::jsonb),'recent_issues',coalesce((select jsonb_agg(jsonb_build_object('movement_id',m.id,'item_name',i.item_name,'quantity',abs(m.quantity_delta),'unit_of_measure',i.unit_of_measure,'purpose',m.purpose,'posted_at',m.posted_at,'location',l.name) order by m.posted_at desc) from (select * from public.inventory_stock_movements where recipient_staff_id=v_staff and movement_type='issue' and voided_at is null order by posted_at desc limit 30)m join public.inventory_items i on i.id=m.item_id join public.inventory_locations l on l.id=m.location_id),'[]'::jsonb)); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_my_request_options()
  RETURNS jsonb
@@ -3482,6 +3627,7 @@ begin
     'locations',coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'code',l.code,'name',l.name) order by l.name) from public.inventory_locations l where l.active),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_purchase_order_detail(target_po_id uuid)
  RETURNS jsonb
@@ -3496,6 +3642,7 @@ begin
   if v_header is null then raise exception 'Purchase order not found'; end if;
   return jsonb_build_object('header',v_header,'lines',coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'request_line_id',l.request_line_id,'item_id',l.item_id,'item_code',i.item_code,'item_name',i.item_name,'item_type',i.item_type,'unit_of_measure',i.unit_of_measure,'quantity_ordered',l.quantity_ordered,'quantity_received',l.quantity_received,'quantity_outstanding',l.quantity_ordered-l.quantity_received,'unit_cost',l.unit_cost,'line_total',l.quantity_ordered*l.unit_cost,'notes',l.notes) order by i.item_name) from public.inventory_purchase_order_lines l join public.inventory_items i on i.id=l.item_id where l.purchase_order_id=target_po_id),'[]'::jsonb),'receipts',coalesce((select jsonb_agg(jsonb_build_object('id',g.id,'grn_no',g.grn_no,'supplier_delivery_ref',g.supplier_delivery_ref,'received_on',g.received_on,'received_by',g.received_by,'notes',g.notes) order by g.received_on desc,g.created_at desc) from public.inventory_goods_receipts g where g.purchase_order_id=target_po_id),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_purchase_order_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3504,6 +3651,7 @@ CREATE OR REPLACE FUNCTION public.inventory_purchase_order_register(status_filte
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$
 begin perform public.inventory_require_access('view',false); return coalesce((select jsonb_agg(jsonb_build_object('id',po.id,'po_no',po.po_no,'request_id',po.request_id,'request_no',r.request_no,'supplier_id',po.supplier_id,'supplier_name',s.supplier_name,'order_date',po.order_date,'expected_date',po.expected_date,'status',po.status,'total',coalesce((select sum(l.quantity_ordered*l.unit_cost) from public.inventory_purchase_order_lines l where l.purchase_order_id=po.id),0),'received_total',coalesce((select sum(l.quantity_received*l.unit_cost) from public.inventory_purchase_order_lines l where l.purchase_order_id=po.id),0),'decision_reason',po.decision_reason) order by case po.status when 'draft' then 0 when 'approved' then 1 when 'partially_received' then 2 else 3 end,po.order_date desc,po.created_at desc) from public.inventory_purchase_orders po join public.inventory_purchase_requests r on r.id=po.request_id join public.inventory_suppliers s on s.id=po.supplier_id where coalesce(nullif(status_filter,''),'')='' or po.status=status_filter),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_purchase_request_detail(target_request_id uuid)
  RETURNS jsonb
@@ -3518,6 +3666,7 @@ begin
   if v_header is null then raise exception 'Purchase request not found'; end if;
   return jsonb_build_object('header',v_header,'lines',coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'item_id',l.item_id,'item_code',i.item_code,'item_name',i.item_name,'item_type',i.item_type,'unit_of_measure',i.unit_of_measure,'quantity',l.quantity,'estimated_unit_cost',l.estimated_unit_cost,'estimated_line_total',l.quantity*coalesce(l.estimated_unit_cost,0),'notes',l.notes) order by i.item_name) from public.inventory_purchase_request_lines l join public.inventory_items i on i.id=l.item_id where l.request_id=target_request_id),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_purchase_request_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3526,6 +3675,7 @@ CREATE OR REPLACE FUNCTION public.inventory_purchase_request_register(status_fil
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$
 begin perform public.inventory_require_access('view',false); return coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'request_no',r.request_no,'justification',r.justification,'needed_by',r.needed_by,'status',r.status,'requested_at',r.requested_at,'requester_name',p.full_name,'line_count',(select count(*) from public.inventory_purchase_request_lines l where l.request_id=r.id),'estimated_total',coalesce((select sum(l.quantity*coalesce(l.estimated_unit_cost,0)) from public.inventory_purchase_request_lines l where l.request_id=r.id),0),'decision_reason',r.decision_reason) order by case r.status when 'submitted' then 0 when 'approved' then 1 else 2 end,r.requested_at desc) from public.inventory_purchase_requests r left join public.profiles p on p.id=r.requested_by where coalesce(nullif(status_filter,''),'')='' or r.status=status_filter),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_receive_purchase_order(target_po_id uuid, supplier_delivery_ref_text text, receipt_lines jsonb, notes_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3570,6 +3720,7 @@ begin
   insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('goods_received','goods_receipt',v_grn.id,jsonb_build_object('grn_no',v_grn.grn_no,'po_no',v_po.po_no,'po_status',v_po.status),auth.uid());
   return public.inventory_goods_receipt_detail(v_grn.id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_record_asset_maintenance(target_asset_id uuid, maintenance_kind text, description_text text, vendor_uuid uuid DEFAULT NULL::uuid, cost_value numeric DEFAULT NULL::numeric, next_due_date date DEFAULT NULL::date)
  RETURNS jsonb
@@ -3579,6 +3730,7 @@ CREATE OR REPLACE FUNCTION public.inventory_record_asset_maintenance(target_asse
 AS $function$
 declare v_row public.inventory_asset_maintenance;
 begin perform public.inventory_require_access('assets',true); if exists(select 1 from public.inventory_asset_assignments where asset_id=target_asset_id and returned_at is null) then raise exception 'Assigned asset must be returned before maintenance'; end if; if not exists(select 1 from public.inventory_assets where id=target_asset_id and active and asset_status not in ('disposed','lost')) then raise exception 'Asset is not eligible for maintenance'; end if; insert into public.inventory_asset_maintenance(asset_id,maintenance_type,vendor_id,cost,description,next_due_on,status,created_by) values(target_asset_id,maintenance_kind,vendor_uuid,cost_value,coalesce(nullif(btrim(description_text),''),'Maintenance'),next_due_date,'open',auth.uid()) returning * into v_row; update public.inventory_assets set asset_status='maintenance' where id=target_asset_id; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('asset_maintenance_opened','asset',target_asset_id,jsonb_build_object('maintenance_id',v_row.id,'type',maintenance_kind),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_record_stock_movement(target_item_id uuid, target_location_id uuid, movement_kind text, quantity_change numeric, unit_cost_value numeric DEFAULT NULL::numeric, reference_kind text DEFAULT NULL::text, reference_uuid uuid DEFAULT NULL::uuid, reference_text text DEFAULT NULL::text, related_movement_uuid uuid DEFAULT NULL::uuid, recipient_staff_uuid uuid DEFAULT NULL::uuid, purpose_text text DEFAULT NULL::text, notes_text text DEFAULT NULL::text)
  RETURNS uuid
@@ -3605,6 +3757,7 @@ begin
   insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('stock_'||movement_kind,'stock_movement',v_id,jsonb_build_object('item_id',target_item_id,'location_id',target_location_id,'quantity_delta',quantity_change,'reference_no',reference_text),auth.uid());
   return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_request_asset_writeoff(target_asset_id uuid, reason_text text)
  RETURNS jsonb
@@ -3614,6 +3767,7 @@ CREATE OR REPLACE FUNCTION public.inventory_request_asset_writeoff(target_asset_
 AS $function$
 declare v_row public.inventory_asset_writeoffs;
 begin perform public.inventory_require_access('assets',true); if coalesce(btrim(reason_text),'')='' then raise exception 'Write-off reason is required'; end if; if exists(select 1 from public.inventory_asset_assignments where asset_id=target_asset_id and returned_at is null) then raise exception 'Assigned asset cannot be written off'; end if; if not exists(select 1 from public.inventory_assets where id=target_asset_id and active and asset_status<>'disposed') then raise exception 'Active asset not found'; end if; insert into public.inventory_asset_writeoffs(writeoff_no,asset_id,reason,requested_by) values(public.inventory_generate_code('writeoff'),target_asset_id,reason_text,auth.uid()) returning * into v_row; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('asset_writeoff_requested','asset',target_asset_id,jsonb_build_object('writeoff_id',v_row.id,'writeoff_no',v_row.writeoff_no),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_require_access(capability text DEFAULT 'view'::text, require_write boolean DEFAULT false)
  RETURNS jsonb
@@ -3633,6 +3787,7 @@ begin
   if public.current_aal()<>'aal2' then raise exception 'Multi-factor authentication is required for Inventory management' using errcode='42501'; end if;
   return v_access;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_return_asset(target_assignment_id uuid, return_condition_value text DEFAULT NULL::text, return_notes_text text DEFAULT NULL::text, target_location_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -3642,6 +3797,7 @@ CREATE OR REPLACE FUNCTION public.inventory_return_asset(target_assignment_id uu
 AS $function$
 declare v_assignment public.inventory_asset_assignments; v_status text;
 begin perform public.inventory_require_access('assets',true); select * into v_assignment from public.inventory_asset_assignments where id=target_assignment_id and returned_at is null for update; if v_assignment.id is null then raise exception 'Current asset assignment not found'; end if; v_status:=case when coalesce(return_condition_value,'')='damaged' then 'maintenance' else 'available' end; update public.inventory_asset_assignments set returned_at=now(),returned_by=auth.uid(),return_condition=coalesce(nullif(return_condition_value,''),assignment_condition),return_notes=nullif(btrim(return_notes_text),'') where id=target_assignment_id returning * into v_assignment; update public.inventory_assets set asset_status=v_status,asset_condition=coalesce(nullif(return_condition_value,''),asset_condition),current_location_id=coalesce(target_location_id,current_location_id) where id=v_assignment.asset_id; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('asset_returned','asset',v_assignment.asset_id,jsonb_build_object('assignment_id',v_assignment.id,'condition',return_condition_value,'status',v_status),auth.uid()); return to_jsonb(v_assignment); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_return_stock(issue_movement_id uuid, quantity numeric, notes_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3651,6 +3807,7 @@ CREATE OR REPLACE FUNCTION public.inventory_return_stock(issue_movement_id uuid,
 AS $function$
 declare v_issue public.inventory_stock_movements; v_returned numeric; v_id uuid;
 begin perform public.inventory_require_access('stock',true); if quantity<=0 then raise exception 'Return quantity must be positive'; end if; select * into v_issue from public.inventory_stock_movements where id=issue_movement_id and movement_type='issue' and voided_at is null; if v_issue.id is null then raise exception 'Original issue movement not found'; end if; select coalesce(sum(quantity_delta),0) into v_returned from public.inventory_stock_movements where related_movement_id=v_issue.id and movement_type='return' and voided_at is null; if v_returned+quantity>abs(v_issue.quantity_delta) then raise exception 'Return quantity exceeds outstanding issued quantity'; end if; v_id:=public.inventory_record_stock_movement(v_issue.item_id,v_issue.location_id,'return',quantity,v_issue.unit_cost,'return',v_issue.reference_id,v_issue.reference_no,v_issue.id,v_issue.recipient_staff_id,v_issue.purpose,notes_text); return jsonb_build_object('movement_id',v_id,'balance',public.inventory_current_stock(v_issue.item_id,v_issue.location_id),'remaining_outstanding',abs(v_issue.quantity_delta)-v_returned-quantity); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_revoke_staff_access(target_access_id uuid, reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3660,6 +3817,7 @@ CREATE OR REPLACE FUNCTION public.inventory_revoke_staff_access(target_access_id
 AS $function$
 declare v_row public.inventory_staff_access;
 begin perform public.inventory_require_access('staff_access',true); update public.inventory_staff_access set active=false,revoked_by=auth.uid(),revoked_at=now(),notes=case when coalesce(btrim(reason_text),'')<>'' then concat_ws(E'\n',notes,'Revoked: '||reason_text) else notes end where id=target_access_id and active and revoked_at is null returning * into v_row; if v_row.id is null then raise exception 'Active inventory staff appointment not found'; end if; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('inventory_staff_access_revoked','inventory_staff_access',v_row.id,jsonb_build_object('staff_id',v_row.staff_id,'access_role',v_row.access_role,'reason',reason_text),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_save_asset(payload jsonb)
  RETURNS jsonb
@@ -3672,6 +3830,7 @@ begin perform public.inventory_require_access('assets',true); v_id:=nullif(paylo
   if v_id is null then insert into public.inventory_assets(asset_tag,item_id,asset_name,category,serial_number,model,manufacturer,supplier_id,purchase_date,purchase_cost,warranty_expires_on,current_location_id,asset_status,asset_condition,next_maintenance_on,notes,active,created_by) values(coalesce(nullif(btrim(payload->>'asset_tag'),''),public.inventory_generate_code('asset')),nullif(payload->>'item_id','')::uuid,coalesce(nullif(btrim(payload->>'asset_name'),''),'School asset'),nullif(btrim(payload->>'category'),''),nullif(btrim(payload->>'serial_number'),''),nullif(btrim(payload->>'model'),''),nullif(btrim(payload->>'manufacturer'),''),nullif(payload->>'supplier_id','')::uuid,nullif(payload->>'purchase_date','')::date,nullif(payload->>'purchase_cost','')::numeric,nullif(payload->>'warranty_expires_on','')::date,nullif(payload->>'current_location_id','')::uuid,'available',coalesce(nullif(payload->>'asset_condition',''),'good'),nullif(payload->>'next_maintenance_on','')::date,nullif(btrim(payload->>'notes'),''),true,auth.uid()) returning * into v_row;
   else update public.inventory_assets set asset_name=coalesce(nullif(btrim(payload->>'asset_name'),''),asset_name),category=case when payload?'category' then nullif(btrim(payload->>'category'),'') else category end,serial_number=case when payload?'serial_number' then nullif(btrim(payload->>'serial_number'),'') else serial_number end,model=case when payload?'model' then nullif(btrim(payload->>'model'),'') else model end,manufacturer=case when payload?'manufacturer' then nullif(btrim(payload->>'manufacturer'),'') else manufacturer end,supplier_id=case when payload?'supplier_id' then nullif(payload->>'supplier_id','')::uuid else supplier_id end,purchase_date=case when payload?'purchase_date' then nullif(payload->>'purchase_date','')::date else purchase_date end,purchase_cost=case when payload?'purchase_cost' then nullif(payload->>'purchase_cost','')::numeric else purchase_cost end,warranty_expires_on=case when payload?'warranty_expires_on' then nullif(payload->>'warranty_expires_on','')::date else warranty_expires_on end,current_location_id=case when payload?'current_location_id' then nullif(payload->>'current_location_id','')::uuid else current_location_id end,asset_condition=coalesce(nullif(payload->>'asset_condition',''),asset_condition),next_maintenance_on=case when payload?'next_maintenance_on' then nullif(payload->>'next_maintenance_on','')::date else next_maintenance_on end,notes=case when payload?'notes' then nullif(btrim(payload->>'notes'),'') else notes end where id=v_id and asset_status<>'disposed' returning * into v_row; end if;
   if v_row.id is null then raise exception 'Asset not found or cannot be edited'; end if; return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_save_item(payload jsonb)
  RETURNS jsonb
@@ -3691,6 +3850,7 @@ begin
   if v_row.id is null then raise exception 'Inventory item not found'; end if;
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_save_location(payload jsonb)
  RETURNS jsonb
@@ -3703,6 +3863,7 @@ begin perform public.inventory_require_access('catalog',true); v_id:=nullif(payl
   if v_id is null then insert into public.inventory_locations(code,name,location_type,description,active,created_by) values(upper(coalesce(nullif(btrim(payload->>'code'),''),'LOC-'||to_char(nextval('public.inventory_item_code_seq'),'FM000000'))),coalesce(nullif(btrim(payload->>'name'),''),'Inventory location'),coalesce(nullif(payload->>'location_type',''),'store'),nullif(btrim(payload->>'description'),''),coalesce((payload->>'active')::boolean,true),auth.uid()) returning * into v_row;
   else update public.inventory_locations set name=coalesce(nullif(btrim(payload->>'name'),''),name),location_type=coalesce(nullif(payload->>'location_type',''),location_type),description=case when payload?'description' then nullif(btrim(payload->>'description'),'') else description end,active=coalesce((payload->>'active')::boolean,active) where id=v_id returning * into v_row; end if;
   if v_row.id is null then raise exception 'Inventory location not found'; end if; return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_save_settings(payload jsonb)
  RETURNS jsonb
@@ -3712,6 +3873,7 @@ CREATE OR REPLACE FUNCTION public.inventory_save_settings(payload jsonb)
 AS $function$
 declare v_row public.inventory_settings;
 begin perform public.inventory_require_access('settings',true); update public.inventory_settings set currency=coalesce(nullif(upper(btrim(payload->>'currency')),''),currency),default_reorder_level=coalesce(nullif(payload->>'default_reorder_level','')::numeric,default_reorder_level),default_reorder_quantity=coalesce(nullif(payload->>'default_reorder_quantity','')::numeric,default_reorder_quantity),low_stock_alerts=coalesce((payload->>'low_stock_alerts')::boolean,low_stock_alerts),asset_maintenance_alert_days=coalesce(nullif(payload->>'asset_maintenance_alert_days','')::integer,asset_maintenance_alert_days) where singleton_key='default' returning * into v_row; return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_save_staff_access(payload jsonb)
  RETURNS jsonb
@@ -3737,6 +3899,7 @@ begin
   insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('inventory_staff_access_saved','inventory_staff_access',v_row.id,jsonb_build_object('staff_id',v_staff,'access_role',v_role,'mfa_required',true),auth.uid());
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_save_supplier(payload jsonb)
  RETURNS jsonb
@@ -3749,6 +3912,7 @@ begin perform public.inventory_require_access('procurement',true); v_id:=nullif(
   if v_id is null then insert into public.inventory_suppliers(supplier_code,supplier_name,contact_name,phone,email,address,tax_id,payment_terms,notes,active,created_by) values(coalesce(nullif(btrim(payload->>'supplier_code'),''),public.inventory_generate_code('supplier')),coalesce(nullif(btrim(payload->>'supplier_name'),''),'Supplier'),nullif(btrim(payload->>'contact_name'),''),nullif(btrim(payload->>'phone'),''),nullif(btrim(payload->>'email'),''),nullif(btrim(payload->>'address'),''),nullif(btrim(payload->>'tax_id'),''),nullif(btrim(payload->>'payment_terms'),''),nullif(btrim(payload->>'notes'),''),coalesce((payload->>'active')::boolean,true),auth.uid()) returning * into v_row;
   else update public.inventory_suppliers set supplier_name=coalesce(nullif(btrim(payload->>'supplier_name'),''),supplier_name),contact_name=case when payload?'contact_name' then nullif(btrim(payload->>'contact_name'),'') else contact_name end,phone=case when payload?'phone' then nullif(btrim(payload->>'phone'),'') else phone end,email=case when payload?'email' then nullif(btrim(payload->>'email'),'') else email end,address=case when payload?'address' then nullif(btrim(payload->>'address'),'') else address end,tax_id=case when payload?'tax_id' then nullif(btrim(payload->>'tax_id'),'') else tax_id end,payment_terms=case when payload?'payment_terms' then nullif(btrim(payload->>'payment_terms'),'') else payment_terms end,notes=case when payload?'notes' then nullif(btrim(payload->>'notes'),'') else notes end,active=coalesce((payload->>'active')::boolean,active) where id=v_id returning * into v_row; end if;
   if v_row.id is null then raise exception 'Supplier not found'; end if; return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_session()
  RETURNS jsonb
@@ -3764,6 +3928,7 @@ begin
   select id into v_staff from public.hr_staff_members where profile_id=auth.uid() and active and deleted_at is null limit 1;
   return v_access || jsonb_build_object('read_allowed',coalesce((v_license->>'read_allowed')::boolean,false),'write_allowed',coalesce((v_license->>'write_allowed')::boolean,false),'self_service',v_staff is not null);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_settings_read()
  RETURNS jsonb
@@ -3771,6 +3936,7 @@ CREATE OR REPLACE FUNCTION public.inventory_settings_read()
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$ begin perform public.inventory_require_access('view',false); return (select to_jsonb(s) from public.inventory_settings s where singleton_key='default'); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_staff_access_register()
  RETURNS jsonb
@@ -3779,6 +3945,7 @@ CREATE OR REPLACE FUNCTION public.inventory_staff_access_register()
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$
 begin perform public.inventory_require_access('staff_access',false); return coalesce((select jsonb_agg(jsonb_build_object('id',a.id,'staff_id',a.staff_id,'profile_id',a.profile_id,'access_role',a.access_role,'active',a.active,'appointed_at',a.appointed_at,'revoked_at',a.revoked_at,'notes',a.notes,'staff_no',h.staff_no,'full_name',btrim(concat_ws(' ',h.first_name,nullif(h.middle_name,''),nullif(h.last_name,''))),'department',h.department,'job_title',h.job_title) order by a.active desc,a.appointed_at desc) from public.inventory_staff_access a join public.hr_staff_members h on h.id=a.staff_id),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_staff_candidates()
  RETURNS jsonb
@@ -3787,6 +3954,7 @@ CREATE OR REPLACE FUNCTION public.inventory_staff_candidates()
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$
 begin perform public.inventory_require_access('staff_access',false); return coalesce((select jsonb_agg(jsonb_build_object('id',h.id,'profile_id',h.profile_id,'staff_no',h.staff_no,'full_name',btrim(concat_ws(' ',h.first_name,nullif(h.middle_name,''),nullif(h.last_name,''))),'department',h.department,'job_title',h.job_title,'email',h.email,'phone',h.phone,'current_inventory_role',a.access_role) order by h.last_name,h.first_name) from public.hr_staff_members h left join public.inventory_staff_access a on a.staff_id=h.id and a.active and a.revoked_at is null where h.active and h.deleted_at is null and h.profile_id is not null),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_staff_directory(search_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3805,6 +3973,7 @@ begin
     where h.active and h.deleted_at is null and h.profile_id is not null
       and (coalesce(nullif(search_text,''),'')='' or h.staff_no ilike '%'||search_text||'%' or btrim(concat_ws(' ',h.first_name,nullif(h.middle_name,''),nullif(h.last_name,''))) ilike '%'||search_text||'%' or coalesce(h.department,'') ilike '%'||search_text||'%')),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_stock_movement_register(search_text text DEFAULT NULL::text, location_filter uuid DEFAULT NULL::uuid, movement_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3823,6 +3992,7 @@ begin
       and (coalesce(nullif(movement_filter,''),'')='' or m.movement_type=movement_filter)
       and (coalesce(nullif(search_text,''),'')='' or i.item_code ilike '%'||search_text||'%' or i.item_name ilike '%'||search_text||'%' or coalesce(m.reference_no,'') ilike '%'||search_text||'%')),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_stock_register(search_text text DEFAULT NULL::text, location_filter uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -3837,6 +4007,7 @@ begin
     'rows',coalesce((select jsonb_agg(jsonb_build_object('item_id',i.id,'item_code',i.item_code,'item_name',i.item_name,'category',i.category,'unit_of_measure',i.unit_of_measure,'location_id',l.id,'location_name',l.name,'quantity',coalesce((select sum(m.quantity_delta) from public.inventory_stock_movements m where m.item_id=i.id and m.location_id=l.id and m.voided_at is null),0),'reorder_level',i.reorder_level,'low_stock',coalesce((select sum(m.quantity_delta) from public.inventory_stock_movements m where m.item_id=i.id and m.location_id=l.id and m.voided_at is null),0)<=i.reorder_level) order by i.item_name,l.name) from public.inventory_items i cross join public.inventory_locations l where i.active and i.item_type='consumable' and l.active and (location_filter is null or l.id=location_filter) and (coalesce(nullif(search_text,''),'')='' or i.item_code ilike '%'||search_text||'%' or i.item_name ilike '%'||search_text||'%')),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_submit_my_item_request(target_item_id uuid, quantity numeric, purpose_text text, preferred_location_uuid uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -3846,6 +4017,7 @@ CREATE OR REPLACE FUNCTION public.inventory_submit_my_item_request(target_item_i
 AS $function$
 declare v_staff uuid; v_license jsonb; v_row public.inventory_item_requests;
 begin if auth.uid() is null then raise exception 'Authentication required' using errcode='42501'; end if; v_license:=public.license_access_for_actor(auth.uid()); if not coalesce((v_license->>'write_allowed')::boolean,false) then raise exception 'Inventory requests are unavailable while the school licence is read-only' using errcode='42501'; end if; select id into v_staff from public.hr_staff_members where profile_id=auth.uid() and active and deleted_at is null; if v_staff is null then raise exception 'Active staff record not found' using errcode='42501'; end if; if quantity<=0 then raise exception 'Requested quantity must be positive'; end if; if not exists(select 1 from public.inventory_items where id=target_item_id and active and item_type='consumable') then raise exception 'Active consumable item not found'; end if; insert into public.inventory_item_requests(request_no,staff_id,item_id,quantity,purpose,preferred_location_id) values(public.inventory_generate_code('request'),v_staff,target_item_id,quantity,coalesce(nullif(btrim(purpose_text),''),'Staff request'),preferred_location_uuid) returning * into v_row; insert into public.inventory_events(event_type,entity_type,entity_id,details,actor_id) values('item_request_submitted','item_request',v_row.id,jsonb_build_object('request_no',v_row.request_no,'staff_id',v_staff,'item_id',target_item_id,'quantity',quantity),auth.uid()); return to_jsonb(v_row); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_suppliers_register(search_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3853,12 +4025,14 @@ CREATE OR REPLACE FUNCTION public.inventory_suppliers_register(search_text text 
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$ begin perform public.inventory_require_access('view',false); return coalesce((select jsonb_agg(to_jsonb(s) order by s.active desc,s.supplier_name) from public.inventory_suppliers s where coalesce(nullif(search_text,''),'')='' or s.supplier_code ilike '%'||search_text||'%' or s.supplier_name ilike '%'||search_text||'%' or coalesce(s.contact_name,'') ilike '%'||search_text||'%'),'[]'::jsonb); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_touch_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
  SET search_path TO 'public', 'pg_catalog'
 AS $function$ begin new.updated_at:=now(); return new; end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.inventory_transfer_stock(target_item_id uuid, from_location_id uuid, to_location_id uuid, quantity numeric, reason_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3868,6 +4042,7 @@ CREATE OR REPLACE FUNCTION public.inventory_transfer_stock(target_item_id uuid, 
 AS $function$
 declare v_ref text; v_out uuid; v_in uuid;
 begin perform public.inventory_require_access('stock',true); if quantity<=0 then raise exception 'Transfer quantity must be positive'; end if; if from_location_id=to_location_id then raise exception 'Transfer locations must be different'; end if; v_ref:='TRF-'||replace(gen_random_uuid()::text,'-',''); v_out:=public.inventory_record_stock_movement(target_item_id,from_location_id,'transfer_out',-quantity,null,'transfer',null,v_ref,null,null,reason_text,reason_text); v_in:=public.inventory_record_stock_movement(target_item_id,to_location_id,'transfer_in',quantity,null,'transfer',null,v_ref,v_out,null,reason_text,reason_text); return jsonb_build_object('reference_no',v_ref,'out_movement_id',v_out,'in_movement_id',v_in,'from_balance',public.inventory_current_stock(target_item_id,from_location_id),'to_balance',public.inventory_current_stock(target_item_id,to_location_id)); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_academic_manager()
  RETURNS boolean
@@ -3881,6 +4056,7 @@ AS $function$
     false
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_assigned_class_teacher(target_class_id uuid)
  RETURNS boolean
@@ -3897,6 +4073,7 @@ AS $function$
         and c.deleted_at is null
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_official_class_teacher_for_class(target_class_id uuid, target_user_id uuid DEFAULT auth.uid())
  RETURNS boolean
@@ -3910,6 +4087,7 @@ AS $function$
       and c.active and c.deleted_at is null
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_official_subject_teacher_for_class(target_class_id uuid, target_subject_id uuid, target_user_id uuid DEFAULT auth.uid())
  RETURNS boolean
@@ -3927,6 +4105,7 @@ AS $function$
       and s.active and s.deleted_at is null
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_platform_super_admin()
  RETURNS boolean
@@ -3936,6 +4115,7 @@ CREATE OR REPLACE FUNCTION public.is_platform_super_admin()
 AS $function$
   select coalesce(public.current_app_role()::text='platform_super_admin',false)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_records_manager()
  RETURNS boolean
@@ -3945,6 +4125,7 @@ CREATE OR REPLACE FUNCTION public.is_records_manager()
 AS $function$
   select public.has_role(array['system_admin']) and public.current_aal()='aal2'
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_system_admin()
  RETURNS boolean
@@ -3952,6 +4133,7 @@ CREATE OR REPLACE FUNCTION public.is_system_admin()
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ select public.has_role(array['system_admin']) $function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_term_three(term_sequence integer, term_name text)
  RETURNS boolean
@@ -3963,6 +4145,7 @@ AS $function$
     or lower(regexp_replace(coalesce(term_name,''),'[^a-zA-Z0-9]+','','g'))
        in ('term3','termthree','thirdterm','3rdterm')
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.issue_certificate_batch(target_batch_id uuid, target_issue_date date DEFAULT CURRENT_DATE)
  RETURNS jsonb
@@ -3995,6 +4178,7 @@ begin
   update public.certificate_batches set status='issued',issued_by=auth.uid(),issued_at=now(),updated_at=now() where id=target_batch_id;
   return jsonb_build_object('batch_id',target_batch_id,'status','issued','issued_count',issued_count,'certificates',(select jsonb_agg(jsonb_build_object('id',id,'certificate_number',certificate_number,'recipient_name',recipient_name,'verification_token',verification_token) order by recipient_name) from public.certificates where batch_id=target_batch_id and status='issued'));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.issue_staff_id_cards(target_academic_year_id uuid, target_staff_keys text[], target_issue_date date DEFAULT CURRENT_DATE, target_expires_on date DEFAULT NULL::date)
  RETURNS jsonb
@@ -4008,6 +4192,7 @@ begin
   foreach key in array target_staff_keys loop parts:=string_to_array(key,':');kind:=coalesce(parts[1],'');sid:=public.safe_uuid(coalesce(parts[2],''));if kind not in ('teacher','principal') or sid is null then raise exception 'Invalid staff selection';end if;perform pg_advisory_xact_lock(hashtext('rce-staff-id-'||kind||'-'||sid::text));existing:=null;if kind='teacher' then select id into existing from public.staff_id_cards where teacher_id=sid and status='active' order by issued_at desc limit 1 for update;else select id into existing from public.staff_id_cards where headteacher_id=sid and status='active' order by issued_at desc limit 1 for update;end if;if existing is not null then skipped:=skipped||jsonb_build_array(jsonb_build_object('staff_key',key,'reason','active_card_exists'));continue;end if;card_number:=public.generate_staff_id_card_number(target_academic_year_id);token:=gen_random_uuid();snap:=public.build_staff_id_card_snapshot(kind,sid,target_academic_year_id,card_number,token,target_issue_date,expires);insert into public.staff_id_cards(staff_type,teacher_id,headteacher_id,academic_year_id,card_number,verification_token,issue_date,expires_on,snapshot,issued_by) values(kind,case when kind='teacher' then sid else null end,case when kind='principal' then sid else null end,target_academic_year_id,card_number,token,target_issue_date,expires,snap,auth.uid()) returning id into card_id;perform public.record_staff_id_card_event(card_id,kind,sid,'issued',jsonb_build_object('card_number',card_number,'academic_year_id',target_academic_year_id,'expires_on',expires));created:=created||jsonb_build_array(jsonb_build_object('card_id',card_id,'staff_key',key,'card_number',card_number,'verification_token',token));end loop;
   return jsonb_build_object('created',created,'created_count',jsonb_array_length(created),'skipped',skipped,'skipped_count',jsonb_array_length(skipped),'issue_date',target_issue_date,'expires_on',expires);
 end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.issue_student_id_cards(target_academic_year_id uuid, target_class_id uuid, target_student_ids uuid[], target_issue_date date DEFAULT CURRENT_DATE, target_expires_on date DEFAULT NULL::date)
  RETURNS jsonb
@@ -4015,6 +4200,7 @@ CREATE OR REPLACE FUNCTION public.issue_student_id_cards(target_academic_year_id
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ declare sid uuid;e public.enrollments%rowtype;cfg public.id_card_settings%rowtype;card_id uuid;card_number text;token uuid;expires date:=target_expires_on;created jsonb:='[]'::jsonb;skipped jsonb:='[]'::jsonb;snap jsonb;existing public.student_id_cards%rowtype; begin if not public.is_system_admin() then raise exception 'Only the System Administrator can issue student ID cards' using errcode='42501';end if;perform public.require_sensitive_access();perform public.require_license_feature('id_cards');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit ID card issuance' using errcode='42501';end if;if target_academic_year_id is null or target_class_id is null then raise exception 'Academic year and class are required';end if;if target_issue_date is null then raise exception 'ID card issue date is required';end if;if coalesce(array_length(target_student_ids,1),0)=0 then raise exception 'Select at least one student';end if; perform pg_advisory_xact_lock(hashtext('rce-id-card-issue-'||target_academic_year_id::text||'-'||target_class_id::text));insert into public.id_card_settings default values on conflict do nothing;select * into cfg from public.id_card_settings limit 1;if expires is null then expires:=(target_issue_date+(coalesce(cfg.validity_months,12)||' months')::interval)::date;end if;if expires<target_issue_date then raise exception 'ID card expiry date cannot be before the issue date';end if; foreach sid in array target_student_ids loop select * into e from public.enrollments where student_id=sid and academic_year_id=target_academic_year_id and class_id=target_class_id and active and deleted_at is null limit 1;if e.id is null then raise exception 'Selected student % is not actively enrolled in the selected class and academic year',sid;end if; select * into existing from public.student_id_cards where student_id=sid and academic_year_id=target_academic_year_id and status='active' order by issued_at desc limit 1 for update; if existing.id is not null then skipped:=skipped||jsonb_build_array(jsonb_build_object('student_id',sid,'card_id',existing.id,'card_number',existing.card_number,'reason','active_card_exists'));continue;end if; card_number:=public.generate_student_id_card_number(target_academic_year_id);token:=gen_random_uuid();snap:=public.build_student_id_card_snapshot(sid,e.id,card_number,token,target_issue_date,expires); insert into public.student_id_cards(student_id,enrollment_id,academic_year_id,class_id,card_number,verification_token,issue_date,expires_on,snapshot,issued_by) values(sid,e.id,target_academic_year_id,target_class_id,card_number,token,target_issue_date,expires,snap,auth.uid()) returning id into card_id;perform public.record_id_card_event(card_id,sid,'issued',jsonb_build_object('card_number',card_number,'academic_year_id',target_academic_year_id,'class_id',target_class_id,'expires_on',expires));created:=created||jsonb_build_array(jsonb_build_object('card_id',card_id,'student_id',sid,'card_number',card_number,'verification_token',token));existing:=null; end loop; return jsonb_build_object('created',created,'created_count',jsonb_array_length(created),'skipped',skipped,'skipped_count',jsonb_array_length(skipped),'issue_date',target_issue_date,'expires_on',expires); end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.issue_student_transcript(target_student_id uuid, purpose_text text DEFAULT 'Academic transcript'::text)
  RETURNS jsonb
@@ -4095,6 +4281,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_actor_access()
  RETURNS jsonb
@@ -4118,6 +4305,7 @@ begin
   end if;
   return jsonb_build_object('authorized',true,'role','assistant','capabilities',jsonb_build_array('view','circulate'));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_block_delete()
  RETURNS trigger
@@ -4129,6 +4317,7 @@ begin
   if current_setting('app.library_allow_hard_delete',true)='on' then return old; end if;
   raise exception 'Library history cannot be hard deleted; use status, withdrawal or cancellation instead' using errcode='42501';
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_book_detail(target_book_id uuid)
  RETURNS jsonb
@@ -4143,6 +4332,7 @@ begin
   if v_book is null then raise exception 'Library title not found'; end if;
   return jsonb_build_object('book',v_book,'copies',coalesce((select jsonb_agg(to_jsonb(c) order by c.accession_no) from public.library_copies c where c.book_id=target_book_id and c.deleted_at is null),'[]'::jsonb),'reservations',coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'borrower_type',r.borrower_type,'borrower',case when r.borrower_type='student' then concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) else concat_ws(' ',h.first_name,nullif(h.middle_name,''),h.last_name) end,'status',r.status,'reserved_at',r.reserved_at,'ready_at',r.ready_at,'expires_at',r.expires_at) order by r.reserved_at) from public.library_reservations r left join public.students s on s.id=r.borrower_student_id left join public.hr_staff_members h on h.id=r.borrower_hr_staff_id where r.book_id=target_book_id and r.status in ('waiting','ready')),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_cancel_my_reservation(target_reservation_id uuid)
  RETURNS jsonb
@@ -4159,6 +4349,7 @@ begin
   if v_row.id is null then raise exception 'Active reservation not found or not owned by this user'; end if;
   return to_jsonb(v_row);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_catalog_register(search_text text DEFAULT NULL::text, category_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -4179,6 +4370,7 @@ begin
     'categories',coalesce((select jsonb_agg(x.category order by x.category) from (select distinct category from public.library_books where deleted_at is null and coalesce(category,'')<>'') x),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_dashboard()
  RETURNS jsonb
@@ -4205,6 +4397,7 @@ begin
     ) q),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_generate_accession_no()
  RETURNS text
@@ -4223,6 +4416,7 @@ begin
   end loop;
   return candidate;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_issue_copy(target_copy_id uuid, borrower_kind text, borrower_id uuid, due_on date DEFAULT NULL::date)
  RETURNS jsonb
@@ -4257,6 +4451,7 @@ begin
   insert into public.library_inventory_events(copy_id,event_type,details,actor_id) values(v_copy.id,'loan_issued',jsonb_build_object('loan_id',v_loan.id,'borrower_type',borrower_kind,'borrower_id',borrower_id,'due_date',v_due),auth.uid());
   return to_jsonb(v_loan);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_loan_register(status_filter text DEFAULT NULL::text, search_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -4268,6 +4463,7 @@ begin
   perform public.library_require_access(false,'view');
   return coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'copy_id',c.id,'book_id',b.id,'title',b.title,'author',b.author,'accession_no',c.accession_no,'borrower_type',l.borrower_type,'borrower_id',case when l.borrower_type='student' then l.borrower_student_id else l.borrower_hr_staff_id end,'borrower',case when l.borrower_type='student' then concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) else btrim(concat_ws(' ',h.first_name,nullif(h.middle_name,''),nullif(h.last_name,''))) end,'reference_no',case when l.borrower_type='student' then s.admission_no::text else h.staff_no end,'issued_at',l.issued_at,'due_date',l.due_date,'returned_at',l.returned_at,'renew_count',l.renew_count,'status',case when l.status='issued' and l.returned_at is null and l.due_date<current_date then 'overdue' else l.status end) order by case when l.status='issued' and l.due_date<current_date then 0 when l.status='issued' then 1 else 2 end,l.due_date,l.issued_at desc) from public.library_loans l join public.library_copies c on c.id=l.copy_id join public.library_books b on b.id=c.book_id left join public.students s on s.id=l.borrower_student_id left join public.hr_staff_members h on h.id=l.borrower_hr_staff_id where (coalesce(nullif(status_filter,''),'')='' or status_filter=case when l.status='issued' and l.returned_at is null and l.due_date<current_date then 'overdue' else l.status end) and (coalesce(nullif(search_text,''),'')='' or b.title ilike '%'||search_text||'%' or c.accession_no ilike '%'||search_text||'%' or coalesce(s.admission_no::text,'') ilike '%'||search_text||'%' or coalesce(h.staff_no,'') ilike '%'||search_text||'%' or coalesce(s.first_name,'') ilike '%'||search_text||'%' or coalesce(s.last_name,'') ilike '%'||search_text||'%' or coalesce(h.first_name,'') ilike '%'||search_text||'%' or coalesce(h.last_name,'') ilike '%'||search_text||'%')),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_member_search(search_text text)
  RETURNS jsonb
@@ -4306,6 +4502,7 @@ begin
     ) q
   ),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_my_account()
  RETURNS jsonb
@@ -4324,6 +4521,7 @@ begin
     'reservations',coalesce((select jsonb_agg(jsonb_build_object('reservation_id',rv.id,'book_id',b.id,'title',b.title,'author',b.author,'student_id',s.id,'student',case when s.id is null then null else concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name) end,'status',rv.status,'reserved_at',rv.reserved_at,'ready_at',rv.ready_at,'expires_at',rv.expires_at) order by rv.reserved_at desc) from public.library_reservations rv join public.library_books b on b.id=rv.book_id left join public.students s on s.id=rv.borrower_student_id left join public.hr_staff_members h on h.id=rv.borrower_hr_staff_id where (r='student' and s.profile_id=auth.uid()) or (r='parent_guardian' and s.id is not null and exists(select 1 from public.guardian_links gl where gl.auth_user_id=auth.uid() and gl.student_id=s.id)) or (r not in ('student','parent_guardian') and h.profile_id=auth.uid())),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_place_my_reservation(target_book_id uuid)
  RETURNS jsonb
@@ -4349,6 +4547,7 @@ begin
   return to_jsonb(v_row);
 exception when unique_violation then raise exception 'An active reservation already exists for this title';
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_public_catalog(search_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -4362,6 +4561,7 @@ begin
   v_license:=public.license_access_for_actor(auth.uid()); if not coalesce((v_license->>'read_allowed')::boolean,false) then raise exception 'Library catalog unavailable while school licence is locked' using errcode='42501'; end if;
   return coalesce((select jsonb_agg(jsonb_build_object('id',b.id,'isbn',b.isbn,'title',b.title,'author',b.author,'publisher',b.publisher,'publication_year',b.publication_year,'category',b.category,'subject',b.subject,'language',b.language,'available',(select count(*) from public.library_copies c where c.book_id=b.id and c.deleted_at is null and c.active and c.circulation_status='available'),'total',(select count(*) from public.library_copies c where c.book_id=b.id and c.deleted_at is null and c.active)) order by b.title,b.author) from public.library_books b where b.deleted_at is null and b.active and (coalesce(nullif(search_text,''),'')='' or b.title ilike '%'||search_text||'%' or b.author ilike '%'||search_text||'%' or coalesce(b.isbn,'') ilike '%'||search_text||'%')),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.library_record_copy_event()
  RETURNS trigger
@@ -4379,24 +4579,6 @@ begin
   end if;
   return null;
 end $function$
-
-CREATE OR REPLACE FUNCTION public.library_renew_loan(target_loan_id uuid)
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_catalog', 'extensions'
-AS $function$
-declare v_loan public.library_loans; v_settings public.library_settings; v_book uuid;
-begin
-  perform public.library_require_access(true,'circulate');
-  select * into v_loan from public.library_loans where id=target_loan_id and status='issued' and returned_at is null for update;
-  if v_loan.id is null then raise exception 'Active library loan not found'; end if;
-  select * into v_settings from public.library_settings limit 1;
-  if v_loan.renew_count>=v_settings.max_renewals then raise exception 'Maximum renewals reached'; end if;
-  select book_id into v_book from public.library_copies where id=v_loan.copy_id;
-  if exists(select 1 from public.library_reservations where book_id=v_book and status in ('waiting','ready') and not ((v_loan.borrower_type='student' and borrower_student_id=v_loan.borrower_student_id) or (v_loan.borrower_type='staff' and borrower_hr_staff_id=v_loan.borrower_hr_staff_id))) then raise exception 'Loan cannot be renewed because another borrower is waiting'; end if;
-  update public.library_loans set due_date=greatest(due_date,current_date)+v_settings.renewal_days,renew_count=renew_count+1 where id=v_loan.id returning * into v_loan;
-  return to_jsonb(v_loan);
-end $function$
+;
 
 SET check_function_bodies=on;

@@ -1,8 +1,7 @@
 -- Edusentia tenant foundation: public functions
--- Read-only schema snapshot from the live Edusentia Supabase tenant.
+-- Read-only schema snapshot from live Edusentia Supabase.
 -- Snapshot date: 2026-09-21. Contains schema only, no application data or secrets.
 SET search_path TO public, extensions, pg_catalog;
-
 SET check_function_bodies=off;
 
 CREATE OR REPLACE FUNCTION public.academic_analytics(target_term_id uuid, target_class_id uuid DEFAULT NULL::uuid)
@@ -15,6 +14,7 @@ begin
   perform public.require_license_feature('analytics');
   return public.academic_analytics_v729(target_term_id,target_class_id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.academic_analytics_v729(target_term_id uuid, target_class_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -40,6 +40,7 @@ begin
       from public.classes c join lateral (select round(avg(sr.total_score),2) average,round(100.0*sum(distinct r.days_present)/nullif(sum(distinct r.days_school_opened),0),2) attendance_rate,count(distinct e.student_id) students,count(distinct r.id) filter(where r.status='published') published from public.enrollments e left join public.student_reports r on r.enrollment_id=e.id and r.term_id=target_term_id and r.deleted_at is null left join public.subject_results sr on sr.report_id=r.id where e.class_id=c.id and e.active and e.deleted_at is null and e.academic_year_id=(select academic_year_id from public.terms where id=target_term_id)) q on q.students>0 where c.active and c.deleted_at is null and (target_class_id is null or c.id=target_class_id) and (public.current_app_role() in ('system_admin','principal') or public.can_access_class(c.id,false))),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.academic_configuration_readiness()
  RETURNS jsonb
@@ -201,6 +202,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.academic_year_auto_status_trigger()
  RETURNS trigger
@@ -213,6 +215,7 @@ begin
   perform public.sync_current_academic_year_status();
   return null;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.acknowledge_emergency_academic_delegation(target_delegation_id uuid, note_text text DEFAULT ''::text)
  RETURNS jsonb
@@ -238,6 +241,7 @@ begin
     'emergency_academic_delegation','emergency_academic_delegation',currentrow.id,false);
   return public.get_emergency_delegation_console();
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.active_emergency_delegation_ids(target_class_id uuid, target_subject_id uuid, target_term_id uuid, require_score_entry boolean DEFAULT false, require_class_fields boolean DEFAULT false, target_user_id uuid DEFAULT auth.uid())
  RETURNS uuid[]
@@ -266,6 +270,7 @@ AS $function$
       or d.subject_id=target_subject_id
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_accounts_staff_directory(search_text text DEFAULT ''::text, include_inactive boolean DEFAULT true)
  RETURNS jsonb
@@ -289,6 +294,7 @@ begin
       and (coalesce(search_text,'')='' or concat_ws(' ',a.full_name,a.staff_no::text,a.phone,a.email,a.contact_address) ilike '%'||search_text||'%')
   ),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_apply_user_bundle(actor_id uuid, bundle jsonb)
  RETURNS jsonb
@@ -326,6 +332,7 @@ begin
   values(actor_id,'profiles',targetid,case when previous is null then 'ADMIN_CREATE_USER' else 'ADMIN_UPDATE_USER' end,previous,jsonb_build_object('profile',(select to_jsonb(p) from public.profiles p where p.id=targetid),'teacher',(select to_jsonb(t) from public.teachers t where t.profile_id=targetid and t.deleted_at is null limit 1),'principal',(select to_jsonb(h) from public.headteachers h where h.profile_id=targetid and h.deleted_at is null limit 1),'accountant',(select to_jsonb(a) from public.accounts_office_staff a where a.profile_id=targetid and a.deleted_at is null limit 1),'student',(select to_jsonb(s) from public.students s where s.profile_id=targetid and s.deleted_at is null limit 1),'access',coalesce((select jsonb_agg(to_jsonb(x)) from public.user_class_access x where x.user_id=targetid),'[]'::jsonb)),coalesce(nullif(bundle->>'reason',''),'User account management'));
   return jsonb_build_object('profile',(select to_jsonb(p) from public.profiles p where p.id=targetid),'accountant',(select to_jsonb(a) from public.accounts_office_staff a where a.profile_id=targetid and a.deleted_at is null limit 1),'student',(select to_jsonb(s) from public.students s where s.profile_id=targetid and s.deleted_at is null limit 1));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_deactivate_accounts_staff(target_staff_id uuid, reason_text text DEFAULT ''::text)
  RETURNS boolean
@@ -346,6 +353,7 @@ begin
   insert into public.audit_log(actor_id,table_name,record_id,action,reason) values(auth.uid(),'accounts_office_staff',target_staff_id,'ACCOUNTANT_DIRECTORY_DEACTIVATE',coalesce(nullif(reason_text,''),'Accountant directory record deactivated'));
   return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_finance_test_payment_cleanup_list()
  RETURNS jsonb
@@ -396,6 +404,7 @@ begin
   return jsonb_build_object('rows',rows_json);
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_guardian_account_records()
  RETURNS jsonb
@@ -467,6 +476,7 @@ begin
   ),'[]'::jsonb);
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_permanently_delete_test_fee_payment(target_transaction_id uuid, confirmation_receipt text, reason_text text)
  RETURNS jsonb
@@ -565,6 +575,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_remove_accounts_staff_permanently(target_staff_id uuid, reason_text text DEFAULT ''::text)
  RETURNS boolean
@@ -598,6 +609,7 @@ begin
     using errcode='42501';
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_save_accounts_staff(payload jsonb)
  RETURNS jsonb
@@ -624,6 +636,7 @@ begin
   end if;
   return to_jsonb(r);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admin_validate_user_bundle(actor_id uuid, bundle jsonb, require_existing_user boolean DEFAULT false)
  RETURNS jsonb
@@ -668,6 +681,7 @@ begin
   end loop;
   return jsonb_build_object('valid',true,'role',role_text,'staff_record_id',staffrecordid,'access_count',coalesce(jsonb_array_length(bundle->'access'),0));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_accept_offer(target_offer_id uuid)
  RETURNS void
@@ -685,6 +699,7 @@ begin
  update public.admissions_applications set status='accepted',decided_by=auth.uid(),decided_at=now() where id=v_app;
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('admissions','offer_accepted','admissions_offer',target_offer_id,auth.uid(),jsonb_build_object('application_id',v_app));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_application_detail(target_application_id uuid)
  RETURNS jsonb
@@ -702,6 +717,7 @@ begin
   'documents',coalesce((select jsonb_agg(to_jsonb(d) order by d.created_at) from public.admissions_documents d where d.application_id=target_application_id),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_application_register(search_text text DEFAULT NULL::text, status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -750,6 +766,7 @@ begin
     ) q
   ),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_dashboard()
  RETURNS jsonb
@@ -790,6 +807,7 @@ begin
     ),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_decide_application(target_application_id uuid, decision text, offered_academic_year_id uuid DEFAULT NULL::uuid, offered_class_id uuid DEFAULT NULL::uuid, decision_notes text DEFAULT NULL::text, offer_expires_at date DEFAULT NULL::date)
  RETURNS uuid
@@ -814,6 +832,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('admissions','application_decision','admissions_application',target_application_id,auth.uid(),jsonb_build_object('decision',decision,'offer_id',v_offer));
  return v_offer;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_delete_application(target_application_id uuid, reason text DEFAULT NULL::text)
  RETURNS void
@@ -885,6 +904,7 @@ begin
     jsonb_build_object('application_no',v_app.application_no,'previous_status',v_app.status,'reason',v_reason,'historical_student_id',v_app.student_id)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_enroll_application(target_application_id uuid)
  RETURNS jsonb
@@ -911,6 +931,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('admissions','applicant_enrolled','admissions_application',a.id,auth.uid(),jsonb_build_object('student_id',v_student,'admission_no',v_no,'academic_year_id',o.academic_year_id,'class_id',o.class_id));
  return jsonb_build_object('student_id',v_student,'admission_no',v_no,'academic_year_id',o.academic_year_id,'class_id',o.class_id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_mark_not_enrolled(target_application_id uuid, reason text)
  RETURNS jsonb
@@ -983,6 +1004,7 @@ begin
 
   return jsonb_build_object('updated',true,'application_no',v_app.application_no,'status','not_enrolled');
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_next_application_no()
  RETURNS text
@@ -997,6 +1019,7 @@ begin
  c:=p||'-APP-'||lpad(n::text,6,'0');
  return c;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_next_student_no()
  RETURNS text
@@ -1014,6 +1037,7 @@ begin
  end loop;
  return c;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_permanently_remove_application(target_application_id uuid, confirmation_application_no text, reason text)
  RETURNS jsonb
@@ -1096,6 +1120,7 @@ begin
     'previous_status',v_app.status
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_reference_data()
  RETURNS jsonb
@@ -1114,6 +1139,7 @@ begin
   end if;
   raise exception 'Student Services access denied' using errcode='42501';
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_save_application(payload jsonb)
  RETURNS uuid
@@ -1137,6 +1163,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('admissions','application_saved','admissions_application',v_id,auth.uid(),'{}');
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_save_document(payload jsonb)
  RETURNS uuid
@@ -1152,6 +1179,7 @@ begin
  else update public.admissions_documents set document_type=coalesce(nullif(btrim(payload->>'document_type'),''),document_type),document_name=coalesce(nullif(btrim(payload->>'document_name'),''),document_name),storage_path=case when payload ? 'storage_path' then nullif(payload->>'storage_path','') else storage_path end,verification_status=coalesce(nullif(payload->>'verification_status',''),verification_status),verified_by=case when payload->>'verification_status'='verified' then auth.uid() else verified_by end,verified_at=case when payload->>'verification_status'='verified' then now() else verified_at end,notes=case when payload ? 'notes' then nullif(payload->>'notes','') else notes end where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_submit_application(target_application_id uuid)
  RETURNS void
@@ -1165,6 +1193,7 @@ begin
  if not found then raise exception 'Only a draft application can be submitted'; end if;
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('admissions','application_submitted','admissions_application',target_application_id,auth.uid(),'{}');
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.admissions_sync_student_lifecycle()
  RETURNS trigger
@@ -1224,6 +1253,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.after_score_entry_change()
  RETURNS trigger
@@ -1235,6 +1265,7 @@ begin
   perform public.refresh_subject_result(coalesce(new.subject_result_id,old.subject_result_id));
   return coalesce(new,old);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.allowed_report_transitions(target_report_id uuid)
  RETURNS text[]
@@ -1268,6 +1299,7 @@ begin
   end if;
   return result;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_add_engagement(payload jsonb)
  RETURNS uuid
@@ -1281,6 +1313,7 @@ begin
  insert into public.alumni_engagements(alumni_id,engagement_type,engagement_date,summary,outcome,finance_reference,recorded_by) values((payload->>'alumni_id')::uuid,payload->>'engagement_type',coalesce(nullif(payload->>'engagement_date','')::date,current_date),btrim(payload->>'summary'),nullif(payload->>'outcome',''),nullif(payload->>'finance_reference',''),auth.uid()) returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_candidate_register(search_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -1298,6 +1331,7 @@ begin
    and (search_text is null or concat_ws(' ',s.admission_no,s.first_name,s.middle_name,s.last_name) ilike '%'||search_text||'%')
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_create_from_student(target_student_id uuid, graduation_academic_year_id uuid DEFAULT NULL::uuid, final_class_id uuid DEFAULT NULL::uuid)
  RETURNS uuid
@@ -1321,6 +1355,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('alumni','graduate_synced','alumni_record',v_id,auth.uid(),jsonb_build_object('student_id',s.id,'former_admission_no',s.admission_no));
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_dashboard()
  RETURNS jsonb
@@ -1339,6 +1374,7 @@ begin
   'graduated_not_synced',(select count(*) from public.students s where s.status='graduated' and s.deleted_at is null and not exists(select 1 from public.alumni_records a where a.student_id=s.id))
  ));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_my_record()
  RETURNS jsonb
@@ -1354,6 +1390,7 @@ begin
  select jsonb_build_object('alumni_code',a.alumni_code,'former_admission_no',a.former_admission_no,'name',concat_ws(' ',a.first_name,nullif(a.middle_name,''),a.last_name),'graduation_academic_year_id',a.graduation_academic_year_id,'final_class_id',a.final_class_id,'personal_email',a.personal_email,'phone',a.phone,'location',a.location,'occupation',a.occupation,'employer',a.employer,'further_education',a.further_education,'verification_status',a.verification_status) into r from public.alumni_records a where a.student_id=v_student;
  return r;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_next_code()
  RETURNS text
@@ -1366,6 +1403,7 @@ begin
  select upper(regexp_replace(coalesce(nullif(report_number_prefix,''),'ALU'),'[^0-9A-Za-z]','','g')) into p from public.school_settings limit 1;
  n:=nextval('public.alumni_record_seq'); return p||'-ALU-'||lpad(n::text,7,'0');
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_record_detail(target_alumni_id uuid)
  RETURNS jsonb
@@ -1383,6 +1421,7 @@ begin
   'verification_requests',coalesce((select jsonb_agg(to_jsonb(v) order by v.requested_at desc) from public.alumni_verification_requests v where v.alumni_id=target_alumni_id),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_register(search_text text DEFAULT NULL::text, status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -1399,6 +1438,7 @@ begin
   order by a.last_name,a.first_name limit 500
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_save_record(payload jsonb)
  RETURNS uuid
@@ -1417,6 +1457,7 @@ begin
   update public.alumni_records set personal_email=case when payload ? 'personal_email' then nullif(lower(btrim(payload->>'personal_email')),'') else personal_email end,phone=case when payload ? 'phone' then nullif(btrim(payload->>'phone'),'') else phone end,location=case when payload ? 'location' then nullif(payload->>'location','') else location end,occupation=case when payload ? 'occupation' then nullif(payload->>'occupation','') else occupation end,employer=case when payload ? 'employer' then nullif(payload->>'employer','') else employer end,further_education=case when payload ? 'further_education' then nullif(payload->>'further_education','') else further_education end,consent_to_contact=coalesce((payload->>'consent_to_contact')::boolean,consent_to_contact),directory_visible=coalesce((payload->>'directory_visible')::boolean,directory_visible),verification_status=coalesce(nullif(payload->>'verification_status',''),verification_status),verified_by=case when payload->>'verification_status'='verified' then auth.uid() else verified_by end,verified_at=case when payload->>'verification_status'='verified' then now() else verified_at end,status=coalesce(nullif(payload->>'status',''),status),notes=case when payload ? 'notes' then nullif(payload->>'notes','') else notes end where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_save_verification_request(payload jsonb)
  RETURNS uuid
@@ -1432,6 +1473,7 @@ begin
  else update public.alumni_verification_requests set status=coalesce(nullif(payload->>'status',''),status),outcome_notes=case when payload ? 'outcome_notes' then nullif(payload->>'outcome_notes','') else outcome_notes end,reviewed_by=case when payload->>'status' in ('verified','declined') then auth.uid() else reviewed_by end,reviewed_at=case when payload->>'status' in ('verified','declined') then now() else reviewed_at end where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.alumni_verification_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -1443,6 +1485,7 @@ begin
  perform public.student_services_require_access('alumni','read');
  return coalesce((select jsonb_agg(to_jsonb(q) order by q.requested_at desc) from (select v.*,a.alumni_code,concat_ws(' ',a.first_name,nullif(a.middle_name,''),a.last_name) alumni_name from public.alumni_verification_requests v left join public.alumni_records a on a.id=v.alumni_id where status_filter is null or v.status=status_filter)q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.apply_attendance_totals_to_report()
  RETURNS trigger
@@ -1460,6 +1503,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.apply_automatic_report_comments()
  RETURNS trigger
@@ -1480,6 +1524,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.apply_certificate_placeholders(template_text text, context_data jsonb)
  RETURNS text
@@ -1495,6 +1540,7 @@ begin
   result:=regexp_replace(result,'[[:space:]]+',' ','g');
   return btrim(result);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.apply_pending_term3_promotions()
  RETURNS integer
@@ -1518,6 +1564,7 @@ begin
   end loop;
   return processed;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.apply_promotion_when_report_published()
  RETURNS trigger
@@ -1539,6 +1586,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.archive_academic_entity(entity_type text, target_id uuid, reason_text text DEFAULT 'Academic record archived'::text)
  RETURNS boolean
@@ -1587,6 +1635,7 @@ begin
   end if;
   return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.archive_grading_scale(target_grade_id uuid, reason_text text DEFAULT 'Grading scale removed'::text)
  RETURNS boolean
@@ -1601,6 +1650,7 @@ begin
   if not found then raise exception 'Grading scale not found'; end if;
   return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.archive_headteacher(target_headteacher_id uuid, reason_text text DEFAULT 'Principal archived'::text)
  RETURNS boolean
@@ -1626,6 +1676,7 @@ begin
   where id=(select id from public.school_settings order by created_at,id limit 1);
   return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.archive_report_card(target_report_id uuid, reason_text text DEFAULT 'Report card permanently deleted'::text)
  RETURNS boolean
@@ -1636,6 +1687,7 @@ AS $function$
 begin
   return public.delete_report_card_permanently(target_report_id,reason_text);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.archive_school_prospectus(target_prospectus_id uuid, reason_text text DEFAULT ''::text)
  RETURNS jsonb
@@ -1643,6 +1695,7 @@ CREATE OR REPLACE FUNCTION public.archive_school_prospectus(target_prospectus_id
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$declare row public.school_prospectuses%rowtype;begin if not public.is_system_admin() then raise exception 'Only the System Administrator can archive school prospectuses' using errcode='42501';end if;perform public.require_sensitive_access();perform public.require_license_feature('school_prospectus');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit prospectus changes' using errcode='42501';end if;update public.school_prospectuses set status='archived',updated_by=auth.uid(),updated_at=now() where id=target_prospectus_id returning * into row;if row.id is null then raise exception 'Prospectus not found';end if;return public.build_school_prospectus_snapshot(row.id);end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.archive_student(target_student_id uuid, reason_text text DEFAULT 'Student archived'::text)
  RETURNS boolean
@@ -1660,6 +1713,7 @@ begin
   update public.enrollments set active=false,updated_at=now() where student_id=target_student_id and deleted_at is null;
   return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.archive_teacher(target_teacher_id uuid, reason_text text DEFAULT 'Teacher archived'::text)
  RETURNS boolean
@@ -1682,6 +1736,7 @@ begin
   end if;
   return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.attendance_counts_for_enrollment(target_enrollment_id uuid, target_term_id uuid)
  RETURNS TABLE(days_school_opened integer, days_present integer)
@@ -1696,6 +1751,7 @@ AS $function$
   left join public.student_attendance_entries a on a.register_id=r.id and a.enrollment_id=e.id
   where e.id=target_enrollment_id
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.audit_backup_export_lifecycle()
  RETURNS trigger
@@ -1736,6 +1792,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.audit_row_change()
  RETURNS trigger
@@ -1765,6 +1822,7 @@ begin
     coalesce(current_setting('app.change_reason',true),''));
   return null;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.audit_school_restore_lifecycle()
  RETURNS trigger
@@ -1791,6 +1849,7 @@ begin
   end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.backup_dashboard()
  RETURNS jsonb
@@ -1811,6 +1870,7 @@ begin
       from (select * from public.backup_exports order by created_at desc limit 100) b),'[]'::jsonb)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.begin_report_correction(target_report_id uuid, reason_text text)
  RETURNS jsonb
@@ -1838,6 +1898,7 @@ begin
   perform public.create_workflow_notifications(target_report_id,'returned');
   return public.get_report_editor(target_report_id,null,null);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.broadcast_application_change()
  RETURNS trigger
@@ -1863,6 +1924,7 @@ begin
  foreach topic in array topics loop if topic is not null and right(topic,1)<>':' then begin perform realtime.broadcast_changes(topic,tg_op,tg_op,tg_table_name,tg_table_schema,new,old); exception when undefined_function or invalid_schema_name then null; end; end if; end loop;
  return null;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.build_report_snapshot(target_report_id uuid)
  RETURNS jsonb
@@ -1870,6 +1932,7 @@ CREATE OR REPLACE FUNCTION public.build_report_snapshot(target_report_id uuid)
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ select jsonb_build_object( 'school',(select to_jsonb(s) from public.school_settings s limit 1), 'report',to_jsonb(r), 'student',jsonb_build_object( 'id',st.id,'admission_no',st.admission_no, 'full_name',concat_ws(' ',st.first_name,nullif(st.middle_name,''),st.last_name), 'gender',st.gender,'date_of_birth',st.date_of_birth,'photo_url',st.photo_url, 'class_name',c.name,'academic_year',ay.name,'term',t.name,'roll_number',e.roll_number, 'next_term_begins',coalesce(r.next_term_reopening_date,t.next_term_begins), 'next_term_reopening_date',coalesce(r.next_term_reopening_date,t.next_term_begins) ), 'results',coalesce((select jsonb_agg(jsonb_build_object( 'subject_id',sb.id,'subject_code',sb.code,'subject_name',sb.name,'total_score',sr.total_score, 'grade',sr.grade,'remark',sr.remark,'grade_point',sr.grade_point,'teacher_initials',sr.teacher_initials, 'components',coalesce((select jsonb_agg(jsonb_build_object( 'component_id',ac.id,'name',ac.name,'code',ac.code,'maximum_score',ac.maximum_score, 'weight',ac.weight,'raw_score',se.raw_score,'weighted_score',se.weighted_score ) order by ac.display_order,ac.name) from public.assessment_score_entries se join public.assessment_components ac on ac.id=se.component_id where se.subject_result_id=sr.id),'[]'::jsonb) ) order by sb.display_order,sb.name) from public.subject_results sr join public.subjects sb on sb.id=sr.subject_id where sr.report_id=r.id),'[]'::jsonb), 'promotion',public.report_promotion_canonical(r.id), 'summary',jsonb_build_object( 'average',(select round(coalesce(avg(total_score),0),2) from public.subject_results where report_id=r.id), 'aggregate',(select round(coalesce(sum(grade_point),0),2) from public.subject_results where report_id=r.id), 'subjects',(select count(*) from public.subject_results where report_id=r.id) ) ) from public.student_reports r join public.enrollments e on e.id=r.enrollment_id join public.students st on st.id=e.student_id join public.classes c on c.id=e.class_id join public.terms t on t.id=r.term_id join public.academic_years ay on ay.id=t.academic_year_id where r.id=target_report_id $function$
+;
 
 CREATE OR REPLACE FUNCTION public.build_school_prospectus_snapshot(target_prospectus_id uuid)
  RETURNS jsonb
@@ -1884,6 +1947,7 @@ select jsonb_build_object(
  'sections',coalesce((select jsonb_agg(jsonb_build_object('id',s.id,'section_type',s.section_type,'title',s.title,'instructions',s.instructions,'display_order',s.display_order,'items',coalesce((select jsonb_agg(jsonb_build_object('id',i.id,'item_name',i.item_name,'description',i.description,'amount',i.amount,'charge_basis',i.charge_basis,'quantity',i.quantity,'unit',i.unit,'calculation_units',i.calculation_units,'include_in_total',i.include_in_total,'required',i.required,'notes',i.notes,'display_order',i.display_order) order by i.display_order,i.item_name,i.id) from public.school_prospectus_items i where i.section_id=s.id),'[]'::jsonb)) order by s.display_order,s.title,s.id) from public.school_prospectus_sections s where s.prospectus_id=p.id),'[]'::jsonb)
 ) from public.school_prospectuses p join public.academic_years y on y.id=p.academic_year_id where p.id=target_prospectus_id
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.build_staff_id_card_snapshot(target_staff_type text, target_staff_id uuid, target_academic_year_id uuid, target_card_number text, target_verification_token uuid, target_issue_date date, target_expires_on date)
  RETURNS jsonb
@@ -1899,6 +1963,7 @@ begin
   if staff is null then raise exception 'Active staff record not found';end if;select * into y from public.academic_years where id=target_academic_year_id and deleted_at is null;select * into s from public.school_settings limit 1;select * into cfg from public.id_card_settings limit 1;if y.id is null then raise exception 'Academic year not found';end if;if s.id is null or cfg.id is null then raise exception 'School or ID card settings are not configured';end if;
   return jsonb_build_object('schema','rce-staff-id-card/v1','staff_type',kind,'staff',staff,'academic',jsonb_build_object('academic_year_id',y.id,'academic_year_name',y.name),'school',jsonb_build_object('school_name',s.school_name,'motto',s.motto,'address',s.address,'phone',s.phone,'email',s.email,'website',s.website,'logo_url',s.logo_url,'primary_colour',s.primary_colour,'accent_colour',s.accent_colour),'principal',public.current_id_card_principal_snapshot(),'card',jsonb_build_object('card_number',target_card_number,'verification_token',target_verification_token,'issue_date',target_issue_date,'expires_on',target_expires_on),'template',to_jsonb(cfg)-'updated_by'-'created_at'-'updated_at');
 end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.build_student_id_card_snapshot(target_student_id uuid, target_enrollment_id uuid, target_card_number text, target_verification_token uuid, target_issue_date date, target_expires_on date)
  RETURNS jsonb
@@ -1912,6 +1977,7 @@ begin
   select coalesce(nullif(g.phone,''),nullif(st.guardian_phone,''),'') into guardian_phone from public.guardian_links gl join public.student_guardians g on g.id=gl.guardian_id where gl.student_id=st.id order by g.is_primary desc,gl.created_at limit 1;if guardian_phone is null then guardian_phone:=coalesce(st.guardian_phone,'');end if;
   return jsonb_build_object('schema','rce-student-id-card/v2','student',jsonb_build_object('id',st.id,'admission_no',st.admission_no,'full_name',concat_ws(' ',st.first_name,nullif(st.middle_name,''),st.last_name),'gender',case when cfg.show_gender then st.gender else null end,'date_of_birth',case when cfg.show_date_of_birth then st.date_of_birth else null end,'photo_url',st.photo_url,'guardian_phone',case when cfg.show_guardian_phone then guardian_phone else '' end),'academic',jsonb_build_object('enrollment_id',e.id,'academic_year_id',y.id,'academic_year_name',y.name,'class_id',c.id,'class_name',c.name),'school',jsonb_build_object('school_name',s.school_name,'motto',s.motto,'address',s.address,'phone',s.phone,'email',s.email,'website',s.website,'logo_url',s.logo_url,'primary_colour',s.primary_colour,'accent_colour',s.accent_colour),'principal',public.current_id_card_principal_snapshot(),'card',jsonb_build_object('card_number',target_card_number,'verification_token',target_verification_token,'issue_date',target_issue_date,'expires_on',target_expires_on),'template',to_jsonb(cfg)-'updated_by'-'created_at'-'updated_at');
 end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.build_student_transcript_snapshot(target_student_id uuid)
  RETURNS jsonb
@@ -2103,6 +2169,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.bulk_generate_missing_reports(target_term_id uuid, target_class_id uuid, preview_only boolean DEFAULT true)
  RETURNS jsonb
@@ -2127,6 +2194,7 @@ begin
   end if;
   return jsonb_build_object('preview',preview_only,'missing_reports',missing_count,'created_reports',created_count,'term_id',target_term_id,'class_id',target_class_id);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.bulk_import_scores(target_term_id uuid, target_class_id uuid, rows jsonb, filename text DEFAULT ''::text)
  RETURNS jsonb
@@ -2205,6 +2273,7 @@ begin
   update public.import_batches set successful_rows=ok,failed_rows=failed,status=case when failed=0 then 'completed' else 'completed_with_errors' end,completed_at=now() where id=batchid;
   return jsonb_build_object('batch_id',batchid,'successful',ok,'failed',failed);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.bulk_import_students(rows jsonb, filename text DEFAULT ''::text)
  RETURNS jsonb
@@ -2251,6 +2320,7 @@ begin
   where id=batchid;
   return jsonb_build_object('batch_id',batchid,'successful',ok,'failed',failed);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.bulk_promote_all_classes(source_academic_year_id uuid, target_academic_year_id uuid)
  RETURNS jsonb
@@ -2385,6 +2455,7 @@ begin
     'mappings',mappings
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.bulk_promote_class(source_academic_year_id uuid, source_class_id uuid, target_academic_year_id uuid, target_class_id uuid)
  RETURNS jsonb
@@ -2489,6 +2560,7 @@ begin
     'target_academic_year_name',target_year_name
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.bulk_transition_class_reports(target_term_id uuid, target_class_id uuid, target_status report_status, comment_text text DEFAULT ''::text)
  RETURNS jsonb
@@ -2622,6 +2694,7 @@ begin
     'failures',failures
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_access_class(target_class_id uuid, require_write boolean DEFAULT false)
  RETURNS boolean
@@ -2650,6 +2723,7 @@ AS $function$
     else false
   end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_create_report_for_class(target_class_id uuid)
  RETURNS boolean
@@ -2664,6 +2738,7 @@ AS $function$
         and public.can_score_class_subject(target_class_id,cs.subject_id)
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_create_report_for_class_term(target_class_id uuid, target_term_id uuid)
  RETURNS boolean
@@ -2678,6 +2753,7 @@ AS $function$
         and public.can_score_class_subject_for_term(target_class_id,cs.subject_id,target_term_id)
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_create_report_scope(target_class_id uuid, target_term_id uuid)
  RETURNS boolean
@@ -2688,6 +2764,7 @@ AS $function$
   select public.can_manage_class_report_fields_scope(target_class_id,target_term_id)
     or exists(select 1 from public.class_subjects cs where cs.class_id=target_class_id and cs.active and public.can_score_class_subject_scope(target_class_id,cs.subject_id,target_term_id))
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_delete_report(target_report_id uuid)
  RETURNS boolean
@@ -2710,6 +2787,7 @@ AS $function$
       )
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_delete_report_pdf_object(target_report_id uuid, target_storage_path text)
  RETURNS boolean
@@ -2725,6 +2803,7 @@ AS $function$
         and p.storage_path=target_storage_path
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_edit_report(target_report_id uuid)
  RETURNS boolean
@@ -2739,6 +2818,7 @@ AS $function$
         or (public.has_approved_report_correction(r.id) and public.can_create_report_scope(e.class_id,r.term_id)))
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_enter_tertiary_course_result(p_course_registration_id uuid)
  RETURNS boolean
@@ -2763,6 +2843,7 @@ AS $function$
       )
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_academic_model()
  RETURNS boolean
@@ -2774,6 +2855,7 @@ AS $function$
     and public.license_write_allowed()
     and public.has_role(array['system_admin','principal'])
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_certificates()
  RETURNS boolean
@@ -2781,6 +2863,7 @@ CREATE OR REPLACE FUNCTION public.can_manage_certificates()
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ select public.license_write_allowed() and public.is_system_admin() $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_class_report_fields(target_class_id uuid)
  RETURNS boolean
@@ -2790,6 +2873,7 @@ CREATE OR REPLACE FUNCTION public.can_manage_class_report_fields(target_class_id
 AS $function$
   select public.is_official_class_teacher_for_class(target_class_id)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_class_report_fields_for_term(target_class_id uuid, target_term_id uuid)
  RETURNS boolean
@@ -2799,6 +2883,7 @@ CREATE OR REPLACE FUNCTION public.can_manage_class_report_fields_for_term(target
 AS $function$
   select public.term_phase_writable(target_term_id,'reports',null) and public.can_manage_class_report_fields_scope(target_class_id,target_term_id)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_class_report_fields_scope(target_class_id uuid, target_term_id uuid)
  RETURNS boolean
@@ -2809,6 +2894,7 @@ AS $function$
   select public.is_official_class_teacher_for_class(target_class_id,auth.uid())
     or public.has_active_emergency_delegation(target_class_id,null,target_term_id,false,true,auth.uid())
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_headteachers()
  RETURNS boolean
@@ -2818,6 +2904,7 @@ CREATE OR REPLACE FUNCTION public.can_manage_headteachers()
 AS $function$
   select public.is_system_admin() and public.current_aal()='aal2'
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_report_pdf(target_report_id uuid)
  RETURNS boolean
@@ -2839,6 +2926,7 @@ AS $function$
       )
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_staff_photo(target_staff_id uuid)
  RETURNS boolean
@@ -2852,6 +2940,7 @@ AS $function$
    or exists(select 1 from public.headteachers h where h.id=target_staff_id and h.profile_id=auth.uid() and h.deleted_at is null)
  )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_student(target_student_id uuid DEFAULT NULL::uuid)
  RETURNS boolean
@@ -2861,6 +2950,7 @@ CREATE OR REPLACE FUNCTION public.can_manage_student(target_student_id uuid DEFA
 AS $function$
   select public.is_records_manager()
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_manage_teachers()
  RETURNS boolean
@@ -2870,6 +2960,7 @@ CREATE OR REPLACE FUNCTION public.can_manage_teachers()
 AS $function$
   select public.is_system_admin() and public.current_aal()='aal2'
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_modify_certificate_template_object(target_path text)
  RETURNS boolean
@@ -2887,6 +2978,7 @@ AS $function$
       where c.snapshot->'template'->>'storage_path'=target_path
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_publish_report(target_report_id uuid)
  RETURNS boolean
@@ -2897,6 +2989,7 @@ AS $function$
   select public.is_system_admin()
     or public.is_assigned_class_teacher(public.report_class_id(target_report_id))
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_read_principal_signature()
  RETURNS boolean
@@ -2917,6 +3010,7 @@ AS $function$
       'parent_guardian'
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_read_student_academic_record(p_student_id uuid)
  RETURNS boolean
@@ -2931,6 +3025,7 @@ AS $function$
       or exists(select 1 from public.students s where s.id=p_student_id and s.profile_id=auth.uid())
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_read_tertiary_student_record(p_student_id uuid)
  RETURNS boolean
@@ -2956,6 +3051,7 @@ AS $function$
       )
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_remove_report(target_report_id uuid)
  RETURNS boolean
@@ -2975,6 +3071,7 @@ AS $function$
     )
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_review_certificates()
  RETURNS boolean
@@ -2982,6 +3079,7 @@ CREATE OR REPLACE FUNCTION public.can_review_certificates()
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ select public.license_write_allowed() and public.has_role(array['principal']) $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_score_class_subject(target_class_id uuid, target_subject_id uuid)
  RETURNS boolean
@@ -2991,6 +3089,7 @@ CREATE OR REPLACE FUNCTION public.can_score_class_subject(target_class_id uuid, 
 AS $function$
   select public.is_official_subject_teacher_for_class(target_class_id,target_subject_id)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_score_class_subject_for_term(target_class_id uuid, target_subject_id uuid, target_term_id uuid)
  RETURNS boolean
@@ -3000,6 +3099,7 @@ CREATE OR REPLACE FUNCTION public.can_score_class_subject_for_term(target_class_
 AS $function$
   select public.term_phase_writable(target_term_id,'scores',null) and public.can_score_class_subject_scope(target_class_id,target_subject_id,target_term_id)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_score_class_subject_scope(target_class_id uuid, target_subject_id uuid, target_term_id uuid)
  RETURNS boolean
@@ -3011,6 +3111,7 @@ AS $function$
     or public.is_official_class_teacher_for_class(target_class_id,auth.uid())
     or public.has_active_emergency_delegation(target_class_id,target_subject_id,target_term_id,true,false,auth.uid())
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_score_subject(target_report_id uuid, target_subject_id uuid)
  RETURNS boolean
@@ -3027,6 +3128,7 @@ AS $function$
       and public.can_score_class_subject_for_term(e.class_id,target_subject_id,r.term_id)
   )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_submit_report(target_report_id uuid)
  RETURNS boolean
@@ -3042,6 +3144,7 @@ AS $function$
         and r.status in ('draft','returned')
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_view_class_timetable(target_class_id uuid)
  RETURNS boolean
@@ -3051,6 +3154,7 @@ CREATE OR REPLACE FUNCTION public.can_view_class_timetable(target_class_id uuid)
 AS $function$
  select public.current_app_role() in ('system_admin','principal') or (public.current_app_role() in ('class_teacher','subject_teacher') and public.can_access_class(target_class_id,false))
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_view_report(target_report_id uuid)
  RETURNS boolean
@@ -3063,6 +3167,7 @@ AS $function$
     or exists(select 1 from public.student_reports r join public.enrollments e on e.id=r.enrollment_id join public.guardian_links gl on gl.student_id=e.student_id where r.id=target_report_id and r.status='published' and r.deleted_at is null and gl.auth_user_id=auth.uid() and gl.can_view_reports and not coalesce((public.finance_student_hold_status(e.student_id)->>'block_grade_details')::boolean,false))
     or exists(select 1 from public.student_reports r join public.enrollments e on e.id=r.enrollment_id join public.students s on s.id=e.student_id where r.id=target_report_id and r.status='published' and r.deleted_at is null and s.profile_id=auth.uid() and not coalesce((public.finance_student_hold_status(e.student_id)->>'block_grade_details')::boolean,false))
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_view_report_internal(target_report_id uuid)
  RETURNS boolean
@@ -3074,6 +3179,7 @@ AS $function$
     and public.current_app_role()::text in ('system_admin','principal','class_teacher','subject_teacher')
     and public.can_view_report(target_report_id)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_view_report_pdf(target_report_id uuid)
  RETURNS boolean
@@ -3087,6 +3193,7 @@ AS $function$
       or not coalesce((public.finance_student_hold_status(public.report_student_id(target_report_id))->>'block_report_pdf')::boolean,false)
     )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_view_staff_photo(target_staff_id uuid)
  RETURNS boolean
@@ -3100,6 +3207,7 @@ AS $function$
    or exists(select 1 from public.headteachers h where h.id=target_staff_id and h.profile_id=auth.uid() and h.deleted_at is null)
  )
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_view_student(target_student_id uuid)
  RETURNS boolean
@@ -3130,6 +3238,7 @@ AS $function$
     else false
   end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.can_view_student_history(target_student_id uuid)
  RETURNS boolean
@@ -3141,6 +3250,7 @@ AS $function$
     or public.can_view_student(target_student_id)
     or exists(select 1 from public.guardian_links g where g.student_id=target_student_id and g.auth_user_id=auth.uid() and g.can_view_reports)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.canonical_school_email_domain()
  RETURNS text
@@ -3150,6 +3260,7 @@ CREATE OR REPLACE FUNCTION public.canonical_school_email_domain()
 AS $function$
   select lower(public.canonical_school_identity_prefix()) || '.app'
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.canonical_school_identity_prefix()
  RETURNS text
@@ -3177,6 +3288,7 @@ begin
   return left(coalesce(nullif(prefix_value,''),'SCH'),16);
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.certificate_type_code(target_type text)
  RETURNS text
@@ -3184,6 +3296,7 @@ CREATE OR REPLACE FUNCTION public.certificate_type_code(target_type text)
  IMMUTABLE
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$ select case target_type when 'student_promotion' then 'PROM' when 'jhs_completion' then 'COMP' when 'teacher_recognition' then 'STAFF' else 'CERT' end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.certificate_type_label(target_type text)
  RETURNS text
@@ -3191,6 +3304,7 @@ CREATE OR REPLACE FUNCTION public.certificate_type_label(target_type text)
  IMMUTABLE
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$ select case target_type when 'student_promotion' then 'Student Promotion' when 'jhs_completion' then 'JHS 3 Completion' when 'teacher_recognition' then 'Teacher Recognition' else 'Certificate' end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.claim_notification_jobs(target_batch_size integer DEFAULT 50, target_worker_id text DEFAULT NULL::text)
  RETURNS SETOF notification_outbox
@@ -3222,6 +3336,7 @@ begin
   where o.id=c.id
   returning o.*;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.clear_section_history(scope_text text, reason_text text, confirmation_text text)
  RETURNS jsonb
@@ -3229,6 +3344,7 @@ CREATE OR REPLACE FUNCTION public.clear_section_history(scope_text text, reason_
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$declare v_scope text:=lower(btrim(coalesce(scope_text,'')));v_reason text:=btrim(coalesce(reason_text,''));v_deleted integer:=0;v_secondary_deleted integer:=0;v_skipped integer:=0;v_preserved integer:=0;v_result jsonb;begin if not public.is_system_admin() then raise exception 'Only the System Administrator can permanently clear section history' using errcode='42501';end if;if public.current_aal()<>'aal2' then raise exception 'Multi-factor authentication is required to permanently clear history' using errcode='42501';end if;if upper(btrim(coalesce(confirmation_text,'')))<>'CLEAR HISTORY' then raise exception 'Type CLEAR HISTORY exactly to confirm permanent history removal' using errcode='22023';end if;if length(v_reason)<5 then raise exception 'A reset reason of at least five characters is required' using errcode='22023';end if;case v_scope when 'report_corrections' then select count(*) into v_secondary_deleted from public.report_correction_events e where exists(select 1 from public.report_correction_requests r where r.id=e.request_id and r.status in ('rejected','cancelled','applied'));delete from public.report_correction_requests where status in ('rejected','cancelled','applied');get diagnostics v_deleted=row_count;select count(*) into v_preserved from public.report_correction_requests where status in ('pending','approved');v_result:=jsonb_build_object('scope',v_scope,'requests_deleted',v_deleted,'events_deleted',v_secondary_deleted,'active_requests_preserved',v_preserved);when 'recovery_rehearsals' then delete from public.recovery_test_runs where status in ('passed','failed','cancelled');get diagnostics v_deleted=row_count;select count(*) into v_preserved from public.recovery_test_runs where status not in ('passed','failed','cancelled');v_result:=jsonb_build_object('scope',v_scope,'rehearsals_deleted',v_deleted,'active_rehearsals_preserved',v_preserved);when 'backup_restore' then delete from public.school_restore_jobs where status in ('completed','failed','cancelled');get diagnostics v_deleted=row_count;select count(*) into v_skipped from public.backup_exports b where b.status='failed' and not(coalesce(b.storage_bytes,0)=0 and coalesce(b.storage_path,'')='' and coalesce(b.manifest_path,'')='' and coalesce(b.database_path,'')='' and not exists(select 1 from public.backup_storage_objects o where o.backup_export_id=b.id) and not exists(select 1 from public.recovery_test_runs rr where rr.backup_export_id=b.id and rr.status='processing') and not exists(select 1 from public.school_restore_jobs sj where sj.pre_restore_backup_id=b.id and sj.status not in ('completed','failed','cancelled')));delete from public.backup_exports b where b.status='failed' and coalesce(b.storage_bytes,0)=0 and coalesce(b.storage_path,'')='' and coalesce(b.manifest_path,'')='' and coalesce(b.database_path,'')='' and not exists(select 1 from public.backup_storage_objects o where o.backup_export_id=b.id) and not exists(select 1 from public.recovery_test_runs rr where rr.backup_export_id=b.id and rr.status='processing') and not exists(select 1 from public.school_restore_jobs sj where sj.pre_restore_backup_id=b.id and sj.status not in ('completed','failed','cancelled'));get diagnostics v_secondary_deleted=row_count;select count(*) into v_preserved from public.backup_exports where status<>'failed';v_result:=jsonb_build_object('scope',v_scope,'restore_jobs_deleted',v_deleted,'safe_failed_backup_rows_deleted',v_secondary_deleted,'failed_backup_rows_skipped_for_payload_safety',v_skipped,'completed_or_active_backup_assets_preserved',v_preserved);else raise exception 'Unsupported history scope: %',coalesce(scope_text,'') using errcode='22023';end case;if to_regclass('public.system_maintenance_log') is not null then insert into public.system_maintenance_log(actor_id,operation,affected_rows,details,created_at) values(auth.uid(),'HISTORY_RESET',greatest(v_deleted,0)+greatest(v_secondary_deleted,0),jsonb_build_object('release','r30','scope',v_scope,'reason',v_reason,'result',v_result,'operational_data_deleted',false,'successful_backup_assets_deleted',false),now());end if;return v_result||jsonb_build_object('cleared_at',now(),'reason',v_reason);end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_campaign_options()
  RETURNS jsonb
@@ -3243,6 +3359,7 @@ begin
   'templates',coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'template_name',t.template_name,'subject_template',t.subject_template,'body_template',t.body_template,'category',t.category) order by t.template_name) from public.communication_templates t where t.active),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_campaign_register(status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -3260,6 +3377,7 @@ begin
   where status_filter is null or c.status=status_filter
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_create_thread(subject_text text, participant_profile_ids uuid[])
  RETURNS uuid
@@ -3276,6 +3394,7 @@ begin
  foreach p in array participant_profile_ids loop insert into public.communication_thread_participants(thread_id,profile_id,participant_role) select v_id,p,'member' where exists(select 1 from public.profiles x where x.id=p and x.active) on conflict do nothing; end loop;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_dashboard()
  RETURNS jsonb
@@ -3294,6 +3413,7 @@ begin
   'open_threads',(select count(*) from public.communication_threads where status='open')
  ));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_delivery_register(target_campaign_id uuid)
  RETURNS jsonb
@@ -3305,6 +3425,7 @@ begin
  perform public.student_services_require_access('communications','read');
  return coalesce((select jsonb_agg(to_jsonb(d) order by d.created_at desc) from public.communication_deliveries d where d.campaign_id=target_campaign_id),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_my_threads()
  RETURNS jsonb
@@ -3320,6 +3441,7 @@ begin
   from public.communication_threads t join public.communication_thread_participants p on p.thread_id=t.id where p.profile_id=auth.uid()
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_publish_campaign(target_campaign_id uuid)
  RETURNS jsonb
@@ -3369,6 +3491,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('communications','campaign_published','communication_campaign',c.id,auth.uid(),jsonb_build_object('queued_or_sent',v_count));
  return jsonb_build_object('campaign_id',c.id,'queued_or_sent',v_count);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_save_campaign(payload jsonb)
  RETURNS uuid
@@ -3386,6 +3509,7 @@ begin
  else update public.communication_campaigns set title=coalesce(nullif(btrim(payload->>'title'),''),title),body=coalesce(nullif(btrim(payload->>'body'),''),body),category=coalesce(nullif(payload->>'category',''),category),audience_type=coalesce(nullif(payload->>'audience_type',''),audience_type),audience_class_id=case when payload ? 'audience_class_id' then nullif(payload->>'audience_class_id','')::uuid else audience_class_id end,audience_profile_ids=case when payload ? 'audience_profile_ids' then v_profiles else audience_profile_ids end,channels=case when payload ? 'channels' then v_channels else channels end,scheduled_at=case when payload ? 'scheduled_at' then nullif(payload->>'scheduled_at','')::timestamptz else scheduled_at end where id=v_id and status in ('draft','scheduled');
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_save_template(payload jsonb)
  RETURNS uuid
@@ -3401,6 +3525,7 @@ begin
  else update public.communication_templates set template_name=coalesce(nullif(btrim(payload->>'template_name'),''),template_name),subject_template=case when payload ? 'subject_template' then nullif(payload->>'subject_template','') else subject_template end,body_template=coalesce(nullif(btrim(payload->>'body_template'),''),body_template),category=coalesce(nullif(payload->>'category',''),category),active=coalesce((payload->>'active')::boolean,active) where id=v_id;
  end if; return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_send_message(target_thread_id uuid, message_body text)
  RETURNS uuid
@@ -3415,6 +3540,7 @@ begin
  insert into public.communication_messages(thread_id,sender_profile_id,body) values(target_thread_id,auth.uid(),btrim(message_body)) returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.communications_thread_messages(target_thread_id uuid)
  RETURNS jsonb
@@ -3427,6 +3553,7 @@ begin
  update public.communication_thread_participants set last_read_at=now() where thread_id=target_thread_id and profile_id=auth.uid();
  return coalesce((select jsonb_agg(to_jsonb(q) order by q.created_at) from (select m.id,m.thread_id,m.sender_profile_id,p.full_name sender_name,m.body,m.created_at,m.edited_at from public.communication_messages m left join public.profiles p on p.id=m.sender_profile_id where m.thread_id=target_thread_id)q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.complete_notification_job(target_job_id uuid, target_worker_id text, target_success boolean, target_error text DEFAULT ''::text)
  RETURNS boolean
@@ -3454,6 +3581,7 @@ begin
   get diagnostics changed=row_count;
   return changed=1;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.complete_required_password_change()
  RETURNS jsonb
@@ -3476,6 +3604,7 @@ begin
     'Required password change completed');
   return jsonb_build_object('completed',true);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.control_plane_health_snapshot()
  RETURNS jsonb
@@ -3548,6 +3677,7 @@ begin
     'license',jsonb_build_object('status',v_license_status,'expires_at',v_license_expires,'grace_ends_at',v_license_grace)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.copy_school_prospectus(target_source_id uuid, target_academic_year_id uuid)
  RETURNS jsonb
@@ -3555,6 +3685,7 @@ CREATE OR REPLACE FUNCTION public.copy_school_prospectus(target_source_id uuid, 
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$declare source public.school_prospectuses%rowtype;new_id uuid;sec record;new_sec uuid;begin if not public.is_system_admin() then raise exception 'Only the System Administrator can copy school prospectuses' using errcode='42501';end if;perform public.require_sensitive_access();perform public.require_license_feature('school_prospectus');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit prospectus changes' using errcode='42501';end if;select * into source from public.school_prospectuses where id=target_source_id;if source.id is null then raise exception 'Source prospectus not found';end if;if not exists(select 1 from public.academic_years where id=target_academic_year_id and deleted_at is null) then raise exception 'Target academic year not found';end if;if exists(select 1 from public.school_prospectuses where academic_year_id=target_academic_year_id and class_range=source.class_range) then raise exception 'A prospectus already exists for this class range in the target academic year';end if;insert into public.school_prospectuses(academic_year_id,class_range,title,currency_code,status,effective_date,revision_no,general_notes,created_by,updated_by) values(target_academic_year_id,source.class_range,source.title,source.currency_code,'draft',null,0,source.general_notes,auth.uid(),auth.uid()) returning id into new_id;for sec in select * from public.school_prospectus_sections where prospectus_id=source.id order by display_order,id loop insert into public.school_prospectus_sections(prospectus_id,section_type,title,instructions,display_order,created_by,updated_by) values(new_id,sec.section_type,sec.title,sec.instructions,sec.display_order,auth.uid(),auth.uid()) returning id into new_sec;insert into public.school_prospectus_items(section_id,item_name,description,amount,charge_basis,quantity,unit,calculation_units,include_in_total,required,notes,display_order,created_by,updated_by) select new_sec,item_name,description,amount,charge_basis,quantity,unit,calculation_units,include_in_total,required,notes,display_order,auth.uid(),auth.uid() from public.school_prospectus_items where section_id=sec.id order by display_order,id;end loop;return public.build_school_prospectus_snapshot(new_id);end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.create_certificate_batch(payload jsonb, recipient_ids uuid[])
  RETURNS jsonb
@@ -3782,6 +3913,7 @@ begin
   );
   return jsonb_build_object('batch_id',v_batch_id,'recipient_count',v_inserted_count,'status','draft');
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.create_certificate_replacement_draft(target_certificate_id uuid, reason_text text, replacement_statement text DEFAULT ''::text)
  RETURNS jsonb
@@ -3803,6 +3935,7 @@ begin
   perform public.record_certificate_event(new_batch_id,new_certificate_id,'replacement_draft_created',reason_text,jsonb_build_object('replaces_certificate_id',source.id));
   return jsonb_build_object('batch_id',new_batch_id,'certificate_id',new_certificate_id,'status','draft');
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.create_emergency_academic_delegation(payload jsonb)
  RETURNS jsonb
@@ -3887,6 +4020,7 @@ begin
   end if;
   return public.get_emergency_delegation_console();
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.create_notification(target_recipient uuid, target_title text, target_body text DEFAULT ''::text, target_category text DEFAULT 'system'::text, target_entity_type text DEFAULT ''::text, target_entity_id uuid DEFAULT NULL::uuid, queue_email boolean DEFAULT false)
  RETURNS uuid
@@ -3909,6 +4043,7 @@ begin
   end if;
   return nid;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.create_privacy_request(payload jsonb)
  RETURNS jsonb
@@ -3929,6 +4064,7 @@ begin
     'A privacy-rights request was registered. Sensitive requester contact/details remain only in the privacy-request record.');
   return to_jsonb(row_data);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.create_workflow_notifications(target_report_id uuid, target_status report_status)
  RETURNS void
@@ -4063,6 +4199,7 @@ begin
   end if;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.current_aal()
  RETURNS text
@@ -4070,6 +4207,7 @@ CREATE OR REPLACE FUNCTION public.current_aal()
  STABLE
  SET search_path TO 'public', 'pg_catalog', 'extensions'
 AS $function$ select coalesce(auth.jwt()->>'aal','aal1') $function$
+;
 
 CREATE OR REPLACE FUNCTION public.current_app_role()
  RETURNS app_role
@@ -4082,6 +4220,7 @@ AS $function$
   where p.id=auth.uid() and p.active
     and p.role in ('admin','teacher','headteacher','system_admin','principal','class_teacher','subject_teacher','parent_guardian','platform_super_admin','accounts_office','accountant','student')
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.current_app_role_for(input_role app_role)
  RETURNS text
@@ -4097,6 +4236,7 @@ AS $function$
     else input_role::text
   end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.current_id_card_principal_snapshot()
  RETURNS jsonb
@@ -4106,6 +4246,7 @@ CREATE OR REPLACE FUNCTION public.current_id_card_principal_snapshot()
 AS $function$
  select coalesce((select jsonb_build_object('id',h.id,'full_name',concat_ws(' ',h.first_name,nullif(h.middle_name,''),h.last_name),'title','Principal','signature_path',coalesce(h.signature_path,'')) from public.headteachers h where h.deleted_at is null and h.active and h.employment_status='active' order by case when btrim(coalesce(h.signature_path,''))<>'' then 0 else 1 end,h.updated_at desc,h.created_at desc limit 1),jsonb_build_object('full_name',coalesce((select head_name from public.school_settings limit 1),'Principal'),'title','Principal','signature_path',''))
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.default_grading_interpretation(grade_text text, remark_text text)
  RETURNS text
@@ -4126,6 +4267,7 @@ AS $function$
     else left(concat(coalesce(nullif(btrim(remark_text),''),'Performance recorded'),'. Continue working consistently to improve performance.'),180)
   end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_audit_events(event_ids bigint[])
  RETURNS integer
@@ -4158,6 +4300,7 @@ begin
   return changed;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_certificate_permanently(target_certificate_id uuid, reason_text text)
  RETURNS jsonb
@@ -4227,6 +4370,7 @@ begin
     'status','deleted'
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_class_subject_assignment(target_id uuid, reason_text text DEFAULT 'Class subject assignment permanently deleted'::text)
  RETURNS boolean
@@ -4265,6 +4409,7 @@ begin
   if not found then raise exception 'Subject assignment was not deleted'; end if;
   return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_class_timetable_entry(target_entry_id uuid)
  RETURNS void
@@ -4272,6 +4417,7 @@ CREATE OR REPLACE FUNCTION public.delete_class_timetable_entry(target_entry_id u
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$begin if not public.is_system_admin() then raise exception 'Only the System Administrator can manage class timetables' using errcode='42501';end if;perform public.require_sensitive_access();perform public.require_license_feature('timetable');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit timetable changes' using errcode='42501';end if;delete from public.class_timetable_entries where id=target_entry_id;if not found then raise exception 'Timetable entry not found';end if;end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_notifications(notification_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS integer
@@ -4286,6 +4432,7 @@ begin
   get diagnostics changed=row_count;
   return changed;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_report_card_permanently(target_report_id uuid, reason_text text DEFAULT 'Draft report card permanently deleted'::text)
  RETURNS boolean
@@ -4330,6 +4477,7 @@ begin
   return true;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_school_prospectus(target_prospectus_id uuid)
  RETURNS void
@@ -4337,6 +4485,7 @@ CREATE OR REPLACE FUNCTION public.delete_school_prospectus(target_prospectus_id 
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$declare p public.school_prospectuses%rowtype;begin if not public.is_system_admin() then raise exception 'Only the System Administrator can delete draft school prospectuses' using errcode='42501';end if;perform public.require_sensitive_access();perform public.require_license_feature('school_prospectus');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit prospectus changes' using errcode='42501';end if;select * into p from public.school_prospectuses where id=target_prospectus_id for update;if p.id is null then raise exception 'Prospectus not found';end if;if p.status<>'draft' or p.revision_no>0 or exists(select 1 from public.school_prospectus_revisions where prospectus_id=p.id) then raise exception 'Only a never-published draft prospectus can be deleted. Archive published prospectuses instead.';end if;delete from public.school_prospectuses where id=p.id;end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_school_prospectus_item(target_item_id uuid)
  RETURNS void
@@ -4344,6 +4493,7 @@ CREATE OR REPLACE FUNCTION public.delete_school_prospectus_item(target_item_id u
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$declare pid uuid;status_value text;begin if not public.is_system_admin() then raise exception 'Only the System Administrator can remove prospectus items' using errcode='42501';end if;perform public.require_sensitive_access();perform public.require_license_feature('school_prospectus');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit prospectus changes' using errcode='42501';end if;select s.prospectus_id,p.status into pid,status_value from public.school_prospectus_items i join public.school_prospectus_sections s on s.id=i.section_id join public.school_prospectuses p on p.id=s.prospectus_id where i.id=target_item_id for update of p;if pid is null then raise exception 'Prospectus item not found';end if;if status_value='archived' then raise exception 'Archived prospectuses cannot be edited';end if;delete from public.school_prospectus_items where id=target_item_id;update public.school_prospectuses set status=case when status='published' then 'draft' else status end,updated_by=auth.uid(),updated_at=now() where id=pid;end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_school_prospectus_section(target_section_id uuid)
  RETURNS void
@@ -4351,6 +4501,7 @@ CREATE OR REPLACE FUNCTION public.delete_school_prospectus_section(target_sectio
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$declare pid uuid;status_value text;begin if not public.is_system_admin() then raise exception 'Only the System Administrator can remove prospectus sections' using errcode='42501';end if;perform public.require_sensitive_access();perform public.require_license_feature('school_prospectus');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit prospectus changes' using errcode='42501';end if;select s.prospectus_id,p.status into pid,status_value from public.school_prospectus_sections s join public.school_prospectuses p on p.id=s.prospectus_id where s.id=target_section_id for update of p;if pid is null then raise exception 'Prospectus section not found';end if;if status_value='archived' then raise exception 'Archived prospectuses cannot be edited';end if;delete from public.school_prospectus_sections where id=target_section_id;update public.school_prospectuses set status=case when status='published' then 'draft' else status end,updated_by=auth.uid(),updated_at=now() where id=pid;end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_staff_id_card_permanently(target_card_id uuid, reason_text text, confirmation_text text)
  RETURNS jsonb
@@ -4360,6 +4511,7 @@ CREATE OR REPLACE FUNCTION public.delete_staff_id_card_permanently(target_card_i
 AS $function$
 declare c public.staff_id_cards%rowtype;reason text:=btrim(coalesce(reason_text,''));sid uuid;
 begin if not public.is_system_admin() then raise exception 'Only the System Administrator can permanently delete staff ID card records' using errcode='42501';end if;if public.current_aal()<>'aal2' then raise exception 'Multi-factor authentication is required for permanent ID card deletion' using errcode='42501';end if;perform public.require_license_feature('staff_id_cards');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit staff ID card changes' using errcode='42501';end if;if upper(btrim(coalesce(confirmation_text,'')))<>'DELETE' then raise exception 'Type DELETE exactly to confirm permanent removal';end if;if length(reason)<5 then raise exception 'A deletion reason of at least five characters is required';end if;select * into c from public.staff_id_cards where id=target_card_id and status in ('revoked','replaced') for update;if c.id is null then raise exception 'Only a revoked or replaced staff ID card can be permanently deleted';end if;sid:=coalesce(c.teacher_id,c.headteacher_id);insert into public.id_card_deletion_tombstones(card_kind,card_number,verification_token,previous_status,deleted_by,deletion_reason,details) values('staff',c.card_number,c.verification_token,c.status,auth.uid(),reason,jsonb_build_object('revision',c.revision_no,'staff_type',c.staff_type,'deleted_record_id',c.id)) on conflict(card_kind,card_number) do nothing;perform public.record_staff_id_card_event(c.id,c.staff_type,sid,'permanently_deleted',jsonb_build_object('card_number',c.card_number,'previous_status',c.status,'reason',reason));delete from public.staff_id_cards where id=c.id;return jsonb_build_object('deleted',true,'card_number',c.card_number,'status','permanently_removed');end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_student_id_card_permanently(target_card_id uuid, reason_text text, confirmation_text text)
  RETURNS jsonb
@@ -4369,6 +4521,7 @@ CREATE OR REPLACE FUNCTION public.delete_student_id_card_permanently(target_card
 AS $function$
 declare c public.student_id_cards%rowtype;reason text:=btrim(coalesce(reason_text,''));
 begin if not public.is_system_admin() then raise exception 'Only the System Administrator can permanently delete ID card records' using errcode='42501';end if;if public.current_aal()<>'aal2' then raise exception 'Multi-factor authentication is required for permanent ID card deletion' using errcode='42501';end if;perform public.require_license_feature('id_cards');if not public.license_write_allowed() then raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit ID card changes' using errcode='42501';end if;if upper(btrim(coalesce(confirmation_text,'')))<>'DELETE' then raise exception 'Type DELETE exactly to confirm permanent removal';end if;if length(reason)<5 then raise exception 'A deletion reason of at least five characters is required';end if;select * into c from public.student_id_cards where id=target_card_id and status in ('revoked','replaced') for update;if c.id is null then raise exception 'Only a revoked or replaced student ID card can be permanently deleted';end if;insert into public.id_card_deletion_tombstones(card_kind,card_number,verification_token,previous_status,deleted_by,deletion_reason,details) values('student',c.card_number,c.verification_token,c.status,auth.uid(),reason,jsonb_build_object('revision',c.revision_no,'deleted_record_id',c.id)) on conflict(card_kind,card_number) do nothing;perform public.record_id_card_event(c.id,c.student_id,'permanently_deleted',jsonb_build_object('card_number',c.card_number,'previous_status',c.status,'reason',reason));delete from public.student_id_cards where id=c.id;return jsonb_build_object('deleted',true,'card_number',c.card_number,'status','permanently_removed');end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.delete_transcript_issuance_permanently(target_issuance_id uuid, reason_text text, confirmation_text text)
  RETURNS jsonb
@@ -4432,6 +4585,7 @@ begin
   end if;
   raise exception 'Transcript issuance could not be deleted';
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_acknowledge_incident(target_incident_id uuid, acknowledgement_note text DEFAULT NULL::text)
  RETURNS uuid
@@ -4448,6 +4602,7 @@ begin
  insert into public.discipline_guardian_acknowledgements(incident_id,student_id,guardian_user_id,guardian_name,acknowledgement_note) values(target_incident_id,v_student,auth.uid(),v_name,nullif(acknowledgement_note,'')) on conflict(incident_id,guardian_user_id) do update set acknowledgement_note=excluded.acknowledgement_note,acknowledged_at=now() returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_add_action(payload jsonb)
  RETURNS uuid
@@ -4463,6 +4618,7 @@ begin
  values((payload->>'incident_id')::uuid,payload->>'action_type',btrim(payload->>'action_notes'),nullif(payload->>'starts_at','')::timestamptz,nullif(payload->>'ends_at','')::timestamptz,coalesce(nullif(payload->>'status',''),'active'),nullif(payload->>'assigned_hr_staff_id','')::uuid,auth.uid()) returning id into v_id;
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_dashboard()
  RETURNS jsonb
@@ -4480,6 +4636,7 @@ begin
   'urgent_welfare',(select count(*) from public.welfare_cases where status in ('open','monitoring','referred') and priority='urgent')
  ));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_incident_detail(target_incident_id uuid)
  RETURNS jsonb
@@ -4497,6 +4654,7 @@ begin
   'acknowledgements',coalesce((select jsonb_agg(to_jsonb(g) order by g.acknowledged_at) from public.discipline_guardian_acknowledgements g where g.incident_id=target_incident_id),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_incident_register(search_text text DEFAULT NULL::text, status_filter text DEFAULT NULL::text)
  RETURNS jsonb
@@ -4516,6 +4674,7 @@ begin
   order by i.occurred_at desc limit 300
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_my_children_incidents()
  RETURNS jsonb
@@ -4532,6 +4691,7 @@ begin
   where i.guardian_visible and exists(select 1 from public.guardian_links g where g.student_id=i.student_id and g.auth_user_id=auth.uid() and g.can_view_reports)
  )q),'[]'::jsonb);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_notify_guardian(target_incident_id uuid)
  RETURNS integer
@@ -4552,6 +4712,7 @@ begin
  update public.discipline_incidents set guardian_notified_at=now() where id=target_incident_id;
  return v_count;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_resolve_incident(target_incident_id uuid, resolution_notes text, new_status text DEFAULT 'resolved'::text)
  RETURNS void
@@ -4566,6 +4727,7 @@ begin
  if not found then raise exception 'Incident is finalized or unavailable'; end if;
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('discipline','incident_outcome','discipline_incident',$1,auth.uid(),jsonb_build_object('status',$3));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.discipline_save_incident(payload jsonb)
  RETURNS uuid
@@ -4587,6 +4749,7 @@ begin
  insert into public.student_services_events(domain,event_type,entity_type,entity_id,actor_id,details) values('discipline','incident_saved','discipline_incident',v_id,auth.uid(),'{}');
  return v_id;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.enforce_custom_branding_entitlement()
  RETURNS trigger
@@ -4594,6 +4757,7 @@ CREATE OR REPLACE FUNCTION public.enforce_custom_branding_entitlement()
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ begin if auth.uid() is null or auth.role() in ('service_role','supabase_admin') or public.is_platform_super_admin() then return new;end if; if (new.primary_colour is distinct from old.primary_colour or new.accent_colour is distinct from old.accent_colour or new.report_body_font is distinct from old.report_body_font or new.report_body_font_size is distinct from old.report_body_font_size) and not public.license_feature_enabled('custom_branding') then raise exception 'LICENSE_FEATURE_NOT_INCLUDED: The current plan does not include custom branding' using errcode='42501';end if; return new; end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.enforce_licensed_storage_capacity()
  RETURNS trigger
@@ -4601,6 +4765,7 @@ CREATE OR REPLACE FUNCTION public.enforce_licensed_storage_capacity()
  SECURITY DEFINER
  SET search_path TO 'public', 'storage', 'pg_catalog', 'extensions'
 AS $function$ declare v_snapshot jsonb;v_limit_mb bigint;v_new_bytes bigint;v_used_bytes numeric:=0;v_limit_bytes numeric; begin if new.bucket_id not in ('student-photos','staff-photos','school-branding','report-pdfs','system-backups','headteacher-signatures','report-card-templates','certificate-templates','certificate-pdfs') then return new;end if;v_snapshot:=public.license_snapshot_for_role('system_admin');if not coalesce((v_snapshot->>'write_allowed')::boolean,false) then raise exception 'LICENSE_WRITE_RESTRICTED: %',coalesce(nullif(v_snapshot->>'warning',''),'The current licence does not permit Storage changes.') using errcode='42501';end if;v_limit_mb:=nullif(v_snapshot#>>'{plan,max_storage_mb}','')::bigint;if v_limit_mb is null then return new;end if;v_new_bytes:=public.rce_finalized_storage_object_size(new.metadata);if v_new_bytes is null then return new;end if;perform pg_advisory_xact_lock(hashtext('rce-license-storage'));select coalesce(sum(public.rce_finalized_storage_object_size(o.metadata)),0) into v_used_bytes from storage.objects o where o.bucket_id in ('student-photos','staff-photos','school-branding','report-pdfs','system-backups','headteacher-signatures','report-card-templates','certificate-templates','certificate-pdfs') and not(o.bucket_id=new.bucket_id and o.name=new.name) and (new.id is null or o.id is distinct from new.id);v_limit_bytes:=v_limit_mb::numeric*1048576;if v_used_bytes+v_new_bytes::numeric>v_limit_bytes then raise exception 'LICENSE_CAPACITY_REACHED: The plan permits a maximum of % MB of school Storage',v_limit_mb using errcode='23514';end if;return new; end$function$
+;
 
 CREATE OR REPLACE FUNCTION public.enforce_licensed_write()
  RETURNS trigger
@@ -4704,6 +4869,7 @@ begin
   if tg_op='DELETE' then return old; end if;
   return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.enforce_single_current_principal()
  RETURNS trigger
@@ -4725,6 +4891,7 @@ begin
   return new;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.enforce_student_management_aal2_write()
  RETURNS trigger
@@ -4747,6 +4914,7 @@ begin
   return new;
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.enforce_system_admin_capacity()
  RETURNS trigger
@@ -4784,6 +4952,7 @@ begin
     end if;
   end if;return new;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.ensure_current_user_profile()
  RETURNS jsonb
@@ -4858,6 +5027,7 @@ begin
     from public.profiles p where p.id=v_target_id
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.export_backup_snapshot()
  RETURNS jsonb
@@ -4907,6 +5077,7 @@ begin
     'backup_storage_objects',(select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) from public.backup_storage_objects x)
   );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_accounts_console(target_academic_year_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid, target_class_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -4964,6 +5135,7 @@ begin
   'staff',case when public.current_app_role()='system_admin' then coalesce((select jsonb_agg(to_jsonb(a) order by lower(a.full_name)) from public.accounts_office_staff a where a.deleted_at is null),'[]'::jsonb) else '[]'::jsonb end
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_approve_payroll(target_run_id uuid)
  RETURNS jsonb
@@ -4973,6 +5145,7 @@ CREATE OR REPLACE FUNCTION public.finance_approve_payroll(target_run_id uuid)
 AS $function$
 declare r public.finance_payroll_runs%rowtype;
 begin perform public.finance_require_access('payroll',true); select * into r from public.finance_payroll_runs where id=target_run_id; if r.id is null or r.status<>'calculated' then raise exception 'Only calculated payroll can be approved'; end if; update public.finance_payroll_runs set status='approved',approved_by=auth.uid(),approved_at=now() where id=target_run_id returning * into r; return to_jsonb(r); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_calculate_payroll(target_year integer, target_month integer)
  RETURNS jsonb
@@ -5010,6 +5183,7 @@ begin
  insert into public.audit_log(actor_id,table_name,record_id,action,new_data,reason) values(auth.uid(),'finance_payroll_runs',runrow.id,'PAYROLL_CALCULATED',jsonb_build_object('year',target_year,'month',target_month,'items',cnt),'Monthly payroll calculated');
  return jsonb_build_object('run',to_jsonb(runrow),'item_count',cnt);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_class_fee_statement(target_academic_year_id uuid, target_term_id uuid, target_class_id uuid)
  RETURNS jsonb
@@ -5036,6 +5210,7 @@ begin
   where e.academic_year_id=target_academic_year_id and e.class_id=target_class_id and e.active and e.deleted_at is null),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_clear_guardian_contact_history()
  RETURNS jsonb
@@ -5061,6 +5236,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_clear_hold_override(target_student_id uuid, reason_text text)
  RETURNS jsonb
@@ -5068,6 +5244,7 @@ CREATE OR REPLACE FUNCTION public.finance_clear_hold_override(target_student_id 
  SECURITY DEFINER
  SET search_path TO 'public', 'extensions'
 AS $function$ begin perform public.finance_require_access('financial_holds',true); perform public.finance_require_capability('financial_hold'); if btrim(coalesce(reason_text,''))='' then raise exception 'A reason is required'; end if; update public.finance_hold_overrides set active=false,updated_at=now() where student_id=target_student_id and active; insert into public.audit_log(actor_id,table_name,record_id,action,reason) values(auth.uid(),'finance_hold_overrides',target_student_id,'FINANCIAL_HOLD_OVERRIDE_CLEARED',reason_text); return public.finance_student_hold_status(target_student_id); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_compute_tax(taxable_amount numeric, target_date date)
  RETURNS numeric
@@ -5098,6 +5275,7 @@ begin
   end if;
   return round(greatest(total,0),2);
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_deactivate_accounts_staff(target_staff_id uuid, reason_text text DEFAULT ''::text)
  RETURNS boolean
@@ -5115,6 +5293,7 @@ begin
  insert into public.audit_log(actor_id,table_name,record_id,action,reason) values(auth.uid(),'accounts_office_staff',target_staff_id,'FINANCE_STAFF_DEACTIVATED',coalesce(nullif(reason_text,''),'Accounts Office staff deactivated'));
  return true;
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_effective_rate(raw_rate numeric)
  RETURNS numeric
@@ -5122,6 +5301,7 @@ CREATE OR REPLACE FUNCTION public.finance_effective_rate(raw_rate numeric)
  IMMUTABLE
  SET search_path TO 'pg_catalog'
 AS $function$ select case when raw_rate is null then 0 when raw_rate>1 then raw_rate/100 else raw_rate end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_feature_enabled(feature_code text)
  RETURNS boolean
@@ -5131,6 +5311,7 @@ CREATE OR REPLACE FUNCTION public.finance_feature_enabled(feature_code text)
 AS $function$
   select coalesce((public.license_effective_entitlement()->'plan'->'feature_flags'->>feature_code)::boolean,false)
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_generate_invoice_no()
  RETURNS text
@@ -5151,6 +5332,7 @@ begin
   return root||'-INV-'||extract(year from current_date)::int||'-'||lpad(n::text,6,'0');
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_generate_payroll_number()
  RETURNS text
@@ -5160,6 +5342,7 @@ CREATE OR REPLACE FUNCTION public.finance_generate_payroll_number()
 AS $function$
 declare root text; n bigint;
 begin select coalesce(nullif(identifier_root,''),regexp_replace(upper(school_name),'[^A-Z]','','g'),'SCH') into root from public.school_settings limit 1; n:=nextval('public.finance_payroll_no_seq'); return left(root,8)||'-PAY-'||lpad(n::text,6,'0'); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_generate_receipt_no()
  RETURNS text
@@ -5179,6 +5362,7 @@ begin
   n:=nextval('public.finance_receipt_seq');
   return root||'-RCP-'||extract(year from current_date)::int||'-'||lpad(n::text,6,'0');
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_generate_staff_no()
  RETURNS text
@@ -5188,6 +5372,7 @@ CREATE OR REPLACE FUNCTION public.finance_generate_staff_no()
 AS $function$
 declare root text; n bigint;
 begin select coalesce(nullif(identifier_root,''),regexp_replace(upper(school_name),'[^A-Z]','','g'),'SCH') into root from public.school_settings limit 1; n:=nextval('public.accounts_office_staff_no_seq'); return left(root,8)||'AOS'||lpad(n::text,6,'0'); end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_guardian_contact_history(target_academic_year_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid, search_text text DEFAULT NULL::text, page_number integer DEFAULT 1, page_size integer DEFAULT 100)
  RETURNS jsonb
@@ -5234,6 +5419,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_guardian_follow_up(target_academic_year_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid, target_class_id uuid DEFAULT NULL::uuid, status_filter text DEFAULT 'outstanding'::text, search_text text DEFAULT NULL::text)
  RETURNS jsonb
@@ -5417,6 +5603,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_immutable_row()
  RETURNS trigger
@@ -5433,6 +5620,7 @@ begin
   raise exception 'Posted finance ledger rows are immutable. Use a reversal or adjustment.' using errcode='42501';
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_invoice_detail(target_invoice_id uuid)
  RETURNS jsonb
@@ -5469,6 +5657,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_invoice_register(target_academic_year_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid, target_class_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -5513,6 +5702,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_loan_balance(target_loan_id uuid)
  RETURNS numeric
@@ -5523,6 +5713,7 @@ AS $function$
  select greatest(l.principal_amount-coalesce((select sum(pl.amount) from public.finance_payroll_item_lines pl join public.finance_payroll_items pi on pi.id=pl.payroll_item_id where pl.loan_id=l.id and pl.line_type='loan' and pi.payment_status='paid'),0),0)::numeric
  from public.finance_teacher_loans l where l.id=target_loan_id
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_lock_payroll(target_run_id uuid)
  RETURNS boolean
@@ -5531,6 +5722,7 @@ CREATE OR REPLACE FUNCTION public.finance_lock_payroll(target_run_id uuid)
  SET search_path TO 'public', 'extensions'
 AS $function$
 begin perform public.finance_require_access('payroll',true); if not exists(select 1 from public.finance_payroll_runs where id=target_run_id and status='paid') then raise exception 'Only fully paid payroll can be locked'; end if; update public.finance_payroll_runs set status='locked',updated_at=now() where id=target_run_id; return true; end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_log_guardian_contact(payload jsonb)
  RETURNS jsonb
@@ -5580,6 +5772,7 @@ begin
   return jsonb_build_object('id',event_id,'recorded',true,'created_at',now());
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_mark_salary_paid(target_item_id uuid, payment_reference_text text, payment_date_value date DEFAULT CURRENT_DATE)
  RETURNS jsonb
@@ -5609,6 +5802,7 @@ begin
   return to_jsonb(i);
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_my_children_fees()
  RETURNS jsonb
@@ -5621,6 +5815,7 @@ begin
  if not public.finance_feature_enabled('finance_statements') then return jsonb_build_object('children','[]'::jsonb); end if;
  return jsonb_build_object('children',coalesce((select jsonb_agg(jsonb_build_object('id',s.id,'full_name',concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name),'admission_no',s.admission_no,'class_name',coalesce(c.name,''),'statement',public.finance_student_statement(s.id)) order by s.last_name,s.first_name) from public.guardian_links gl join public.students s on s.id=gl.student_id and s.deleted_at is null left join lateral(select e.class_id from public.enrollments e where e.student_id=s.id and e.active and e.deleted_at is null order by e.updated_at desc limit 1) ce on true left join public.classes c on c.id=ce.class_id where gl.auth_user_id=auth.uid()),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_my_invoices()
  RETURNS jsonb
@@ -5652,6 +5847,7 @@ begin
   );
 end
 $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_payment_candidates(target_academic_year_id uuid, target_term_id uuid, target_class_id uuid)
  RETURNS jsonb
@@ -5664,6 +5860,7 @@ begin
  return jsonb_build_object('students',coalesce((select jsonb_agg(jsonb_build_object('student_id',s.id,'student',concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name),'admission_no',s.admission_no,'account_id',b.id,'term_fee',coalesce(b.term_fee_amount,0),'paid',coalesce(b.amount_paid,0),'balance',coalesce(b.balance,0),'status',coalesce(b.status,'not_configured'),'total_outstanding',public.finance_student_outstanding(s.id)) order by s.last_name,s.first_name)
  from public.enrollments e join public.students s on s.id=e.student_id and s.deleted_at is null left join public.finance_fee_account_balances b on b.student_id=s.id and b.term_id=target_term_id where e.academic_year_id=target_academic_year_id and e.class_id=target_class_id and e.active and e.deleted_at is null),'[]'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_payment_register(target_academic_year_id uuid DEFAULT NULL::uuid, target_term_id uuid DEFAULT NULL::uuid, target_class_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
@@ -5721,6 +5918,7 @@ begin
  ) into school_json from public.school_settings limit 1;
  return jsonb_build_object('rows',rows_json,'school',coalesce(school_json,'{}'::jsonb));
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_payroll_console(target_year integer DEFAULT NULL::integer, target_month integer DEFAULT NULL::integer)
  RETURNS jsonb
@@ -5740,6 +5938,7 @@ begin
   'items',coalesce((select jsonb_agg(to_jsonb(i)||jsonb_build_object('teacher_name',concat_ws(' ',t.first_name,nullif(t.middle_name,''),t.last_name),'staff_no',t.staff_no,'payroll_number',p.payroll_number,'year',r.payroll_year,'month',r.payroll_month,'run_status',r.status,'lines',coalesce((select jsonb_agg(to_jsonb(l) order by l.line_type,l.description) from public.finance_payroll_item_lines l where l.payroll_item_id=i.id),'[]'::jsonb)) order by t.last_name,t.first_name) from public.finance_payroll_items i join public.finance_payroll_runs r on r.id=i.run_id join public.teachers t on t.id=i.teacher_id left join public.finance_payroll_profiles p on p.id=i.payroll_profile_id where (target_year is null or r.payroll_year=target_year) and (target_month is null or r.payroll_month=target_month)),'[]'::jsonb)
  );
 end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.finance_portal_account_candidates()
  RETURNS jsonb
@@ -5755,5 +5954,6 @@ begin
    'students',coalesce((select jsonb_agg(jsonb_build_object('id',s.id,'profile_id',s.profile_id,'admission_no',s.admission_no,'full_name',concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name),'class_id',e.class_id,'class_name',c.name,'portal_email',u.email,'portal_active',p.active,'must_change_password',p.must_change_password) order by c.level_order,s.last_name,s.first_name) from public.students s left join lateral(select x.class_id from public.enrollments x where x.student_id=s.id and x.active and x.deleted_at is null order by x.updated_at desc limit 1)e on true left join public.classes c on c.id=e.class_id left join public.profiles p on p.id=s.profile_id left join auth.users u on u.id=s.profile_id where s.deleted_at is null and s.status='active'),'[]'::jsonb)
  );
 end $function$
+;
 
 SET check_function_bodies=on;
