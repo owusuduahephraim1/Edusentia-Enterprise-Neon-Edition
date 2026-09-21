@@ -46,7 +46,7 @@ jobs:
         if: github.ref == 'refs/heads/reference-parity-r42'
         shell: bash
         env:
-          PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4-pooler.c-7.us-east-2.aws.neon.tech
+          PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4.c-7.us-east-2.aws.neon.tech
         run: |
           set -euo pipefail
           PARITY_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" node --input-type=module -e '
@@ -61,7 +61,9 @@ jobs:
           PARITY_DB_NAME="$(psql "$PARITY_DATABASE_URL" -Atc "select current_database()")"
           PARITY_DB_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select session_user||'|'||current_user||'|'||current_setting('role')")"
           test "$PARITY_DB_NAME" = "edusentia"
-          echo "Parity Neon endpoint verified; session/current/role is $PARITY_DB_ROLE."
+          test "$PARITY_DB_ROLE" = "edusentia_runtime|edusentia_runtime|none"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_provisioner','set')")" = "t"
+          echo "Parity direct endpoint and deployment runtime identity verified."
 
       - name: Fresh database migration smoke test
         shell: bash
@@ -73,13 +75,24 @@ jobs:
           echo "Using disposable database $PROBE_DB"
 
           cleanup() {
-            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true
+            if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
+              psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
+set role edusentia_provisioner;
+drop database if exists "$PROBE_DB" with (force);
+SQL
+            else
+              psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true
+            fi
           }
           trap cleanup EXIT
 
           cleanup
           if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
-            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\" owner edusentia_provisioner template \"$CI_TEMPLATE_DATABASE\";"
+            psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
+set role edusentia_provisioner;
+create database "$PROBE_DB" owner edusentia_provisioner template "$CI_TEMPLATE_DATABASE";
+grant connect,create,temp on database "$PROBE_DB" to edusentia_runtime;
+SQL
           else
             psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\";"
           fi
@@ -87,7 +100,8 @@ jobs:
           PROBE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PROBE_DB="$PROBE_DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.PROBE_DB;process.stdout.write(u.toString())')"
           echo "::add-mask::$PROBE_URL"
           PROBE_IDENTITY="$(psql "$PROBE_URL" -Atc "select session_user||'|'||current_user||'|'||current_setting('role')||'|'||pg_get_userbyid(datdba)||'|'||has_database_privilege(current_user,current_database(),'create') from pg_database where datname=current_database()")"
-          echo "Disposable database identity: $PROBE_IDENTITY"
+          test "$PROBE_IDENTITY" = "edusentia_runtime|edusentia_runtime|none|edusentia_provisioner|true"
+          echo "Disposable runtime migration identity verified."
 
           BOOTSTRAP_DATABASE_URL="$PROBE_URL" bash database/install-master.sh
           psql "$PROBE_URL" -v ON_ERROR_STOP=1 -f database/runtime-role.sql
