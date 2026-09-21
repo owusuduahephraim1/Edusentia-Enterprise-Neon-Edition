@@ -11,18 +11,19 @@ if [ "$TARGET_DATABASE" != "$EXPECTED_DATABASE" ]; then
   exit 1
 fi
 
-TARGET_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" TARGET_DATABASE="$TARGET_DATABASE" node --input-type=module -e '
+TARGET_URL="$(EXPECTED_HOST="$EXPECTED_HOST" BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" TARGET_DATABASE="$TARGET_DATABASE" node --input-type=module -e '
   const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
-  if(u.hostname!==process.env.EXPECTED_HOST && u.hostname!==process.env.EXPECTED_HOST.replace(".c-7.","-pooler.c-7.")){
-    throw new Error("Parity reference updater received a non-parity host");
-  }
-  u.hostname=process.env.EXPECTED_HOST;
+  const direct=process.env.EXPECTED_HOST;
+  const pooled=direct.replace(".c-7.","-pooler.c-7.");
+  if(u.hostname!==direct && u.hostname!==pooled) throw new Error("Parity reference updater received a non-parity host");
+  u.hostname=direct;
   u.pathname="/"+process.env.TARGET_DATABASE;
   process.stdout.write(u.toString());
-' EXPECTED_HOST="$EXPECTED_HOST")"
+')"
 echo "::add-mask::$TARGET_URL"
 
 test "$(psql "$TARGET_URL" -Atc "select current_database()")" = "$EXPECTED_DATABASE"
+test "$(psql "$TARGET_URL" -Atc "select session_user")" = "edusentia_runtime"
 
 apply_once() {
   local version="$1"
