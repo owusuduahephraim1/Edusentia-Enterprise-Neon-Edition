@@ -10,6 +10,7 @@ import { tenantDb } from "./tenant-db";
 import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
 import { deleteIsolatedTenant } from "./deletion";
 import { inspectTenantRelease } from "./tenant-release";
+import { handlePlatformPackageAction, handlePlatformPackageTransfer } from "./platform-package-service";
 
 async function authed(request:Request,env:Env){
   const ctx=await authenticatePlatform(request,env);
@@ -64,6 +65,7 @@ async function refreshTenantSnapshot(env:Env,master:any,tenantId:string){
 
 export async function platformRoute(request:Request,env:Env,requestId:string):Promise<Response|null>{
   const url=new URL(request.url),p=url.pathname,method=request.method.toUpperCase(),sql=db(env);
+  const packageTransfer=await handlePlatformPackageTransfer(request,env);if(packageTransfer)return packageTransfer;
 
   if(method==="POST"&&p==="/api/public/school-registration"){
     const b=await readJson<any>(request);
@@ -142,8 +144,21 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
     return json({authenticated:true,user:{id:ctx.userId,email:ctx.email,displayName:ctx.displayName},platform:{role:ctx.role,roleLabel:"Platform Super Administrator"},session:{id:ctx.sessionId,assuranceLevel:ctx.assuranceLevel}});
   }
 
+  if(method==="POST"&&(p==="/api/compat/functions/platform-package-manager"||p==="/api/compat/functions/platform-package-gateway")){
+    const ctx=await authed(request,env),body=await readJson<Record<string,unknown>>(request);
+    return json(await handlePlatformPackageAction(env,sql,ctx,body,url.origin));
+  }
+
   if(!p.startsWith("/api/platform/"))return null;
   const ctx=await authed(request,env);
+
+  if(method==="POST"&&p==="/api/platform/packages/action"){
+    const body=await readJson<Record<string,unknown>>(request);
+    return json(await handlePlatformPackageAction(env,sql,ctx,body,url.origin));
+  }
+  if(method==="GET"&&p==="/api/platform/packages/status"){
+    return json(await handlePlatformPackageAction(env,sql,ctx,{action:"status"},url.origin));
+  }
 
   if(method==="GET"&&p==="/api/platform/mfa/factors"){
     return json({ok:true,factors:await listMfaFactors(sql,ctx.userId)});
