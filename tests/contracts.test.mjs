@@ -223,6 +223,19 @@ test("Certified report assignment scope prerequisites stay internal before 0044"
 });
 
 
+test("Neon report-view compatibility restores Principal visibility",()=>{
+  const m=read("database/reference-compat/0045b_neon_report_view_compat.sql");
+  const i=read("database/tenant-template/install.sh");
+  const s=read("database/synthetic-school-lifecycle-smoke.sh");
+  assert.match(m,/current_app_role\(\) in \('system_admin','principal'\)/);
+  assert.match(m,/public\.finance_student_hold_status/);
+  assert.match(m,/public\.guardian_links/);
+  assert.doesNotMatch(m,/s\.profile_id/);
+  assert.match(i,/0045b_neon_report_view_compat\.sql/);
+  assert.match(s,/0045b_neon_report_view_compat\.sql/);
+});
+
+
 test("R2-native report PDF integrity preserves certified authorization and removes Supabase storage dependency",()=>{
   const m=read("database/reference-compat/0045_certified_report_pdf_integrity_r2.sql");
   const i=read("database/tenant-template/install.sh");
