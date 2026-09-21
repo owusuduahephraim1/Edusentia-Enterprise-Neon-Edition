@@ -104,6 +104,7 @@ jobs:
 
           PROBE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PROBE_DB="$PROBE_DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.PROBE_DB;process.stdout.write(u.toString())')"
           echo "::add-mask::$PROBE_URL"
+          psql "$PROBE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner; grant usage,create on schema public to edusentia_runtime; reset role;"
           PROBE_IDENTITY="$(psql "$PROBE_URL" -Atc "select session_user||'|'||current_user||'|'||current_setting('role')||'|'||pg_get_userbyid(datdba)||'|'||has_database_privilege(current_user,current_database(),'create') from pg_database where datname=current_database()")"
           test "$PROBE_IDENTITY" = "edusentia_runtime|edusentia_runtime|none|edusentia_provisioner|true"
           echo "Disposable runtime migration identity verified."
