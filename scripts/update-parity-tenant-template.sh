@@ -82,7 +82,7 @@ NODE
 
 relock
 trap - EXIT
-test "$(psql "$MASTER_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|f"
+test "$(psql "$MASTER_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|false"
 test "$(psql "$MASTER_URL" -Atc "select has_database_privilege('edusentia_runtime','$TEMPLATE_DB','connect')")" = "f"
 
 echo "Parity tenant template updated incrementally through certified compatibility 0048 and relocked."
