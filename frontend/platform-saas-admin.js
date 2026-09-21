@@ -23,10 +23,7 @@ function dateValue(v){const d=v?new Date(v):new Date();if(Number.isNaN(d.getTime
 function plusDays(v,n){const d=v instanceof Date?new Date(v):new Date(v||Date.now());d.setUTCDate(d.getUTCDate()+n);return d;}
 function badge(v){const x=String(v||"unknown");return `<span class="pa-badge ${esc(x)}">${esc(x.replaceAll("_"," "))}</span>`;}
 function money(v,c="USD"){if(v==null||v==="")return"Custom";try{return new Intl.NumberFormat("en",{style:"currency",currency:c,maximumFractionDigits:0}).format(Number(v));}catch{return String(v);}}
-function showAuth(step="login"){
-  $("#paAuthView")?.classList.remove("hidden");$("#paConsole")?.classList.add("hidden");
-  $("#paLogin")?.classList.toggle("hidden",step!=="login");$("#paMfa")?.classList.toggle("hidden",step!=="mfa");$("#paRecoveryCodes")?.classList.toggle("hidden",step!=="recovery");
-}
+function showAuth(){location.replace("./?platform=1");}
 function showConsole(session){
   state.session=session;$("#paAuthView")?.classList.add("hidden");$("#paConsole")?.classList.remove("hidden");
   $("#paAdminIdentity").textContent=session?.user?.displayName||session?.user?.email||"Platform Administrator";
@@ -52,8 +49,8 @@ function beginMfa(result){
 }
 async function enter(session){showConsole(session);setView(state.view);await load(true);}
 async function boot(){
-  try{const session=await api().platformSession();if(session?.authenticated){await enter(session);return;}showAuth("login");renderTurnstile();}
-  catch(e){showAuth("login");authMessage(e?.message||"Platform API is unavailable.");renderTurnstile();}
+  try{const session=await api().platformSession();if(session?.authenticated){await enter(session);return;}showAuth();}
+  catch(e){showAuth();}
 }
 async function load(force=false){
   if(state.loading&&!force)return;state.loading=true;$("#paConnection").textContent="Refreshing control plane…";
@@ -268,7 +265,7 @@ function wire(){
   $("#paMfaForm")?.addEventListener("submit",async e=>{e.preventDefault();mfaMessage("");const b=e.currentTarget.querySelector('button[type="submit"]');b.disabled=true;try{const r=await api().platformCompleteMfa(state.mfaChallenge,$("#paMfaCode").value.trim());state.mfaChallenge="";if(Array.isArray(r.recoveryCodes)&&r.recoveryCodes.length){state.pendingSession=r;$("#paRecoveryCodeList").textContent=r.recoveryCodes.join("\n");showAuth("recovery");}else await enter(r);}catch(err){mfaMessage(err.message||String(err));}finally{b.disabled=false;}});
   $("#paMfaBack")?.addEventListener("click",()=>{state.mfaChallenge="";showAuth("login");resetTurnstile();renderTurnstile();});
   $("#paRecoveryContinue")?.addEventListener("click",async()=>{if(!state.pendingSession)return;const s=state.pendingSession;state.pendingSession=null;$("#paRecoveryCodeList").textContent="";await enter(s);});
-  $("#paRefresh")?.addEventListener("click",()=>load(true));$("#paSignOut")?.addEventListener("click",async()=>{try{await api().platformLogout();}finally{location.reload();}});
+  $("#paRefresh")?.addEventListener("click",()=>load(true));$("#paSignOut")?.addEventListener("click",async()=>{try{await api().platformLogout();}finally{location.replace("./?platform=1");}});
   $("#paMfaManage")?.addEventListener("click",openMfaManager);
   $$(".pa-nav [data-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
   $("#paContent")?.addEventListener("click",action);$("#paModal")?.addEventListener("click",action);$("#paModal")?.addEventListener("close",()=>$("#paModalBody").innerHTML="");
