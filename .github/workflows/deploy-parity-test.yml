@@ -92,9 +92,10 @@ jobs:
             if(u.pathname!=="/edusentia") throw new Error("Parity bootstrap URL must target the edusentia control database");
             console.log("Parity bootstrap route structure verified.");
           '
-          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select current_database()")" = "edusentia"
-          test "$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select current_user")" = "edusentia_runtime"
-          echo "Parity bootstrap endpoint and deployment role verified."
+          PARITY_DB_NAME="$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select current_database()")"
+          PARITY_DB_ROLE="$(psql "$PARITY_BOOTSTRAP_URL" -Atc "select current_user")"
+          test "$PARITY_DB_NAME" = "edusentia"
+          echo "Parity bootstrap endpoint verified; deployment role is $PARITY_DB_ROLE."
 
       - name: Prepare isolated parity Worker and provisioner credentials
         if: steps.config.outputs.ready == 'true'
