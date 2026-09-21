@@ -65,7 +65,8 @@ async function sha256Bytes(bytes:Uint8Array){
   return Array.from(hash,b=>b.toString(16).padStart(2,"0")).join("");
 }
 async function encryptionMaterial(env:Env){
-  const source=String(env.BACKUP_ENCRYPTION_KEY||"");
+  const configured=String(env.BACKUP_ENCRYPTION_KEY||"");
+  const source=configured||(env.TURNSTILE_TEST_MODE==="true"?`edusentia:parity-backup:v1:${env.SESSION_PEPPER}`:"");
   if(source.length<32)fail("BACKUP_ENCRYPTION_KEY must contain at least 32 characters","backup_encryption_unavailable",503);
   const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(source)));
   const key=await crypto.subtle.importKey("raw",digest,{name:"AES-GCM"},false,["encrypt","decrypt"]);

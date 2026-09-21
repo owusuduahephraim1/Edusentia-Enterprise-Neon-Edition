@@ -232,6 +232,23 @@ jobs:
           trap - EXIT
           echo "Rotatable provisioner login wrapper can create and remove isolated tenant databases."
 
+      - name: Apply parity compatibility migrations before Worker promotion
+        if: steps.config.outputs.test_ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PARITY_TENANT_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
+            u.pathname="/edusentia_rpt_000001";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$PARITY_TENANT_URL"
+          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048k_mfa_recovery_compat.sql
+          psql "$PARITY_TENANT_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql
+          test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from app.schema_migrations where version in('0048k_mfa_recovery_compat','0048l_backup_worker_api')")" = "2"
+          test "$(psql "$PARITY_TENANT_URL" -Atc "select count(*) from information_schema.columns where table_schema='authn' and table_name='mfa_recovery_codes' and column_name in('generation_id','expires_at')")" = "2"
+          echo "Persistent parity tenant is schema-compatible with the Worker candidate."
+
       - name: Stage parity frontend configuration
         if: steps.config.outputs.code_deploy_ready == 'true'
         shell: bash
