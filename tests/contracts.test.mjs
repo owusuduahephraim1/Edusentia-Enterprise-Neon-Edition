@@ -496,7 +496,7 @@ test("database smokes serialize access to the shared parity CI seed",()=>{
   const schema=read(".github/workflows/schema-smoke.yml");
   const compat=read(".github/workflows/reference-compat-smoke.yml");
   const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
-  for(const x of [schema,compat,lifecycle]) assert.match(x,/pg_terminate_backend(pid).*CI_TEMPLATE_DATABASE/s);
+  for(const x of [schema,compat,lifecycle]) assert.match(x,/pg_terminate_backend\(pid\).*CI_TEMPLATE_DATABASE/s);
 });
 
 
