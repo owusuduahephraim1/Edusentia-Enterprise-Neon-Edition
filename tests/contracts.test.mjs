@@ -242,3 +242,22 @@ test("accelerated testing workspaces stay Worker-backed and certified",()=>{
   assert.match(r,/\/api\/finance\/invoices/);assert.match(r,/\/api\/finance\/payments/);assert.match(r,/\/api\/operations\/overview/);assert.match(r,/requireRole\(ctx,\["system_admin","principal","accountant"\]\)/);
   for(const x of [students,teachers,principal,timetable,reports,ops,operations])assert.doesNotMatch(x,/supabase|postgresql:\/\//i);
 });
+
+
+test("parity browser harness is isolated from production configuration",()=>{
+  const prod=read("worker/wrangler.jsonc");
+  const parity=read("worker/wrangler.parity.jsonc");
+  const turnstile=read("worker/src/turnstile.ts");
+  const workflow=read(".github/workflows/deploy-parity-test.yml");
+  assert.doesNotMatch(prod,/TURNSTILE_TEST_MODE/);
+  assert.match(parity,/"TURNSTILE_TEST_MODE": "true"/);
+  assert.match(parity,/edusentia-enterprise-neon-parity-test/);
+  assert.match(parity,/"run_worker_first": \["\/api\/\*"\]/);
+  assert.match(turnstile,/result\.hostname\s*!==\s*expectedHostname/);
+  assert.match(turnstile,/result\.action\s*!==\s*expectedAction/);
+  assert.match(turnstile,/!result\.success \|\| metadataInvalid/);
+  assert.match(workflow,/secrets\.PARITY_WORKER_DATABASE_URL/);
+  assert.match(workflow,/u\.username!=="edusentia_worker_runtime"/);
+  assert.doesNotMatch(workflow,/secrets\.DATABASE_URL \|\| secrets\.NEON_DATABASE_URL/);
+  assert.match(workflow,/edusentia-enterprise-neon-parity-test/);
+});
