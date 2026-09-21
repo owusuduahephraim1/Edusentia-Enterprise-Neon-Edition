@@ -490,7 +490,7 @@ test("database smokes serialize access to the shared parity CI seed",()=>{
     ".github/workflows/synthetic-school-lifecycle.yml"
   ]){
     const w=read(file);
-    assert.match(w,/group: edusentia-database-smoke-${{ github.ref }}/);
+    assert.match(w,/group: edusentia-database-smoke-\$\{\{ github\.ref \}\}/);
     assert.match(w,/cancel-in-progress: false/);
   }
   const schema=read(".github/workflows/schema-smoke.yml");
@@ -509,5 +509,17 @@ test("parity smoke routing locks the shared CI seed before cloning",()=>{
     const w=read(file);
     assert.match(w,/alter database edusentia_ci_base_v2 with allow_connections false/i);
     assert.match(w,/datistemplate and not datallowconn/);
+  }
+});
+
+
+test("CI clones grant runtime public-schema migration access",()=>{
+  for(const file of [
+    ".github/workflows/schema-smoke.yml",
+    ".github/workflows/reference-compat-smoke.yml",
+    "database/synthetic-school-lifecycle-smoke.sh"
+  ]){
+    const x=read(file);
+    assert.match(x,/set role edusentia_provisioner; grant usage,create on schema public to edusentia_runtime; reset role;/i);
   }
 });
