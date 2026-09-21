@@ -3,6 +3,8 @@ import { route } from "./routes";
 import { corsHeaders, error, withHeaders } from "./http";
 import { dispatchScheduledNotifications } from "./notification-dispatcher";
 import { dispatchScheduledBackups } from "./backup-service";
+import { platformPackageMaintenance } from "./platform-package-service";
+import { db } from "./db";
 export default { async fetch(request:Request,env:Env):Promise<Response>{
   const requestId=request.headers.get("x-request-id")||crypto.randomUUID();
   if(request.method==="OPTIONS") return withHeaders(new Response(null,{status:204,headers:corsHeaders(request,env)}),request,env);
@@ -19,6 +21,9 @@ export default { async fetch(request:Request,env:Env):Promise<Response>{
 },
   async scheduled(controller:ScheduledController,env:Env,ctx:ExecutionContext):Promise<void>{
     ctx.waitUntil(dispatchScheduledNotifications(env));
-    if(controller.cron==="0 2 * * *")ctx.waitUntil(dispatchScheduledBackups(env));
+    if(controller.cron==="0 2 * * *"){
+      ctx.waitUntil(dispatchScheduledBackups(env));
+      ctx.waitUntil(platformPackageMaintenance(env,db(env)));
+    }
   }
 };
