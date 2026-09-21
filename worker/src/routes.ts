@@ -8,6 +8,7 @@ import { tenantDb } from "./tenant-db";
 import { sha256Hex } from "./crypto";
 import { beginMfaEnrollment, listMfaFactors, removeMfaFactor, verifyMfaEnrollment } from "./mfa-management";
 import { invokeCertifiedRpc } from "./certified-rpc";
+import { handleLegacyIdentityFunction } from "./identity-admin";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -53,6 +54,11 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({authenticated:true,user:{id:ctx.userId,email:ctx.email,displayName:ctx.displayName},membership:{tenantId:ctx.tenantId,tenantCode:ctx.tenantCode,tenantName:ctx.tenantName,role:ctx.role,roleLabel:ctx.role.replaceAll('_',' ')},session:{id:ctx.sessionId,assuranceLevel:ctx.assuranceLevel}});
   }
   const ctx=await authed(request,env),sql=tenantDb(env,ctx.databaseName),master=db(env);
+  const legacyIdentity=p.match(/^\/api\/compat\/functions\/(admin-user-management|directory-user-management)$/);
+  if(method==="POST"&&legacyIdentity){
+    const body=await readJson<any>(request);
+    return json(await handleLegacyIdentityFunction(legacyIdentity[1],sql,ctx,body));
+  }
   if(method==="GET"&&p==="/api/security/mfa/factors"){
     requireRole(ctx,["system_admin"]);
     if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required",403,requestId);
