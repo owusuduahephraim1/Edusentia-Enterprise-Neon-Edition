@@ -491,200 +491,1937 @@ create table if not exists public."transcript_issuances"(
   "template_version" text default 'professional-transcript-v1'::text not null
 );
 
-alter table public."backup_storage_objects" add constraint "backup_storage_objects_encrypted_size_check" CHECK (encrypted_size >= 0);
-alter table public."backup_storage_objects" add constraint "backup_storage_objects_original_size_check" CHECK (original_size >= 0);
-alter table public."backup_storage_objects" add constraint "backup_storage_objects_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'completed'::text, 'failed'::text]));
-alter table public."certificate_batches" add constraint "certificate_batches_certificate_type_check" CHECK (certificate_type = ANY (ARRAY['student_promotion'::text, 'jhs_completion'::text, 'teacher_recognition'::text]));
-alter table public."certificate_batches" add constraint "certificate_batches_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'submitted'::text, 'approved'::text, 'rejected'::text, 'issued'::text, 'cancelled'::text]));
-alter table public."certificate_templates" add constraint "certificate_templates_certificate_type_check" CHECK (certificate_type = ANY (ARRAY['student_promotion'::text, 'jhs_completion'::text, 'teacher_recognition'::text]));
-alter table public."certificate_templates" add constraint "certificate_templates_file_mime_chk" CHECK (mime_type = ''::text OR (mime_type = ANY (ARRAY['application/pdf'::text, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::text])));
-alter table public."certificate_templates" add constraint "certificate_templates_file_path_chk" CHECK (storage_path = ''::text OR storage_path ~~ (certificate_type || '/%'::text));
-alter table public."certificate_templates" add constraint "certificate_templates_file_size_chk" CHECK (storage_path = ''::text AND file_size = 0 OR storage_path <> ''::text AND file_size > 0 AND file_size <= 20971520);
-alter table public."certificate_templates" add constraint "certificate_templates_version_chk" CHECK (version > 0);
-alter table public."certificates" add constraint "certificate_recipient_chk" CHECK (recipient_kind = 'student'::text AND student_id IS NOT NULL AND teacher_id IS NULL OR recipient_kind = 'teacher'::text AND teacher_id IS NOT NULL AND student_id IS NULL);
-alter table public."certificates" add constraint "certificates_recipient_kind_check" CHECK (recipient_kind = ANY (ARRAY['student'::text, 'teacher'::text]));
-alter table public."certificates" add constraint "certificates_revision_no_check" CHECK (revision_no > 0);
-alter table public."certificates" add constraint "certificates_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'approved'::text, 'issued'::text, 'rejected'::text, 'revoked'::text, 'superseded'::text]));
-alter table public."data_retention_policies" add constraint "data_retention_policies_disposition_action_check" CHECK (disposition_action = ANY (ARRAY['review'::text, 'archive'::text, 'anonymise'::text, 'delete'::text]));
-alter table public."data_retention_policies" add constraint "data_retention_policies_retention_years_check" CHECK (retention_years IS NULL OR retention_years >= 1 AND retention_years <= 100);
-alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_event_type_check" CHECK (event_type = ANY (ARRAY['created'::text, 'principal_acknowledged'::text, 'revoked'::text, 'report_saved'::text, 'score_imported'::text]));
-alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_card_kind_check" CHECK (card_kind = ANY (ARRAY['student'::text, 'staff'::text]));
-alter table public."id_card_settings" add constraint "id_card_settings_staff_validity_check" CHECK (staff_validity_months >= 1 AND staff_validity_months <= 60);
-alter table public."id_card_settings" add constraint "id_card_settings_template_code_check" CHECK (template_code = ANY (ARRAY['classic'::text, 'modern'::text, 'minimal'::text]));
-alter table public."id_card_settings" add constraint "id_card_settings_validity_months_check" CHECK (validity_months >= 1 AND validity_months <= 60);
-alter table public."platform_access_locks" add constraint "platform_access_lock_dates_chk" CHECK (ends_at IS NULL OR ends_at > starts_at);
-alter table public."platform_access_locks" add constraint "platform_access_locks_lock_mode_check" CHECK (lock_mode = ANY (ARRAY['read_only'::text, 'deny'::text]));
-alter table public."platform_access_locks" add constraint "platform_access_locks_lock_scope_check" CHECK (lock_scope = ANY (ARRAY['system_admin'::text, 'school'::text, 'platform'::text]));
-alter table public."privacy_requests" add constraint "privacy_requests_request_details_check" CHECK (length(btrim(request_details)) >= 10);
-alter table public."privacy_requests" add constraint "privacy_requests_request_type_check" CHECK (request_type = ANY (ARRAY['access'::text, 'correction'::text, 'export'::text, 'restriction'::text, 'anonymisation'::text, 'deletion'::text, 'consent_review'::text]));
-alter table public."privacy_requests" add constraint "privacy_requests_status_check" CHECK (status = ANY (ARRAY['open'::text, 'in_review'::text, 'approved'::text, 'rejected'::text, 'completed'::text, 'cancelled'::text]));
-alter table public."recovery_test_runs" add constraint "recovery_test_runs_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'passed'::text, 'failed'::text]));
-alter table public."report_card_templates" add constraint "report_card_templates_mime_chk" CHECK (mime_type = ANY (ARRAY['application/pdf'::text, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::text]));
-alter table public."report_card_templates" add constraint "report_card_templates_path_chk" CHECK (storage_path ~~ (range_key || '/%'::text));
-alter table public."report_card_templates" add constraint "report_card_templates_range_chk" CHECK (range_key = ANY (ARRAY['early_years'::text, 'basic_1_6'::text, 'basic_7_9'::text]));
-alter table public."report_card_templates" add constraint "report_card_templates_size_chk" CHECK (file_size > 0 AND file_size <= 20971520);
-alter table public."report_card_templates" add constraint "report_card_templates_version_chk" CHECK (version > 0);
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_amount_check" CHECK (amount IS NULL OR amount >= 0::numeric);
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_calculation_units_check" CHECK (calculation_units IS NULL OR calculation_units > 0::numeric);
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_charge_basis_check" CHECK (charge_basis = ANY (ARRAY['free'::text, 'one_off'::text, 'per_day'::text, 'per_week'::text, 'per_month'::text, 'per_term'::text, 'per_academic_year'::text, 'per_occurrence'::text, 'optional'::text, 'parent_provides'::text, 'informational'::text]));
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_display_order_check" CHECK (display_order >= 0 AND display_order <= 10000);
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_quantity_check" CHECK (quantity IS NULL OR quantity > 0::numeric);
-alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_revision_no_check" CHECK (revision_no > 0);
-alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_display_order_check" CHECK (display_order >= 0 AND display_order <= 10000);
-alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_section_type_check" CHECK (section_type = ANY (ARRAY['main_fees'::text, 'other_items'::text, 'parent_provided'::text, 'transportation'::text, 'policies'::text, 'custom'::text]));
-alter table public."school_prospectuses" add constraint "school_prospectuses_class_range_check" CHECK (class_range = ANY (ARRAY['early_years'::text, 'basic_1_6'::text, 'basic_7_9'::text]));
-alter table public."school_prospectuses" add constraint "school_prospectuses_currency_code_check" CHECK (currency_code ~ '^[A-Z]{3}$'::text);
-alter table public."school_prospectuses" add constraint "school_prospectuses_revision_no_check" CHECK (revision_no >= 0);
-alter table public."school_prospectuses" add constraint "school_prospectuses_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]));
-alter table public."school_restore_jobs" add constraint "school_restore_jobs_package_size_check" CHECK (package_size >= 0);
-alter table public."school_restore_jobs" add constraint "school_restore_jobs_status_check" CHECK (status = ANY (ARRAY['upload_pending'::text, 'uploaded'::text, 'validating'::text, 'restoring'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]));
-alter table public."security_events" add constraint "security_events_severity_check" CHECK (severity = ANY (ARRAY['info'::text, 'warning'::text, 'high'::text, 'critical'::text]));
-alter table public."security_events" add constraint "security_events_status_check" CHECK (status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'resolved'::text, 'false_positive'::text]));
-alter table public."security_verification_runs" add constraint "security_verification_runs_status_check" CHECK (status = ANY (ARRAY['planned'::text, 'in_progress'::text, 'passed'::text, 'passed_with_findings'::text, 'failed'::text]));
-alter table public."staff_id_cards" add constraint "staff_id_cards_check" CHECK (staff_type = 'teacher'::text AND teacher_id IS NOT NULL AND headteacher_id IS NULL OR staff_type = 'principal'::text AND headteacher_id IS NOT NULL AND teacher_id IS NULL);
-alter table public."staff_id_cards" add constraint "staff_id_cards_check1" CHECK (expires_on >= issue_date);
-alter table public."staff_id_cards" add constraint "staff_id_cards_revision_no_check" CHECK (revision_no > 0);
-alter table public."staff_id_cards" add constraint "staff_id_cards_staff_type_check" CHECK (staff_type = ANY (ARRAY['teacher'::text, 'principal'::text]));
-alter table public."staff_id_cards" add constraint "staff_id_cards_status_check" CHECK (status = ANY (ARRAY['active'::text, 'revoked'::text, 'replaced'::text]));
-alter table public."student_attendance_entries" add constraint "student_attendance_entries_attendance_status_check" CHECK (attendance_status = ANY (ARRAY['present'::text, 'absent'::text, 'late'::text, 'excused'::text]));
-alter table public."student_id_cards" add constraint "student_id_cards_check" CHECK (expires_on >= issue_date);
-alter table public."student_id_cards" add constraint "student_id_cards_revision_no_check" CHECK (revision_no > 0);
-alter table public."student_id_cards" add constraint "student_id_cards_status_check" CHECK (status = ANY (ARRAY['active'::text, 'revoked'::text, 'replaced'::text]));
-alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_event_type_check" CHECK (event_type = ANY (ARRAY['transfer_in'::text, 'transfer_out'::text, 'withdrawn'::text, 'graduated'::text, 'inactive'::text, 'reactivated'::text, 'archived'::text]));
-alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_reason_check" CHECK (length(btrim(reason)) >= 5);
-alter table public."transcript_issuances" add constraint "transcript_issuances_status_check" CHECK (status = ANY (ARRAY['valid'::text, 'superseded'::text, 'revoked'::text]));
-alter table public."backup_storage_objects" add constraint "backup_storage_objects_pkey" PRIMARY KEY (id);
-alter table public."certificate_batches" add constraint "certificate_batches_pkey" PRIMARY KEY (id);
-alter table public."certificate_events" add constraint "certificate_events_pkey" PRIMARY KEY (id);
-alter table public."certificate_templates" add constraint "certificate_templates_pkey" PRIMARY KEY (id);
-alter table public."certificates" add constraint "certificates_pkey" PRIMARY KEY (id);
-alter table public."class_attendance_registers" add constraint "class_attendance_registers_pkey" PRIMARY KEY (id);
-alter table public."data_retention_policies" add constraint "data_retention_policies_pkey" PRIMARY KEY (id);
-alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_pkey" PRIMARY KEY (id);
-alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_pkey" PRIMARY KEY (id);
-alter table public."id_card_settings" add constraint "id_card_settings_pkey" PRIMARY KEY (id);
-alter table public."platform_access_locks" add constraint "platform_access_locks_pkey" PRIMARY KEY (id);
-alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_pkey" PRIMARY KEY (id);
-alter table public."privacy_requests" add constraint "privacy_requests_pkey" PRIMARY KEY (id);
-alter table public."recovery_test_runs" add constraint "recovery_test_runs_pkey" PRIMARY KEY (id);
-alter table public."report_card_templates" add constraint "report_card_templates_pkey" PRIMARY KEY (range_key);
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_pkey" PRIMARY KEY (id);
-alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_pkey" PRIMARY KEY (id);
-alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_pkey" PRIMARY KEY (id);
-alter table public."school_prospectuses" add constraint "school_prospectuses_pkey" PRIMARY KEY (id);
-alter table public."school_restore_jobs" add constraint "school_restore_jobs_pkey" PRIMARY KEY (id);
-alter table public."security_events" add constraint "security_events_pkey" PRIMARY KEY (id);
-alter table public."security_verification_runs" add constraint "security_verification_runs_pkey" PRIMARY KEY (id);
-alter table public."staff_id_cards" add constraint "staff_id_cards_pkey" PRIMARY KEY (id);
-alter table public."student_attendance_entries" add constraint "student_attendance_entries_pkey" PRIMARY KEY (id);
-alter table public."student_id_cards" add constraint "student_id_cards_pkey" PRIMARY KEY (id);
-alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_pkey" PRIMARY KEY (id);
-alter table public."system_maintenance_log" add constraint "system_maintenance_log_pkey" PRIMARY KEY (id);
-alter table public."teacher_award_categories" add constraint "teacher_award_categories_pkey" PRIMARY KEY (id);
-alter table public."transcript_issuances" add constraint "transcript_issuances_pkey" PRIMARY KEY (id);
-alter table public."backup_storage_objects" add constraint "backup_storage_objects_backup_export_id_source_bucket_sourc_key" UNIQUE (backup_export_id, source_bucket, source_path);
-alter table public."certificates" add constraint "certificates_certificate_number_key" UNIQUE (certificate_number);
-alter table public."certificates" add constraint "certificates_verification_token_key" UNIQUE (verification_token);
-alter table public."class_attendance_registers" add constraint "class_attendance_registers_term_id_class_id_attendance_date_key" UNIQUE (term_id, class_id, attendance_date);
-alter table public."data_retention_policies" add constraint "data_retention_policies_data_category_key" UNIQUE (data_category);
-alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_card_kind_card_number_key" UNIQUE (card_kind, card_number);
-alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_verification_token_key" UNIQUE (verification_token);
-alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_actor_id_key" UNIQUE (actor_id);
-alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_distributor_code_key" UNIQUE (distributor_code);
-alter table public."report_card_templates" add constraint "report_card_templates_storage_path_key" UNIQUE (storage_path);
-alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_prospectus_id_revision_no_key" UNIQUE (prospectus_id, revision_no);
-alter table public."school_prospectuses" add constraint "school_prospectuses_academic_year_id_class_range_key" UNIQUE (academic_year_id, class_range);
-alter table public."staff_id_cards" add constraint "staff_id_cards_card_number_key" UNIQUE (card_number);
-alter table public."staff_id_cards" add constraint "staff_id_cards_verification_token_key" UNIQUE (verification_token);
-alter table public."student_attendance_entries" add constraint "student_attendance_entries_register_id_enrollment_id_key" UNIQUE (register_id, enrollment_id);
-alter table public."student_id_cards" add constraint "student_id_cards_card_number_key" UNIQUE (card_number);
-alter table public."student_id_cards" add constraint "student_id_cards_verification_token_key" UNIQUE (verification_token);
-alter table public."transcript_issuances" add constraint "transcript_issuances_verification_token_key" UNIQUE (verification_token);
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."backup_storage_objects"'::regclass and conname='backup_storage_objects_encrypted_size_check'
+  ) then
+    alter table public."backup_storage_objects" add constraint "backup_storage_objects_encrypted_size_check" CHECK (encrypted_size >= 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."backup_storage_objects"'::regclass and conname='backup_storage_objects_original_size_check'
+  ) then
+    alter table public."backup_storage_objects" add constraint "backup_storage_objects_original_size_check" CHECK (original_size >= 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."backup_storage_objects"'::regclass and conname='backup_storage_objects_status_check'
+  ) then
+    alter table public."backup_storage_objects" add constraint "backup_storage_objects_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'completed'::text, 'failed'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_certificate_type_check'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_certificate_type_check" CHECK (certificate_type = ANY (ARRAY['student_promotion'::text, 'jhs_completion'::text, 'teacher_recognition'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_status_check'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'submitted'::text, 'approved'::text, 'rejected'::text, 'issued'::text, 'cancelled'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_certificate_type_check'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_certificate_type_check" CHECK (certificate_type = ANY (ARRAY['student_promotion'::text, 'jhs_completion'::text, 'teacher_recognition'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_file_mime_chk'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_file_mime_chk" CHECK (mime_type = ''::text OR (mime_type = ANY (ARRAY['application/pdf'::text, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::text])));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_file_path_chk'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_file_path_chk" CHECK (storage_path = ''::text OR storage_path ~~ (certificate_type || '/%'::text));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_file_size_chk'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_file_size_chk" CHECK (storage_path = ''::text AND file_size = 0 OR storage_path <> ''::text AND file_size > 0 AND file_size <= 20971520);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_version_chk'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_version_chk" CHECK (version > 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificate_recipient_chk'
+  ) then
+    alter table public."certificates" add constraint "certificate_recipient_chk" CHECK (recipient_kind = 'student'::text AND student_id IS NOT NULL AND teacher_id IS NULL OR recipient_kind = 'teacher'::text AND teacher_id IS NOT NULL AND student_id IS NULL);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_recipient_kind_check'
+  ) then
+    alter table public."certificates" add constraint "certificates_recipient_kind_check" CHECK (recipient_kind = ANY (ARRAY['student'::text, 'teacher'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_revision_no_check'
+  ) then
+    alter table public."certificates" add constraint "certificates_revision_no_check" CHECK (revision_no > 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_status_check'
+  ) then
+    alter table public."certificates" add constraint "certificates_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'approved'::text, 'issued'::text, 'rejected'::text, 'revoked'::text, 'superseded'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."data_retention_policies"'::regclass and conname='data_retention_policies_disposition_action_check'
+  ) then
+    alter table public."data_retention_policies" add constraint "data_retention_policies_disposition_action_check" CHECK (disposition_action = ANY (ARRAY['review'::text, 'archive'::text, 'anonymise'::text, 'delete'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."data_retention_policies"'::regclass and conname='data_retention_policies_retention_years_check'
+  ) then
+    alter table public."data_retention_policies" add constraint "data_retention_policies_retention_years_check" CHECK (retention_years IS NULL OR retention_years >= 1 AND retention_years <= 100);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."emergency_academic_delegation_events"'::regclass and conname='emergency_academic_delegation_events_event_type_check'
+  ) then
+    alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_event_type_check" CHECK (event_type = ANY (ARRAY['created'::text, 'principal_acknowledged'::text, 'revoked'::text, 'report_saved'::text, 'score_imported'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_deletion_tombstones"'::regclass and conname='id_card_deletion_tombstones_card_kind_check'
+  ) then
+    alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_card_kind_check" CHECK (card_kind = ANY (ARRAY['student'::text, 'staff'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_settings"'::regclass and conname='id_card_settings_staff_validity_check'
+  ) then
+    alter table public."id_card_settings" add constraint "id_card_settings_staff_validity_check" CHECK (staff_validity_months >= 1 AND staff_validity_months <= 60);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_settings"'::regclass and conname='id_card_settings_template_code_check'
+  ) then
+    alter table public."id_card_settings" add constraint "id_card_settings_template_code_check" CHECK (template_code = ANY (ARRAY['classic'::text, 'modern'::text, 'minimal'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_settings"'::regclass and conname='id_card_settings_validity_months_check'
+  ) then
+    alter table public."id_card_settings" add constraint "id_card_settings_validity_months_check" CHECK (validity_months >= 1 AND validity_months <= 60);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_access_locks"'::regclass and conname='platform_access_lock_dates_chk'
+  ) then
+    alter table public."platform_access_locks" add constraint "platform_access_lock_dates_chk" CHECK (ends_at IS NULL OR ends_at > starts_at);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_access_locks"'::regclass and conname='platform_access_locks_lock_mode_check'
+  ) then
+    alter table public."platform_access_locks" add constraint "platform_access_locks_lock_mode_check" CHECK (lock_mode = ANY (ARRAY['read_only'::text, 'deny'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_access_locks"'::regclass and conname='platform_access_locks_lock_scope_check'
+  ) then
+    alter table public."platform_access_locks" add constraint "platform_access_locks_lock_scope_check" CHECK (lock_scope = ANY (ARRAY['system_admin'::text, 'school'::text, 'platform'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_request_details_check'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_request_details_check" CHECK (length(btrim(request_details)) >= 10);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_request_type_check'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_request_type_check" CHECK (request_type = ANY (ARRAY['access'::text, 'correction'::text, 'export'::text, 'restriction'::text, 'anonymisation'::text, 'deletion'::text, 'consent_review'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_status_check'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_status_check" CHECK (status = ANY (ARRAY['open'::text, 'in_review'::text, 'approved'::text, 'rejected'::text, 'completed'::text, 'cancelled'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."recovery_test_runs"'::regclass and conname='recovery_test_runs_status_check'
+  ) then
+    alter table public."recovery_test_runs" add constraint "recovery_test_runs_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'passed'::text, 'failed'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_mime_chk'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_mime_chk" CHECK (mime_type = ANY (ARRAY['application/pdf'::text, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_path_chk'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_path_chk" CHECK (storage_path ~~ (range_key || '/%'::text));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_range_chk'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_range_chk" CHECK (range_key = ANY (ARRAY['early_years'::text, 'basic_1_6'::text, 'basic_7_9'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_size_chk'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_size_chk" CHECK (file_size > 0 AND file_size <= 20971520);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_version_chk'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_version_chk" CHECK (version > 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_amount_check'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_amount_check" CHECK (amount IS NULL OR amount >= 0::numeric);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_calculation_units_check'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_calculation_units_check" CHECK (calculation_units IS NULL OR calculation_units > 0::numeric);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_charge_basis_check'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_charge_basis_check" CHECK (charge_basis = ANY (ARRAY['free'::text, 'one_off'::text, 'per_day'::text, 'per_week'::text, 'per_month'::text, 'per_term'::text, 'per_academic_year'::text, 'per_occurrence'::text, 'optional'::text, 'parent_provides'::text, 'informational'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_display_order_check'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_display_order_check" CHECK (display_order >= 0 AND display_order <= 10000);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_quantity_check'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_quantity_check" CHECK (quantity IS NULL OR quantity > 0::numeric);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_revisions"'::regclass and conname='school_prospectus_revisions_revision_no_check'
+  ) then
+    alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_revision_no_check" CHECK (revision_no > 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_sections"'::regclass and conname='school_prospectus_sections_display_order_check'
+  ) then
+    alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_display_order_check" CHECK (display_order >= 0 AND display_order <= 10000);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_sections"'::regclass and conname='school_prospectus_sections_section_type_check'
+  ) then
+    alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_section_type_check" CHECK (section_type = ANY (ARRAY['main_fees'::text, 'other_items'::text, 'parent_provided'::text, 'transportation'::text, 'policies'::text, 'custom'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_class_range_check'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_class_range_check" CHECK (class_range = ANY (ARRAY['early_years'::text, 'basic_1_6'::text, 'basic_7_9'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_currency_code_check'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_currency_code_check" CHECK (currency_code ~ '^[A-Z]{3}$'::text);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_revision_no_check'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_revision_no_check" CHECK (revision_no >= 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_status_check'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_status_check" CHECK (status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_restore_jobs"'::regclass and conname='school_restore_jobs_package_size_check'
+  ) then
+    alter table public."school_restore_jobs" add constraint "school_restore_jobs_package_size_check" CHECK (package_size >= 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_restore_jobs"'::regclass and conname='school_restore_jobs_status_check'
+  ) then
+    alter table public."school_restore_jobs" add constraint "school_restore_jobs_status_check" CHECK (status = ANY (ARRAY['upload_pending'::text, 'uploaded'::text, 'validating'::text, 'restoring'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_events"'::regclass and conname='security_events_severity_check'
+  ) then
+    alter table public."security_events" add constraint "security_events_severity_check" CHECK (severity = ANY (ARRAY['info'::text, 'warning'::text, 'high'::text, 'critical'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_events"'::regclass and conname='security_events_status_check'
+  ) then
+    alter table public."security_events" add constraint "security_events_status_check" CHECK (status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'resolved'::text, 'false_positive'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_verification_runs"'::regclass and conname='security_verification_runs_status_check'
+  ) then
+    alter table public."security_verification_runs" add constraint "security_verification_runs_status_check" CHECK (status = ANY (ARRAY['planned'::text, 'in_progress'::text, 'passed'::text, 'passed_with_findings'::text, 'failed'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_check'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_check" CHECK (staff_type = 'teacher'::text AND teacher_id IS NOT NULL AND headteacher_id IS NULL OR staff_type = 'principal'::text AND headteacher_id IS NOT NULL AND teacher_id IS NULL);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_check1'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_check1" CHECK (expires_on >= issue_date);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_revision_no_check'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_revision_no_check" CHECK (revision_no > 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_staff_type_check'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_staff_type_check" CHECK (staff_type = ANY (ARRAY['teacher'::text, 'principal'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_status_check'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_status_check" CHECK (status = ANY (ARRAY['active'::text, 'revoked'::text, 'replaced'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_attendance_entries"'::regclass and conname='student_attendance_entries_attendance_status_check'
+  ) then
+    alter table public."student_attendance_entries" add constraint "student_attendance_entries_attendance_status_check" CHECK (attendance_status = ANY (ARRAY['present'::text, 'absent'::text, 'late'::text, 'excused'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_check'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_check" CHECK (expires_on >= issue_date);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_revision_no_check'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_revision_no_check" CHECK (revision_no > 0);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_status_check'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_status_check" CHECK (status = ANY (ARRAY['active'::text, 'revoked'::text, 'replaced'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_lifecycle_events"'::regclass and conname='student_lifecycle_events_event_type_check'
+  ) then
+    alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_event_type_check" CHECK (event_type = ANY (ARRAY['transfer_in'::text, 'transfer_out'::text, 'withdrawn'::text, 'graduated'::text, 'inactive'::text, 'reactivated'::text, 'archived'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_lifecycle_events"'::regclass and conname='student_lifecycle_events_reason_check'
+  ) then
+    alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_reason_check" CHECK (length(btrim(reason)) >= 5);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."transcript_issuances"'::regclass and conname='transcript_issuances_status_check'
+  ) then
+    alter table public."transcript_issuances" add constraint "transcript_issuances_status_check" CHECK (status = ANY (ARRAY['valid'::text, 'superseded'::text, 'revoked'::text]));
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."backup_storage_objects"'::regclass and conname='backup_storage_objects_pkey'
+  ) then
+    alter table public."backup_storage_objects" add constraint "backup_storage_objects_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_pkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_events"'::regclass and conname='certificate_events_pkey'
+  ) then
+    alter table public."certificate_events" add constraint "certificate_events_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_pkey'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_pkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."class_attendance_registers"'::regclass and conname='class_attendance_registers_pkey'
+  ) then
+    alter table public."class_attendance_registers" add constraint "class_attendance_registers_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."data_retention_policies"'::regclass and conname='data_retention_policies_pkey'
+  ) then
+    alter table public."data_retention_policies" add constraint "data_retention_policies_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."emergency_academic_delegation_events"'::regclass and conname='emergency_academic_delegation_events_pkey'
+  ) then
+    alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_deletion_tombstones"'::regclass and conname='id_card_deletion_tombstones_pkey'
+  ) then
+    alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_settings"'::regclass and conname='id_card_settings_pkey'
+  ) then
+    alter table public."id_card_settings" add constraint "id_card_settings_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_access_locks"'::regclass and conname='platform_access_locks_pkey'
+  ) then
+    alter table public."platform_access_locks" add constraint "platform_access_locks_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_distribution_authorities"'::regclass and conname='platform_distribution_authorities_pkey'
+  ) then
+    alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_pkey'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."recovery_test_runs"'::regclass and conname='recovery_test_runs_pkey'
+  ) then
+    alter table public."recovery_test_runs" add constraint "recovery_test_runs_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_pkey'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_pkey" PRIMARY KEY (range_key);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_pkey'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_revisions"'::regclass and conname='school_prospectus_revisions_pkey'
+  ) then
+    alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_sections"'::regclass and conname='school_prospectus_sections_pkey'
+  ) then
+    alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_pkey'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_restore_jobs"'::regclass and conname='school_restore_jobs_pkey'
+  ) then
+    alter table public."school_restore_jobs" add constraint "school_restore_jobs_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_events"'::regclass and conname='security_events_pkey'
+  ) then
+    alter table public."security_events" add constraint "security_events_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_verification_runs"'::regclass and conname='security_verification_runs_pkey'
+  ) then
+    alter table public."security_verification_runs" add constraint "security_verification_runs_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_pkey'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_attendance_entries"'::regclass and conname='student_attendance_entries_pkey'
+  ) then
+    alter table public."student_attendance_entries" add constraint "student_attendance_entries_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_pkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_lifecycle_events"'::regclass and conname='student_lifecycle_events_pkey'
+  ) then
+    alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."system_maintenance_log"'::regclass and conname='system_maintenance_log_pkey'
+  ) then
+    alter table public."system_maintenance_log" add constraint "system_maintenance_log_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."teacher_award_categories"'::regclass and conname='teacher_award_categories_pkey'
+  ) then
+    alter table public."teacher_award_categories" add constraint "teacher_award_categories_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."transcript_issuances"'::regclass and conname='transcript_issuances_pkey'
+  ) then
+    alter table public."transcript_issuances" add constraint "transcript_issuances_pkey" PRIMARY KEY (id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."backup_storage_objects"'::regclass and conname='backup_storage_objects_backup_export_id_source_bucket_sourc_key'
+  ) then
+    alter table public."backup_storage_objects" add constraint "backup_storage_objects_backup_export_id_source_bucket_sourc_key" UNIQUE (backup_export_id, source_bucket, source_path);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_certificate_number_key'
+  ) then
+    alter table public."certificates" add constraint "certificates_certificate_number_key" UNIQUE (certificate_number);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_verification_token_key'
+  ) then
+    alter table public."certificates" add constraint "certificates_verification_token_key" UNIQUE (verification_token);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."class_attendance_registers"'::regclass and conname='class_attendance_registers_term_id_class_id_attendance_date_key'
+  ) then
+    alter table public."class_attendance_registers" add constraint "class_attendance_registers_term_id_class_id_attendance_date_key" UNIQUE (term_id, class_id, attendance_date);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."data_retention_policies"'::regclass and conname='data_retention_policies_data_category_key'
+  ) then
+    alter table public."data_retention_policies" add constraint "data_retention_policies_data_category_key" UNIQUE (data_category);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_deletion_tombstones"'::regclass and conname='id_card_deletion_tombstones_card_kind_card_number_key'
+  ) then
+    alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_card_kind_card_number_key" UNIQUE (card_kind, card_number);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_deletion_tombstones"'::regclass and conname='id_card_deletion_tombstones_verification_token_key'
+  ) then
+    alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_verification_token_key" UNIQUE (verification_token);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_distribution_authorities"'::regclass and conname='platform_distribution_authorities_actor_id_key'
+  ) then
+    alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_actor_id_key" UNIQUE (actor_id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_distribution_authorities"'::regclass and conname='platform_distribution_authorities_distributor_code_key'
+  ) then
+    alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_distributor_code_key" UNIQUE (distributor_code);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_storage_path_key'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_storage_path_key" UNIQUE (storage_path);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_revisions"'::regclass and conname='school_prospectus_revisions_prospectus_id_revision_no_key'
+  ) then
+    alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_prospectus_id_revision_no_key" UNIQUE (prospectus_id, revision_no);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_academic_year_id_class_range_key'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_academic_year_id_class_range_key" UNIQUE (academic_year_id, class_range);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_card_number_key'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_card_number_key" UNIQUE (card_number);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_verification_token_key'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_verification_token_key" UNIQUE (verification_token);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_attendance_entries"'::regclass and conname='student_attendance_entries_register_id_enrollment_id_key'
+  ) then
+    alter table public."student_attendance_entries" add constraint "student_attendance_entries_register_id_enrollment_id_key" UNIQUE (register_id, enrollment_id);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_card_number_key'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_card_number_key" UNIQUE (card_number);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_verification_token_key'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_verification_token_key" UNIQUE (verification_token);
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."transcript_issuances"'::regclass and conname='transcript_issuances_verification_token_key'
+  ) then
+    alter table public."transcript_issuances" add constraint "transcript_issuances_verification_token_key" UNIQUE (verification_token);
+  end if;
+end
+$cleanroom_constraint$;
 
-alter table public."backup_storage_objects" add constraint "backup_storage_objects_backup_export_id_fkey" FOREIGN KEY (backup_export_id) REFERENCES backup_exports(id) ON DELETE CASCADE;
-alter table public."certificate_batches" add constraint "certificate_batches_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
-alter table public."certificate_batches" add constraint "certificate_batches_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificate_batches" add constraint "certificate_batches_class_id_fkey" FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
-alter table public."certificate_batches" add constraint "certificate_batches_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificate_batches" add constraint "certificate_batches_prepared_by_fkey" FOREIGN KEY (prepared_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificate_batches" add constraint "certificate_batches_submitted_by_fkey" FOREIGN KEY (submitted_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificate_batches" add constraint "certificate_batches_teacher_award_category_id_fkey" FOREIGN KEY (teacher_award_category_id) REFERENCES teacher_award_categories(id) ON DELETE RESTRICT;
-alter table public."certificate_batches" add constraint "certificate_batches_template_id_fkey" FOREIGN KEY (template_id) REFERENCES certificate_templates(id) ON DELETE RESTRICT;
-alter table public."certificate_batches" add constraint "certificate_batches_term_id_fkey" FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE RESTRICT;
-alter table public."certificate_events" add constraint "certificate_events_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificate_events" add constraint "certificate_events_batch_id_fkey" FOREIGN KEY (batch_id) REFERENCES certificate_batches(id) ON DELETE RESTRICT;
-alter table public."certificate_events" add constraint "certificate_events_certificate_id_fkey" FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE RESTRICT;
-alter table public."certificate_templates" add constraint "certificate_templates_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificate_templates" add constraint "certificate_templates_uploaded_by_fkey" FOREIGN KEY (uploaded_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificates" add constraint "certificates_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificates" add constraint "certificates_batch_id_fkey" FOREIGN KEY (batch_id) REFERENCES certificate_batches(id) ON DELETE RESTRICT;
-alter table public."certificates" add constraint "certificates_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificates" add constraint "certificates_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."certificates" add constraint "certificates_source_report_id_fkey" FOREIGN KEY (source_report_id) REFERENCES student_reports(id) ON DELETE SET NULL;
-alter table public."certificates" add constraint "certificates_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
-alter table public."certificates" add constraint "certificates_supersedes_certificate_id_fkey" FOREIGN KEY (supersedes_certificate_id) REFERENCES certificates(id) ON DELETE SET NULL;
-alter table public."certificates" add constraint "certificates_teacher_id_fkey" FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT;
-alter table public."class_attendance_registers" add constraint "class_attendance_registers_class_id_fkey" FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
-alter table public."class_attendance_registers" add constraint "class_attendance_registers_marked_by_fkey" FOREIGN KEY (marked_by) REFERENCES profiles(id) ON DELETE RESTRICT;
-alter table public."class_attendance_registers" add constraint "class_attendance_registers_term_id_fkey" FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE CASCADE;
-alter table public."data_retention_policies" add constraint "data_retention_policies_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_delegation_id_fkey" FOREIGN KEY (delegation_id) REFERENCES emergency_academic_delegations(id) ON DELETE RESTRICT;
-alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_report_id_fkey" FOREIGN KEY (report_id) REFERENCES student_reports(id) ON DELETE SET NULL;
-alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_subject_id_fkey" FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE SET NULL;
-alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_deleted_by_fkey" FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."id_card_settings" add constraint "id_card_settings_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."platform_access_locks" add constraint "platform_access_locks_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."platform_access_locks" add constraint "platform_access_locks_released_by_fkey" FOREIGN KEY (released_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE CASCADE;
-alter table public."privacy_requests" add constraint "privacy_requests_assigned_to_fkey" FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."privacy_requests" add constraint "privacy_requests_completed_by_fkey" FOREIGN KEY (completed_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."privacy_requests" add constraint "privacy_requests_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."privacy_requests" add constraint "privacy_requests_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL;
-alter table public."recovery_test_runs" add constraint "recovery_test_runs_backup_export_id_fkey" FOREIGN KEY (backup_export_id) REFERENCES backup_exports(id) ON DELETE CASCADE;
-alter table public."recovery_test_runs" add constraint "recovery_test_runs_initiated_by_fkey" FOREIGN KEY (initiated_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."report_card_templates" add constraint "report_card_templates_uploaded_by_fkey" FOREIGN KEY (uploaded_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_section_id_fkey" FOREIGN KEY (section_id) REFERENCES school_prospectus_sections(id) ON DELETE CASCADE;
-alter table public."school_prospectus_items" add constraint "school_prospectus_items_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_prospectus_id_fkey" FOREIGN KEY (prospectus_id) REFERENCES school_prospectuses(id) ON DELETE RESTRICT;
-alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_published_by_fkey" FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_prospectus_id_fkey" FOREIGN KEY (prospectus_id) REFERENCES school_prospectuses(id) ON DELETE CASCADE;
-alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectuses" add constraint "school_prospectuses_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
-alter table public."school_prospectuses" add constraint "school_prospectuses_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectuses" add constraint "school_prospectuses_published_by_fkey" FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_prospectuses" add constraint "school_prospectuses_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_restore_jobs" add constraint "school_restore_jobs_initiated_by_fkey" FOREIGN KEY (initiated_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."school_restore_jobs" add constraint "school_restore_jobs_pre_restore_backup_id_fkey" FOREIGN KEY (pre_restore_backup_id) REFERENCES backup_exports(id) ON DELETE SET NULL;
-alter table public."security_events" add constraint "security_events_acknowledged_by_fkey" FOREIGN KEY (acknowledged_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."security_events" add constraint "security_events_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."security_verification_runs" add constraint "security_verification_runs_verified_by_fkey" FOREIGN KEY (verified_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."staff_id_cards" add constraint "staff_id_cards_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
-alter table public."staff_id_cards" add constraint "staff_id_cards_headteacher_id_fkey" FOREIGN KEY (headteacher_id) REFERENCES headteachers(id) ON DELETE RESTRICT;
-alter table public."staff_id_cards" add constraint "staff_id_cards_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."staff_id_cards" add constraint "staff_id_cards_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."staff_id_cards" add constraint "staff_id_cards_supersedes_card_id_fkey" FOREIGN KEY (supersedes_card_id) REFERENCES staff_id_cards(id) ON DELETE SET NULL;
-alter table public."staff_id_cards" add constraint "staff_id_cards_teacher_id_fkey" FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT;
-alter table public."student_attendance_entries" add constraint "student_attendance_entries_enrollment_id_fkey" FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE CASCADE;
-alter table public."student_attendance_entries" add constraint "student_attendance_entries_register_id_fkey" FOREIGN KEY (register_id) REFERENCES class_attendance_registers(id) ON DELETE CASCADE;
-alter table public."student_id_cards" add constraint "student_id_cards_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
-alter table public."student_id_cards" add constraint "student_id_cards_class_id_fkey" FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
-alter table public."student_id_cards" add constraint "student_id_cards_enrollment_id_fkey" FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE SET NULL;
-alter table public."student_id_cards" add constraint "student_id_cards_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."student_id_cards" add constraint "student_id_cards_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."student_id_cards" add constraint "student_id_cards_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
-alter table public."student_id_cards" add constraint "student_id_cards_supersedes_card_id_fkey" FOREIGN KEY (supersedes_card_id) REFERENCES student_id_cards(id) ON DELETE SET NULL;
-alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_from_class_id_fkey" FOREIGN KEY (from_class_id) REFERENCES classes(id) ON DELETE SET NULL;
-alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE;
-alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_to_class_id_fkey" FOREIGN KEY (to_class_id) REFERENCES classes(id) ON DELETE SET NULL;
-alter table public."system_maintenance_log" add constraint "system_maintenance_log_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."teacher_award_categories" add constraint "teacher_award_categories_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."transcript_issuances" add constraint "transcript_issuances_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."transcript_issuances" add constraint "transcript_issuances_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
-alter table public."transcript_issuances" add constraint "transcript_issuances_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."backup_storage_objects"'::regclass and conname='backup_storage_objects_backup_export_id_fkey'
+  ) then
+    alter table public."backup_storage_objects" add constraint "backup_storage_objects_backup_export_id_fkey" FOREIGN KEY (backup_export_id) REFERENCES backup_exports(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_academic_year_id_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_approved_by_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_class_id_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_class_id_fkey" FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_issued_by_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_prepared_by_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_prepared_by_fkey" FOREIGN KEY (prepared_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_submitted_by_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_submitted_by_fkey" FOREIGN KEY (submitted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_teacher_award_category_id_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_teacher_award_category_id_fkey" FOREIGN KEY (teacher_award_category_id) REFERENCES teacher_award_categories(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_template_id_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_template_id_fkey" FOREIGN KEY (template_id) REFERENCES certificate_templates(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_batches"'::regclass and conname='certificate_batches_term_id_fkey'
+  ) then
+    alter table public."certificate_batches" add constraint "certificate_batches_term_id_fkey" FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_events"'::regclass and conname='certificate_events_actor_id_fkey'
+  ) then
+    alter table public."certificate_events" add constraint "certificate_events_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_events"'::regclass and conname='certificate_events_batch_id_fkey'
+  ) then
+    alter table public."certificate_events" add constraint "certificate_events_batch_id_fkey" FOREIGN KEY (batch_id) REFERENCES certificate_batches(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_events"'::regclass and conname='certificate_events_certificate_id_fkey'
+  ) then
+    alter table public."certificate_events" add constraint "certificate_events_certificate_id_fkey" FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_created_by_fkey'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificate_templates"'::regclass and conname='certificate_templates_uploaded_by_fkey'
+  ) then
+    alter table public."certificate_templates" add constraint "certificate_templates_uploaded_by_fkey" FOREIGN KEY (uploaded_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_approved_by_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_batch_id_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_batch_id_fkey" FOREIGN KEY (batch_id) REFERENCES certificate_batches(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_issued_by_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_revoked_by_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_source_report_id_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_source_report_id_fkey" FOREIGN KEY (source_report_id) REFERENCES student_reports(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_student_id_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_supersedes_certificate_id_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_supersedes_certificate_id_fkey" FOREIGN KEY (supersedes_certificate_id) REFERENCES certificates(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."certificates"'::regclass and conname='certificates_teacher_id_fkey'
+  ) then
+    alter table public."certificates" add constraint "certificates_teacher_id_fkey" FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."class_attendance_registers"'::regclass and conname='class_attendance_registers_class_id_fkey'
+  ) then
+    alter table public."class_attendance_registers" add constraint "class_attendance_registers_class_id_fkey" FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."class_attendance_registers"'::regclass and conname='class_attendance_registers_marked_by_fkey'
+  ) then
+    alter table public."class_attendance_registers" add constraint "class_attendance_registers_marked_by_fkey" FOREIGN KEY (marked_by) REFERENCES profiles(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."class_attendance_registers"'::regclass and conname='class_attendance_registers_term_id_fkey'
+  ) then
+    alter table public."class_attendance_registers" add constraint "class_attendance_registers_term_id_fkey" FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."data_retention_policies"'::regclass and conname='data_retention_policies_updated_by_fkey'
+  ) then
+    alter table public."data_retention_policies" add constraint "data_retention_policies_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."emergency_academic_delegation_events"'::regclass and conname='emergency_academic_delegation_events_actor_id_fkey'
+  ) then
+    alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."emergency_academic_delegation_events"'::regclass and conname='emergency_academic_delegation_events_delegation_id_fkey'
+  ) then
+    alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_delegation_id_fkey" FOREIGN KEY (delegation_id) REFERENCES emergency_academic_delegations(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."emergency_academic_delegation_events"'::regclass and conname='emergency_academic_delegation_events_report_id_fkey'
+  ) then
+    alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_report_id_fkey" FOREIGN KEY (report_id) REFERENCES student_reports(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."emergency_academic_delegation_events"'::regclass and conname='emergency_academic_delegation_events_subject_id_fkey'
+  ) then
+    alter table public."emergency_academic_delegation_events" add constraint "emergency_academic_delegation_events_subject_id_fkey" FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_deletion_tombstones"'::regclass and conname='id_card_deletion_tombstones_deleted_by_fkey'
+  ) then
+    alter table public."id_card_deletion_tombstones" add constraint "id_card_deletion_tombstones_deleted_by_fkey" FOREIGN KEY (deleted_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."id_card_settings"'::regclass and conname='id_card_settings_updated_by_fkey'
+  ) then
+    alter table public."id_card_settings" add constraint "id_card_settings_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_access_locks"'::regclass and conname='platform_access_locks_created_by_fkey'
+  ) then
+    alter table public."platform_access_locks" add constraint "platform_access_locks_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_access_locks"'::regclass and conname='platform_access_locks_released_by_fkey'
+  ) then
+    alter table public."platform_access_locks" add constraint "platform_access_locks_released_by_fkey" FOREIGN KEY (released_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."platform_distribution_authorities"'::regclass and conname='platform_distribution_authorities_actor_id_fkey'
+  ) then
+    alter table public."platform_distribution_authorities" add constraint "platform_distribution_authorities_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_assigned_to_fkey'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_assigned_to_fkey" FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_completed_by_fkey'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_completed_by_fkey" FOREIGN KEY (completed_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_created_by_fkey'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."privacy_requests"'::regclass and conname='privacy_requests_student_id_fkey'
+  ) then
+    alter table public."privacy_requests" add constraint "privacy_requests_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."recovery_test_runs"'::regclass and conname='recovery_test_runs_backup_export_id_fkey'
+  ) then
+    alter table public."recovery_test_runs" add constraint "recovery_test_runs_backup_export_id_fkey" FOREIGN KEY (backup_export_id) REFERENCES backup_exports(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."recovery_test_runs"'::regclass and conname='recovery_test_runs_initiated_by_fkey'
+  ) then
+    alter table public."recovery_test_runs" add constraint "recovery_test_runs_initiated_by_fkey" FOREIGN KEY (initiated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."report_card_templates"'::regclass and conname='report_card_templates_uploaded_by_fkey'
+  ) then
+    alter table public."report_card_templates" add constraint "report_card_templates_uploaded_by_fkey" FOREIGN KEY (uploaded_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_created_by_fkey'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_section_id_fkey'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_section_id_fkey" FOREIGN KEY (section_id) REFERENCES school_prospectus_sections(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_items"'::regclass and conname='school_prospectus_items_updated_by_fkey'
+  ) then
+    alter table public."school_prospectus_items" add constraint "school_prospectus_items_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_revisions"'::regclass and conname='school_prospectus_revisions_prospectus_id_fkey'
+  ) then
+    alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_prospectus_id_fkey" FOREIGN KEY (prospectus_id) REFERENCES school_prospectuses(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_revisions"'::regclass and conname='school_prospectus_revisions_published_by_fkey'
+  ) then
+    alter table public."school_prospectus_revisions" add constraint "school_prospectus_revisions_published_by_fkey" FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_sections"'::regclass and conname='school_prospectus_sections_created_by_fkey'
+  ) then
+    alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_sections"'::regclass and conname='school_prospectus_sections_prospectus_id_fkey'
+  ) then
+    alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_prospectus_id_fkey" FOREIGN KEY (prospectus_id) REFERENCES school_prospectuses(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectus_sections"'::regclass and conname='school_prospectus_sections_updated_by_fkey'
+  ) then
+    alter table public."school_prospectus_sections" add constraint "school_prospectus_sections_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_academic_year_id_fkey'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_created_by_fkey'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_published_by_fkey'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_published_by_fkey" FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_prospectuses"'::regclass and conname='school_prospectuses_updated_by_fkey'
+  ) then
+    alter table public."school_prospectuses" add constraint "school_prospectuses_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_restore_jobs"'::regclass and conname='school_restore_jobs_initiated_by_fkey'
+  ) then
+    alter table public."school_restore_jobs" add constraint "school_restore_jobs_initiated_by_fkey" FOREIGN KEY (initiated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."school_restore_jobs"'::regclass and conname='school_restore_jobs_pre_restore_backup_id_fkey'
+  ) then
+    alter table public."school_restore_jobs" add constraint "school_restore_jobs_pre_restore_backup_id_fkey" FOREIGN KEY (pre_restore_backup_id) REFERENCES backup_exports(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_events"'::regclass and conname='security_events_acknowledged_by_fkey'
+  ) then
+    alter table public."security_events" add constraint "security_events_acknowledged_by_fkey" FOREIGN KEY (acknowledged_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_events"'::regclass and conname='security_events_actor_id_fkey'
+  ) then
+    alter table public."security_events" add constraint "security_events_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."security_verification_runs"'::regclass and conname='security_verification_runs_verified_by_fkey'
+  ) then
+    alter table public."security_verification_runs" add constraint "security_verification_runs_verified_by_fkey" FOREIGN KEY (verified_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_academic_year_id_fkey'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_headteacher_id_fkey'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_headteacher_id_fkey" FOREIGN KEY (headteacher_id) REFERENCES headteachers(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_issued_by_fkey'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_revoked_by_fkey'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_supersedes_card_id_fkey'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_supersedes_card_id_fkey" FOREIGN KEY (supersedes_card_id) REFERENCES staff_id_cards(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."staff_id_cards"'::regclass and conname='staff_id_cards_teacher_id_fkey'
+  ) then
+    alter table public."staff_id_cards" add constraint "staff_id_cards_teacher_id_fkey" FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_attendance_entries"'::regclass and conname='student_attendance_entries_enrollment_id_fkey'
+  ) then
+    alter table public."student_attendance_entries" add constraint "student_attendance_entries_enrollment_id_fkey" FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_attendance_entries"'::regclass and conname='student_attendance_entries_register_id_fkey'
+  ) then
+    alter table public."student_attendance_entries" add constraint "student_attendance_entries_register_id_fkey" FOREIGN KEY (register_id) REFERENCES class_attendance_registers(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_academic_year_id_fkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_academic_year_id_fkey" FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_class_id_fkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_class_id_fkey" FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_enrollment_id_fkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_enrollment_id_fkey" FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_issued_by_fkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_revoked_by_fkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_student_id_fkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_id_cards"'::regclass and conname='student_id_cards_supersedes_card_id_fkey'
+  ) then
+    alter table public."student_id_cards" add constraint "student_id_cards_supersedes_card_id_fkey" FOREIGN KEY (supersedes_card_id) REFERENCES student_id_cards(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_lifecycle_events"'::regclass and conname='student_lifecycle_events_created_by_fkey'
+  ) then
+    alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_lifecycle_events"'::regclass and conname='student_lifecycle_events_from_class_id_fkey'
+  ) then
+    alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_from_class_id_fkey" FOREIGN KEY (from_class_id) REFERENCES classes(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_lifecycle_events"'::regclass and conname='student_lifecycle_events_student_id_fkey'
+  ) then
+    alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."student_lifecycle_events"'::regclass and conname='student_lifecycle_events_to_class_id_fkey'
+  ) then
+    alter table public."student_lifecycle_events" add constraint "student_lifecycle_events_to_class_id_fkey" FOREIGN KEY (to_class_id) REFERENCES classes(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."system_maintenance_log"'::regclass and conname='system_maintenance_log_actor_id_fkey'
+  ) then
+    alter table public."system_maintenance_log" add constraint "system_maintenance_log_actor_id_fkey" FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."teacher_award_categories"'::regclass and conname='teacher_award_categories_created_by_fkey'
+  ) then
+    alter table public."teacher_award_categories" add constraint "teacher_award_categories_created_by_fkey" FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."transcript_issuances"'::regclass and conname='transcript_issuances_issued_by_fkey'
+  ) then
+    alter table public."transcript_issuances" add constraint "transcript_issuances_issued_by_fkey" FOREIGN KEY (issued_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."transcript_issuances"'::regclass and conname='transcript_issuances_revoked_by_fkey'
+  ) then
+    alter table public."transcript_issuances" add constraint "transcript_issuances_revoked_by_fkey" FOREIGN KEY (revoked_by) REFERENCES profiles(id) ON DELETE SET NULL;
+  end if;
+end
+$cleanroom_constraint$;
+do $cleanroom_constraint$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid='public."transcript_issuances"'::regclass and conname='transcript_issuances_student_id_fkey'
+  ) then
+    alter table public."transcript_issuances" add constraint "transcript_issuances_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE;
+  end if;
+end
+$cleanroom_constraint$;
 
 create index if not exists backup_storage_objects_export_idx on public.backup_storage_objects USING btree (backup_export_id, source_bucket, source_path);
 create index if not exists certificate_batches_class_idx on public.certificate_batches USING btree (class_id) WHERE (class_id IS NOT NULL);
