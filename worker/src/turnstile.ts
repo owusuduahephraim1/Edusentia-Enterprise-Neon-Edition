@@ -40,8 +40,10 @@ export async function verifyTurnstile(env: Env, token: string, request: Request,
 
   const result = await response.json<SiteverifyResult>();
   const expectedHostname = new URL(env.APP_ORIGIN).hostname;
-  const metadataValid=testMode || (result.hostname === expectedHostname && result.action === expectedAction);
-  if (!result.success || !metadataValid) {
+  const hostnameMismatch=result.hostname !== expectedHostname;
+  const actionMismatch=result.action !== expectedAction;
+  const metadataInvalid=!testMode && (hostnameMismatch || actionMismatch);
+  if (!result.success || metadataInvalid) {
     console.warn(JSON.stringify({
       level: "warn",
       event: "turnstile.rejected",
