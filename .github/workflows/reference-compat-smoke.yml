@@ -107,6 +107,7 @@ jobs:
           fi
           URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" DB="$DB" node --input-type=module -e 'const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);u.pathname="/"+process.env.DB;process.stdout.write(u.toString())')"
           echo "::add-mask::$URL"
+          psql "$URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner; grant usage,create on schema public to edusentia_runtime; reset role;"
 
           for migration in \
             database/migrations/0001_platform_and_context.sql \
