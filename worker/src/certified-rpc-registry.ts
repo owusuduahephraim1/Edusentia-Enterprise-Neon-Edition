@@ -2765,7 +2765,9 @@ export async function invokeRegistryCertifiedRpc(sql:Sql,ctx:SessionContext,oper
   }
   const fn=quoteIdent(operation);
   const callArgs=supplied.map((arg,index)=>quoteIdent(arg.name)+" => $"+(index+1)+"::"+arg.type).join(",");
-  const text="select public."+fn+"("+callArgs+") as result";
+  const text=spec.setof
+    ?"select to_jsonb(q) as result from public."+fn+"("+callArgs+") q"
+    :"select public."+fn+"("+callArgs+") as result";
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[(txn as any).query(text,values)]);
   if(spec.setof)return (rows as any[]).map(row=>(row as any).result);
   return (rows[0] as any)?.result??null;
