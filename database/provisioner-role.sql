@@ -56,3 +56,5 @@ $provisioner_membership$;
 
 revoke all on schema app,authn,academics,finance,storage,audit,services,documents,ops,platform
   from edusentia_provisioner;
+
+-- CI revalidation anchor: provisioner bootstrap must remain idempotent on persistent parity.
