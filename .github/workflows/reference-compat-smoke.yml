@@ -122,6 +122,7 @@ jobs:
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044_certified_report_workflow_privacy_integrity.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0044b_certified_report_transition_helpers.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0045_certified_report_pdf_integrity_r2.sql
+          psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0045b_neon_report_view_compat.sql
 
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"
@@ -149,6 +150,8 @@ jobs:
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('finance_feature_enabled','finance_student_outstanding','finance_student_hold_status','can_publish_report','can_view_report_pdf','can_manage_report_pdf','can_delete_report_pdf_object','get_report_pdf_descriptor','list_report_pdf_paths','register_report_pdf')")" = "10"
           test "$(psql "$URL" -Atc "select to_regclass('public.finance_hold_policy') is not null and to_regclass('public.finance_hold_overrides') is not null")" = "t"
           test "$(psql "$URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef(p.oid))>0 and position('storage.objects' in pg_get_functiondef(p.oid))=0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='register_report_pdf' limit 1")" = "t"
+          test "$(psql "$URL" -Atc "select count(*) from app.schema_migrations where version='0045b_neon_report_view_compat'")" = "1"
+          test "$(psql "$URL" -Atc "select position('system_admin' in pg_get_functiondef(p.oid))>0 and position('principal' in pg_get_functiondef(p.oid))>0 and position('s.profile_id' in pg_get_functiondef(p.oid))=0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='can_view_report' limit 1")" = "t"
           test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
 
           echo "::group::Certified public function inventory"
