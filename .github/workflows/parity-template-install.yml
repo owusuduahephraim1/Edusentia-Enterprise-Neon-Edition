@@ -71,7 +71,7 @@ jobs:
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select not datallowconn from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")" = "t"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "edusentia_provisioner"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_CI_TEMPLATE_DATABASE'")" = "edusentia_runtime"
-          test "$(psql "$PARITY_DATABASE_URL" -Atc "select datistemplate from pg_database where datname='$PARITY_CI_TEMPLATE_DATABASE'")" = "t"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select datistemplate and not datallowconn from pg_database where datname='$PARITY_CI_TEMPLATE_DATABASE'")" = "t"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_worker_runtime','set') and not exists(select 1 from pg_auth_members m join pg_roles g on g.oid=m.roleid join pg_roles u on u.oid=m.member where g.rolname='edusentia_worker_runtime' and u.rolname='edusentia_runtime' and (m.admin_option or m.inherit_option or not m.set_option))")" = "t"
 
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select has_database_privilege('edusentia_worker_runtime','$PARITY_TEST_TENANT_DATABASE','connect')")" = "t"
