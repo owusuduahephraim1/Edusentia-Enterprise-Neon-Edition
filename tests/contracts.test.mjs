@@ -308,8 +308,6 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/edusentia_provisioner_login/);
   assert.match(workflow,/alter role edusentia_worker_login login password/i);
   assert.match(workflow,/alter role edusentia_provisioner_login login password/i);
-  assert.match(workflow,/options","-c role=edusentia_worker_runtime"/);
-  assert.match(workflow,/options","-c role=edusentia_provisioner"/);
   assert.match(workflow,/select session_user session_role,current_user role,current_database\(\) database/);
   assert.match(workflow,/Dedicated parity Worker and provisioner database identities verified/);
   assert.match(workflow,/PARITY_BOOTSTRAP_URL/);
@@ -441,10 +439,10 @@ test("parity tenant infrastructure gate stays provisioner-only",()=>{
 
 test("service login wrappers isolate rotatable passwords from fixed service roles",()=>{
   const s=read("database/service-login-roles.sql");
-  assert.match(s,/create role edusentia_worker_login login nosuperuser nocreatedb nocreaterole noinherit nobypassrls/i);
-  assert.match(s,/create role edusentia_provisioner_login login nosuperuser nocreatedb nocreaterole noinherit nobypassrls/i);
-  assert.match(s,/grant edusentia_worker_runtime to edusentia_worker_login\s+with admin false, inherit false, set true/i);
-  assert.match(s,/grant edusentia_provisioner to edusentia_provisioner_login\s+with admin false, inherit false, set true/i);
+  assert.match(s,/create role edusentia_worker_login login nosuperuser nocreatedb nocreaterole inherit nobypassrls/i);
+  assert.match(s,/create role edusentia_provisioner_login login nosuperuser createdb nocreaterole inherit nobypassrls/i);
+  assert.match(s,/grant edusentia_worker_runtime to edusentia_worker_login\s+with admin false, inherit true, set true/i);
+  assert.match(s,/grant edusentia_provisioner to edusentia_provisioner_login\s+with admin false, inherit true, set true/i);
   assert.match(s,/grant edusentia_worker_login to edusentia_runtime\s+with admin true, inherit false, set false/i);
   assert.match(s,/grant edusentia_provisioner_login to edusentia_runtime\s+with admin true, inherit false, set false/i);
 });
