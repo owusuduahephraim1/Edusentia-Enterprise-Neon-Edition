@@ -44,6 +44,13 @@ jobs:
           npm run check
           npm test
 
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
       - id: config
         name: Resolve isolated parity deployment configuration
         shell: bash
@@ -52,30 +59,75 @@ jobs:
           ready=true
           [ -n "$CLOUDFLARE_API_TOKEN" ] || ready=false
           [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || ready=false
+          [ -n "$BOOTSTRAP_DATABASE_URL" ] || ready=false
           [ -n "$SESSION_PEPPER_VALUE" ] || ready=false
           [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || ready=false
 
-          if [ -z "$PARITY_WORKER_DATABASE_URL" ] && [ -n "$BOOTSTRAP_DATABASE_URL" ]; then
-            PARITY_WORKER_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" node --input-type=module -e '
+          if [ "$ready" = true ]; then
+            PARITY_BOOTSTRAP_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" node --input-type=module -e '
               const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
               u.hostname=process.env.PARITY_DATABASE_HOST;
               u.pathname="/edusentia";
-              u.username="edusentia_worker_runtime";
               process.stdout.write(u.toString());
             ')"
-            echo "::add-mask::$PARITY_WORKER_DATABASE_URL"
-          fi
-
-          if [ -z "$PARITY_WORKER_DATABASE_URL" ]; then
-            ready=false
-          else
-            echo "PARITY_WORKER_DATABASE_URL=$PARITY_WORKER_DATABASE_URL" >> "$GITHUB_ENV"
+            echo "::add-mask::$PARITY_BOOTSTRAP_URL"
+            echo "PARITY_BOOTSTRAP_URL=$PARITY_BOOTSTRAP_URL" >> "$GITHUB_ENV"
           fi
 
           echo "ready=$ready" >> "$GITHUB_OUTPUT"
           if [ "$ready" != true ]; then
             echo "Parity browser deployment is safely skipped because isolated deployment configuration is incomplete."
           fi
+
+      - name: Verify parity branch release identity
+        if: steps.config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
+            if(u.hostname!==process.env.PARITY_DATABASE_HOST) throw new Error("Parity bootstrap URL does not target the non-primary parity endpoint");
+            if(u.pathname!=="/edusentia") throw new Error("Parity bootstrap URL must target the edusentia control database");
+            console.log("Parity bootstrap route structure verified.");
+          '
+          (
+            cd worker
+            node --input-type=module -e '
+              import { neon } from "@neondatabase/serverless";
+              const sql=neon(process.env.PARITY_BOOTSTRAP_URL);
+              const release=await sql`select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1`;
+              if(release[0]?.schema_version!=="0025")throw new Error("Parity master schema is not 0025");
+              const rows=await sql`select platform.release_gate() gate`;
+              if(rows[0]?.gate?.ready!==true)throw new Error("Parity release gate is not ready");
+              console.log("Parity schema 0025 and release gate verified.");
+            '
+          )
+
+      - name: Prepare least-privilege parity Worker credential
+        if: steps.config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "$PARITY_WORKER_DATABASE_URL" ]; then
+            WORKER_DB_PASSWORD="$(openssl rand -hex 32)"
+            echo "::add-mask::$WORKER_DB_PASSWORD"
+
+            psql "$PARITY_BOOTSTRAP_URL" \
+              -v ON_ERROR_STOP=1 \
+              -v worker_password="$WORKER_DB_PASSWORD" \
+              -c "alter role edusentia_worker_runtime login password :'worker_password';"
+
+            PARITY_WORKER_DATABASE_URL="$(PARITY_BOOTSTRAP_URL="$PARITY_BOOTSTRAP_URL" WORKER_DB_PASSWORD="$WORKER_DB_PASSWORD" node --input-type=module -e '
+              const u=new URL(process.env.PARITY_BOOTSTRAP_URL);
+              u.username="edusentia_worker_runtime";
+              u.password=process.env.WORKER_DB_PASSWORD;
+              process.stdout.write(u.toString());
+            ')"
+          fi
+
+          echo "::add-mask::$PARITY_WORKER_DATABASE_URL"
+          echo "PARITY_WORKER_DATABASE_URL=$PARITY_WORKER_DATABASE_URL" >> "$GITHUB_ENV"
 
       - name: Verify dedicated parity database URL
         if: steps.config.outputs.ready == 'true'
