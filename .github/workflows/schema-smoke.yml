@@ -77,9 +77,9 @@ jobs:
           cleanup() {
             if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
               psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL || true
-set role edusentia_provisioner;
-drop database if exists "$PROBE_DB" with (force);
-SQL
+          set role edusentia_provisioner;
+          drop database if exists "$PROBE_DB" with (force);
+          SQL
             else
               psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true
             fi
@@ -89,10 +89,10 @@ SQL
           cleanup
           if [ -n "${CI_TEMPLATE_DATABASE:-}" ]; then
             psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-set role edusentia_provisioner;
-create database "$PROBE_DB" owner edusentia_provisioner template "$CI_TEMPLATE_DATABASE";
-grant connect,create,temp on database "$PROBE_DB" to edusentia_runtime;
-SQL
+          set role edusentia_provisioner;
+          create database "$PROBE_DB" owner edusentia_provisioner template "$CI_TEMPLATE_DATABASE";
+          grant connect,create,temp on database "$PROBE_DB" to edusentia_runtime;
+          SQL
           else
             psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\";"
           fi
