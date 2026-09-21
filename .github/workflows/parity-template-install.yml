@@ -3,7 +3,7 @@ name: Parity Tenant Template Install
 on:
   push:
     branches: [reference-parity-r42]
-    paths: [".github/workflows/parity-template-install.yml", "database/reference-compat/0041b_neon_notification_recipient_compat.sql", "database/reference-compat/0044b_certified_report_transition_helpers.sql", "database/reference-compat/0045b_neon_report_view_compat.sql"]
+    paths: [".github/workflows/parity-template-install.yml", "database/provisioner-role.sql", "database/reference-compat/0041b_neon_notification_recipient_compat.sql", "database/reference-compat/0044b_certified_report_transition_helpers.sql", "database/reference-compat/0045b_neon_report_view_compat.sql"]
   workflow_dispatch:
 
 permissions:
@@ -62,14 +62,21 @@ jobs:
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from app.schema_migrations")" = "25"
           echo "Parity branch target confirmed."
 
-      - name: Apply certified report transition helper hotfix and verify template
+      - name: Verify canonical provisioner role and certified tenant template
         shell: bash
         run: |
           set -euo pipefail
           CURRENT_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")"
-          TEMPLATE_OWNER="$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")"
           test "$CURRENT_ROLE" = "edusentia_runtime"
-          test "$TEMPLATE_OWNER" = "edusentia_runtime"
+
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/provisioner-role.sql
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_auth_members m join pg_roles r on r.oid=m.roleid join pg_roles u on u.oid=m.member where r.rolname='edusentia_provisioner' and u.rolname='edusentia_runtime' and m.set_option and not m.inherit_option and not m.admin_option")" = "1"
+
+          TEMPLATE_OWNER="$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")"
+          if [ "$TEMPLATE_OWNER" = "edusentia_runtime" ]; then
+            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" owner to edusentia_provisioner;"
+          fi
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")" = "edusentia_provisioner"
 
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections true;"
           TEMPLATE_URL="$(PARITY_DATABASE_URL="$PARITY_DATABASE_URL" PARITY_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" node --input-type=module -e '
@@ -91,15 +98,26 @@ jobs:
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEMPLATE_DATABASE\" from public;"
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_runtime;"
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_worker_runtime;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_provisioner;"
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;"
-          echo "Certified parity tenant template verified and locked."
+
+          PROBE_DB="edusentia_provisioner_probe_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          PROBE_DB="${PROBE_DB//-/_}"; PROBE_DB="${PROBE_DB:0:60}"
+          cleanup_probe(){ PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true; }
+          trap cleanup_probe EXIT
+          cleanup_probe
+          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\" template \"$PARITY_TEMPLATE_DATABASE\";"
+          test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PROBE_DB'")" = "edusentia_provisioner"
+          cleanup_probe
+          trap - EXIT
+          echo "Canonical provisioner role, ownership handoff, and template clone path verified."
 
       - name: Clone and initialize Reference Parity Test School
         shell: bash
         run: |
           set -euo pipefail
           if [ "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "0" ]; then
-            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PARITY_TEST_TENANT_DATABASE\" template \"$PARITY_TEMPLATE_DATABASE\" owner edusentia_runtime;"
+            PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PARITY_TEST_TENANT_DATABASE\" template \"$PARITY_TEMPLATE_DATABASE\";"
           fi
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEST_TENANT_DATABASE\" from public;"
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEST_TENANT_DATABASE\" to edusentia_runtime;"
