@@ -899,3 +899,19 @@ test("production Worker refuses deployment before owner bootstrap completion",()
   assert.match(w,/owner bootstrap readiness verified before code deployment/i);
   assert.ok(w.indexOf("Require completed production owner bootstrap")<w.indexOf("Ensure private R2 bucket"));
 });
+
+
+test("certified 0048h finalizes production identity across all tenant install paths",()=>{
+  const sql=read("database/reference-compat/0048h_certified_release_identity.sql");
+  assert.match(sql,/version='neon-v1\.0\.0-r42'/);
+  assert.match(sql,/schema_version='0048'/);
+  assert.match(sql,/0048h_certified_release_identity/);
+  for(const file of [
+    "database/tenant-template/install.sh",
+    "database/synthetic-school-lifecycle-smoke.sh",
+    "scripts/update-parity-tenant-template.sh",
+    "scripts/update-parity-reference-tenant.sh",
+    ".github/workflows/reference-compat-smoke.yml"
+  ]) assert.match(read(file),/0048h_certified_release_identity/);
+  assert.match(read("scripts/final-parity-database-gates.sh"),/neon-v1\.0\.0-r42/);
+});

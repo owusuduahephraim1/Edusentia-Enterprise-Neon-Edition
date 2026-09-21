@@ -85,6 +85,7 @@ test "$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "select pg_get_userbyid(datdba)||'|'
 LIVE_REFERENCE_URL="$(url_for edusentia_rpt_000001)"
 echo "::add-mask::$LIVE_REFERENCE_URL"
 test "$(psql "$LIVE_REFERENCE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
+test "$(psql "$LIVE_REFERENCE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
 TARGET_DATABASE_URL="$LIVE_REFERENCE_URL" node scripts/reference-surface-inventory.mjs | tee /tmp/final-live-reference.json
 node - <<'NODE'
 const fs=require("node:fs");
