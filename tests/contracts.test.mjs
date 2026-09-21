@@ -616,3 +616,21 @@ test("full reference compatibility installer orders schema and helper closure be
   assert.match(helpers,/storage\.object_metadata/);
   assert.doesNotMatch(helpers,/\bstorage\.objects\b/);
 });
+
+test("enterprise parity workspace bundle exposes the certified operational modules",()=>{
+  const index=read("frontend/index.html");
+  const ui=read("frontend/parity-enterprise-workspaces.js");
+  assert.match(index,/parity-enterprise-workspaces\.js/);
+  for(const view of [
+    "attendance","history","prospectus","delegations","certificates","id_cards",
+    "insights","children","users","compliance","backup_restore","license_capacity"
+  ]) assert.ok(ui.includes('id:"'+view+'"'),view+" workspace missing");
+  for(const operation of [
+    "get_class_attendance_register","get_student_academic_history","issue_student_transcript",
+    "get_school_prospectus_console","get_emergency_delegation_console","get_certificate_console",
+    "get_id_card_console","get_staff_id_card_console","academic_analytics","list_my_children_reports",
+    "list_profiles_with_access","list_guardian_portal_accounts","get_compliance_console",
+    "backup_dashboard","get_recovery_console","get_school_license_capacity_console"
+  ]) assert.ok(ui.includes('"'+operation+'"'),operation+" RPC missing");
+  assert.doesNotMatch(ui,/supabase|storage\.objects|postgresql:\/\//i);
+});
