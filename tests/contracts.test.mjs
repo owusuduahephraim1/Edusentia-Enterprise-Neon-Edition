@@ -421,7 +421,7 @@ test("parity tenant infrastructure gate stays provisioner-only",()=>{
   assert.match(w,/edusentia_provisioner/);
   assert.match(w,/pg_get_userbyid\(datdba\).*PARITY_CI_TEMPLATE_DATABASE/s);
   assert.match(w,/edusentia_runtime/);
-  assert.match(w,/select datistemplate from pg_database/);
+  assert.match(w,/datistemplate and not datallowconn/);
   assert.match(w,/has_database_privilege\('edusentia_worker_runtime'/);
   assert.match(w,/create database .*owner edusentia_provisioner template/);
   assert.doesNotMatch(w,/PARITY_WORKER_DATABASE_URL/);
@@ -497,4 +497,17 @@ test("database smokes serialize access to the shared parity CI seed",()=>{
   const compat=read(".github/workflows/reference-compat-smoke.yml");
   const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
   for(const x of [schema,compat,lifecycle]) assert.match(x,/pg_terminate_backend(pid).*CI_TEMPLATE_DATABASE/s);
+});
+
+
+test("parity smoke routing locks the shared CI seed before cloning",()=>{
+  for(const file of [
+    ".github/workflows/schema-smoke.yml",
+    ".github/workflows/reference-compat-smoke.yml",
+    ".github/workflows/synthetic-school-lifecycle.yml"
+  ]){
+    const w=read(file);
+    assert.match(w,/alter database edusentia_ci_base_v2 with allow_connections false/i);
+    assert.match(w,/datistemplate and not datallowconn/);
+  }
 });
