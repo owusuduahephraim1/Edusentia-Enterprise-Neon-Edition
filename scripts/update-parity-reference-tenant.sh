@@ -59,6 +59,7 @@ apply_once "0048_certified_provider_rpc_neon_r2" "database/reference-compat/0048
 apply_once "0048b_certified_certificate_settings_compat" "database/reference-compat/0048b_certified_certificate_settings_compat.sql"
 apply_once "0048c_certified_backup_settings_compat" "database/reference-compat/0048c_certified_backup_settings_compat.sql"
 apply_once "0048d_certified_system_health_telemetry_compat" "database/reference-compat/0048d_certified_system_health_telemetry_compat.sql"
+apply_once "0048e_certified_system_health_notification_compat" "database/reference-compat/0048e_certified_system_health_notification_compat.sql"
 
 test "$(psql "$TARGET_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 

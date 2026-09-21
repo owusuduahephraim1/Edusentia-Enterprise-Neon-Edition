@@ -720,3 +720,14 @@ test("system health telemetry compatibility completes the certified health schem
     assert.match(source,/0048d_certified_system_health_telemetry_compat\.sql/);
   }
 });
+
+test("system health notification compatibility covers retry-state dependencies",()=>{
+  const sql=read("database/reference-compat/0048e_certified_system_health_notification_compat.sql");
+  const bulk=read("database/reference-compat/0046_certified_reference_rpc_bulk.sql");
+  const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
+  const sources=[read("database/tenant-template/install.sh"),lifecycle,read(".github/workflows/reference-compat-smoke.yml"),read("scripts/update-parity-tenant-template.sh"),read("scripts/update-parity-reference-tenant.sh")];
+  for(const column of ["attempts","processed_at","created_at"]) assert.ok(sql.includes(column));
+  assert.match(bulk,/notification_outbox[\s\S]*processed_at is null/i);
+  assert.ok(lifecycle.includes('psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048e_certified_system_health_notification_compat.sql >/dev/null'));
+  for(const source of sources) assert.match(source,/0048e_certified_system_health_notification_compat\.sql/);
+});
