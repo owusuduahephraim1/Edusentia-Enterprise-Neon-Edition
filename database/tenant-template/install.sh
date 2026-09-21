@@ -93,6 +93,7 @@ psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048k_mfa_recovery_compat.sql
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql
+psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
 
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
