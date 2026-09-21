@@ -165,11 +165,11 @@ begin
 end$$;
 
 insert into platform.release_catalog(release_version,git_sha,status,master_schema_version,tenant_schema_version,manifest_sha256,source_baseline,deployed_at,notes)
-values('neon-v1.0.0-r42-parity','reference-parity-r42','active','0022','0020','','Edusentia-Enterprise-r42-v18-STABLE-20260919',now(),'Fresh Neon implementation of the certified r42-v18 control-plane blueprint')
+values('neon-v1.0.0-r42','main','active','0025','0020','','Edusentia-Enterprise-r42-v18-STABLE-20260919',now(),'Production Neon implementation of the certified r42-v18 control-plane blueprint')
 on conflict(release_version) do update set git_sha=excluded.git_sha,status='active',master_schema_version=excluded.master_schema_version,tenant_schema_version=excluded.tenant_schema_version,source_baseline=excluded.source_baseline,deployed_at=excluded.deployed_at,notes=excluded.notes,updated_at=now();
 
 insert into platform.tenant_releases(release_code,status,baseline_blueprint_version,manifest_sha256,migration_count,worker_function_count,source_schema_version,source_reference,metadata,notes,activated_at)
-values('neon-v1.0.0-r42-parity','active','Edusentia-Enterprise-r42-v18-STABLE-20260919','',20,1,20,'a181e18e0ca044db756193209b5b089cd03efb0f','{"runtime":"Cloudflare Workers + Neon PostgreSQL + R2","tenant_isolation":"dedicated_database"}'::jsonb,'Verified Neon isolated tenant release',now())
+values('neon-v1.0.0-r42','active','Edusentia-Enterprise-r42-v18-STABLE-20260919','',20,1,20,'a181e18e0ca044db756193209b5b089cd03efb0f','{"runtime":"Cloudflare Workers + Neon PostgreSQL + R2","tenant_isolation":"dedicated_database"}'::jsonb,'Verified production Neon isolated tenant release',now())
 on conflict(release_code) do update set status='active',migration_count=excluded.migration_count,worker_function_count=excluded.worker_function_count,source_schema_version=excluded.source_schema_version,source_reference=excluded.source_reference,metadata=excluded.metadata,activated_at=coalesce(platform.tenant_releases.activated_at,excluded.activated_at);
 
 revoke all on function platform.resolve_public_school(text) from public;

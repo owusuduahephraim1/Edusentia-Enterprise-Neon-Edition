@@ -3,7 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import type { Env } from "./types";
 import { db } from "./db";
 import { tenantDatabaseName, tenantDb, validateDatabaseName } from "./tenant-db";
-import { inspectTenantRelease } from "./tenant-release";
+import { inspectTenantRelease, TENANT_RUNTIME_VERSION } from "./tenant-release";
 
 function ident(value:string){
   const v=validateDatabaseName(value);
@@ -69,7 +69,7 @@ export async function provisionIsolatedTenant(env:Env,tenantId:string,actorId:st
 
     await master`update platform.provisioning_jobs set stage='release_verify',updated_at=now() where tenant_id=${tenantId}::uuid and status='running'`;
     const ready=await master`select platform.mark_isolated_tenant_ready(
-      ${tenantId}::uuid,${actorId}::uuid,${databaseName},'neon-v1.0.0-r42-parity',''
+      ${tenantId}::uuid,${actorId}::uuid,${databaseName},${TENANT_RUNTIME_VERSION},''
     ) result`;
 
     return {ok:true,databaseName,initialized:(initialized[0] as any)?.result,health,release,control:(ready[0] as any)?.result};

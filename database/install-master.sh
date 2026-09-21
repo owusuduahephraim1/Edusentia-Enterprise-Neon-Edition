@@ -9,9 +9,20 @@ if [ "${#migrations[@]}" -eq 0 ]; then
   exit 1
 fi
 
-printf 'Applying %s master migrations in lexical order.\n' "${#migrations[@]}"
+printf 'Reconciling %s master migrations in lexical order.\n' "${#migrations[@]}"
 for migration in "${migrations[@]}"; do
-  echo "==> $migration"
+  version="$(basename "$migration" .sql)"
+  installed="0"
+  if [ "$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "select to_regclass('app.schema_migrations') is not null")" = "t" ]; then
+    installed="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "select count(*) from app.schema_migrations where version='$version'")"
+  fi
+
+  if [ "$installed" = "1" ]; then
+    echo "==> $migration already installed; skipping"
+    continue
+  fi
+
+  echo "==> applying $migration"
   psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
 done
 

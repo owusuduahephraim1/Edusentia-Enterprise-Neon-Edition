@@ -50,7 +50,7 @@ test("School sessions route to isolated databases rather than the master",()=>{c
 test("Tenant template is locked between provisioning operations",()=>{const s=read("database/tenant-template/install.sh");assert.match(s,/allow_connections false/i);assert.match(s,/revoke connect on database/);assert.match(s,/grant connect on database.*edusentia_provisioner/i);});
 
 test("Tenant template installs certified core and least-privilege Worker grants",()=>{const i=read("database/tenant-template/install.sh"),g=read("database/tenant-template/runtime-role.sql"),r=read("database/reference-compat/install-core.sh");assert.match(i,/reference-compat\/install-core\.sh/);assert.match(i,/tenant-template\/runtime-role\.sql/);assert.match(i,/0045/);assert.match(g,/revoke all on authn\.password_credentials from edusentia_worker_runtime/i);assert.match(g,/grant select on authn\.users to edusentia_worker_runtime/i);assert.match(g,/authn\.lookup_login\(text,text\)/);assert.match(r,/0027_reference_core_part_01/);});
-test("Tenant release health requires runtime and certified compatibility identities",()=>{const x=read("worker/src/tenant-release.ts"),p=read("worker/src/provisioning.ts"),r=read("worker/src/platform-routes.ts");assert.match(x,/TENANT_RUNTIME_SCHEMA_VERSION="0020"/);assert.match(x,/CERTIFIED_COMPAT_SCHEMA_VERSION="0045"/);assert.match(x,/get_bootstrap_data/);assert.match(p,/inspectTenantRelease/);assert.match(p,/tenant_release_invalid/);assert.match(r,/certifiedCoreReady/);});
+test("Tenant release health requires runtime and certified compatibility identities",()=>{const x=read("worker/src/tenant-release.ts"),p=read("worker/src/provisioning.ts"),r=read("worker/src/platform-routes.ts");assert.match(x,/TENANT_RUNTIME_SCHEMA_VERSION="0020"/);assert.match(x,/CERTIFIED_COMPAT_SCHEMA_VERSION="0048"/);assert.match(x,/TENANT_RUNTIME_VERSION="neon-v1\\.0\\.0-r42"/);assert.match(x,/get_bootstrap_data/);assert.match(p,/inspectTenantRelease/);assert.match(p,/tenant_release_invalid/);assert.match(r,/certifiedCoreReady/);});
 test("Production school onboarding is limited to Basic JHS and Senior High",()=>{const r=read("worker/src/platform-routes.ts"),h=read("frontend/register.html"),m=read("docs/MODULE_CATALOG.md");assert.match(r,/new Set\(\["basic_jhs","senior_high"\]\)/);assert.doesNotMatch(h,/combined_pretertiary|tertiary/);assert.match(m,/Basic\/JHS and Senior High School/);});
 
 test("Certified RPC bridge uses a fixed server-side allowlist and trusted tenant context",()=>{const b=read("worker/src/certified-rpc.ts"),r=read("worker/src/routes.ts"),g=read("database/tenant-template/runtime-role.sql"),a=read("frontend/api-client.js");assert.match(b,/CERTIFIED_RPC_OPERATIONS/);assert.match(b,/get_bootstrap_data/);assert.match(b,/get_academic_configuration/);assert.match(b,/get_academic_calendar_context/);assert.match(b,/get_my_emergency_academic_delegations/);assert.match(b,/academic_configuration_readiness/);assert.match(b,/set_active_period/);assert.match(b,/search_students/);assert.match(b,/search_students_v5/);assert.match(b,/generate_school_identifier/);assert.match(b,/validate_student_import/);assert.match(b,/save_promotion_cutoff/);assert.match(b,/save_academic_entity/);assert.match(b,/archive_academic_entity/);assert.match(b,/save_grading_scale/);assert.match(b,/archive_grading_scale/);assert.match(b,/save_assessment_scheme/);assert.match(b,/save_class_subject_assignments_batch/);assert.match(b,/get_class_timetable_console/);assert.match(b,/save_class_timetable_entry/);assert.match(b,/list_audit_events_v2/);assert.match(b,/list_audit_archives_v1/);assert.match(b,/list_audit_archive_entries_v1/);assert.match(b,/save_student/);assert.match(b,/transition_report_status/);assert.match(b,/list_notifications/);assert.match(b,/certified_rpc_not_allowed/);assert.match(b,/tenantTx/);assert.doesNotMatch(b,/select\s+public\.\$\{/i);assert.match(r,/invokeCertifiedRpc\(sql,ctx/);assert.match(g,/public\.get_bootstrap_data\(\)/);assert.match(a,/certifiedRpc/);});
@@ -798,4 +798,26 @@ test("production release identity and cutover preflight are fail-closed",()=>{
   assert.match(preflight,/TURNSTILE_SECRET/);
   assert.match(preflight,/select current_database\(\)/);
   assert.match(preflight,/legacy lifecycle test databases present/);
+});
+
+
+test("master migration installer upgrades incrementally without replaying installed schema",()=>{
+  const s=read("database/install-master.sh");
+  assert.match(s,/to_regclass\('app\.schema_migrations'\)/);
+  assert.match(s,/select count\(\*\) from app\.schema_migrations where version='\$version'/);
+  assert.match(s,/already installed; skipping/);
+  assert.match(s,/app\.release_identity/);
+});
+
+test("production tenant release identity contains no parity release markers",()=>{
+  const release=read("worker/src/tenant-release.ts");
+  const provisioning=read("worker/src/provisioning.ts");
+  const runtime=read("database/tenant-template/0020_tenant_runtime_parity.sql");
+  const control=read("database/migrations/0022_reference_control_operations.sql");
+  for(const source of [release,provisioning,runtime,control]) assert.doesNotMatch(source,/neon-v1\.0\.0-r42-parity/);
+  assert.match(release,/CERTIFIED_COMPAT_SCHEMA_VERSION="0048"/);
+  assert.match(release,/TENANT_RUNTIME_VERSION="neon-v1\.0\.0-r42"/);
+  assert.match(provisioning,/TENANT_RUNTIME_VERSION/);
+  assert.match(control,/values\('neon-v1\.0\.0-r42','main','active','0025','0020'/);
+  assert.match(control,/Verified production Neon isolated tenant release/);
 });

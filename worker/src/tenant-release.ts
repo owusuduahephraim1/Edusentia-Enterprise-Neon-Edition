@@ -1,6 +1,6 @@
 export const TENANT_RUNTIME_SCHEMA_VERSION="0020";
-export const CERTIFIED_COMPAT_SCHEMA_VERSION="0045";
-export const TENANT_RUNTIME_VERSION="neon-v1.0.0-r42-parity";
+export const CERTIFIED_COMPAT_SCHEMA_VERSION="0048";
+export const TENANT_RUNTIME_VERSION="neon-v1.0.0-r42";
 
 export type TenantReleaseStatus={
   runtimeSchemaVersion:string;

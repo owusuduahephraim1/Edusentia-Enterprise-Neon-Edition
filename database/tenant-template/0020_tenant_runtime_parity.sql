@@ -54,7 +54,7 @@ insert into platform.license_feature_catalog(code,name,description,default_enabl
 on conflict(code) do update set name=excluded.name,description=excluded.description,default_enabled=excluded.default_enabled;
 
 insert into app.release_identity(edition,version,source_baseline,source_commit,schema_version,api_version,frontend_version,worker_version)
-values('Edusentia Enterprise Neon Tenant Runtime','neon-v1.0.0-r42-parity','Edusentia-Enterprise-r42-v18-STABLE-20260919','a181e18e0ca044db756193209b5b089cd03efb0f','0020','v1','neon-v1.0.0-r42-parity','neon-v1.0.0-r42-parity')
+values('Edusentia Enterprise Neon Tenant Runtime','neon-v1.0.0-r42','Edusentia-Enterprise-r42-v18-STABLE-20260919','a181e18e0ca044db756193209b5b089cd03efb0f','0020','v1','neon-v1.0.0-r42','neon-v1.0.0-r42')
 on conflict(edition) do update set version=excluded.version,source_baseline=excluded.source_baseline,source_commit=excluded.source_commit,schema_version=excluded.schema_version,api_version=excluded.api_version,frontend_version=excluded.frontend_version,worker_version=excluded.worker_version;
 
 create or replace function app.platform_initialize_tenant(
