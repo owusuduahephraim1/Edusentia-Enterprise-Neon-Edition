@@ -17,9 +17,10 @@ env:
   PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4-pooler.c-7.us-east-2.aws.neon.tech
   PARITY_MASTER_DATABASE: edusentia
   PARITY_TEMPLATE_DATABASE: edusentia_tenant_template
+  PARITY_TEST_TENANT_DATABASE: edusentia_rpt_000001
 
 jobs:
-  install:
+  verify-and-provision:
     runs-on: ubuntu-latest
     env:
       SOURCE_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
@@ -61,49 +62,15 @@ jobs:
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from app.schema_migrations")" = "25"
           echo "Parity branch target confirmed."
 
-      - name: Install and lock certified tenant template
+      - name: Verify and lock certified tenant template
         shell: bash
         run: |
           set -euo pipefail
           CURRENT_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")"
           TEMPLATE_OWNER="$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")"
-          case "$CURRENT_ROLE" in
-            edusentia_owner|edusentia_runtime) ;;
-            *) echo "Unexpected parity deployment role: $CURRENT_ROLE"; exit 1 ;;
-          esac
-          case "$TEMPLATE_OWNER" in
-            edusentia_owner|edusentia_runtime|edusentia_provisioner) ;;
-            *) echo "Unexpected tenant template owner: $TEMPLATE_OWNER"; exit 1 ;;
-          esac
+          test "$CURRENT_ROLE" = "edusentia_runtime"
+          test "$TEMPLATE_OWNER" = "edusentia_runtime"
 
-          ADDED_TEMPLATE_OWNER=false
-          ADDED_PROVISIONER=false
-          if [ "$CURRENT_ROLE" != "$TEMPLATE_OWNER" ] && [ "$TEMPLATE_OWNER" != "edusentia_provisioner" ]; then
-            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant $TEMPLATE_OWNER to $CURRENT_ROLE;"
-            ADDED_TEMPLATE_OWNER=true
-          fi
-          if [ "$CURRENT_ROLE" != "edusentia_provisioner" ]; then
-            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant edusentia_provisioner to $CURRENT_ROLE;"
-            ADDED_PROVISIONER=true
-          fi
-
-          cleanup_roles() {
-            if [ "$ADDED_PROVISIONER" = true ]; then
-              psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke edusentia_provisioner from $CURRENT_ROLE;" >/dev/null 2>&1 || true
-            fi
-            if [ "$ADDED_TEMPLATE_OWNER" = true ]; then
-              psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke $TEMPLATE_OWNER from $CURRENT_ROLE;" >/dev/null 2>&1 || true
-            fi
-          }
-          trap cleanup_roles EXIT
-          BOOTSTRAP_DATABASE_URL="$PARITY_DATABASE_URL" TENANT_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" bash database/tenant-template/install.sh
-          cleanup_roles
-          trap - EXIT
-
-      - name: Verify certified tenant template
-        shell: bash
-        run: |
-          set -euo pipefail
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections true;"
           TEMPLATE_URL="$(PARITY_DATABASE_URL="$PARITY_DATABASE_URL" PARITY_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" node --input-type=module -e '
             const u=new URL(process.env.PARITY_DATABASE_URL);
@@ -111,9 +78,54 @@ jobs:
             process.stdout.write(u.toString());
           ')"
           echo "::add-mask::$TEMPLATE_URL"
-          trap 'psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;" >/dev/null 2>&1 || true' EXIT
           test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
           test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
+          test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations")" = "37"
           test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
           test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
-          echo "Certified tenant template verified."
+
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$PARITY_TEMPLATE_DATABASE' and pid<>pg_backend_pid();" >/dev/null
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEMPLATE_DATABASE\" from public;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_runtime;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_worker_runtime;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;"
+          echo "Certified parity tenant template verified and locked."
+
+      - name: Clone and initialize Reference Parity Test School
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "0" ]; then
+            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PARITY_TEST_TENANT_DATABASE\" template \"$PARITY_TEMPLATE_DATABASE\" owner edusentia_runtime;"
+          fi
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEST_TENANT_DATABASE\" from public;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEST_TENANT_DATABASE\" to edusentia_runtime;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEST_TENANT_DATABASE\" to edusentia_worker_runtime;"
+
+          TENANT_URL="$(PARITY_DATABASE_URL="$PARITY_DATABASE_URL" PARITY_TEST_TENANT_DATABASE="$PARITY_TEST_TENANT_DATABASE" node --input-type=module -e '
+            const u=new URL(process.env.PARITY_DATABASE_URL);
+            u.pathname="/"+process.env.PARITY_TEST_TENANT_DATABASE;
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$TENANT_URL"
+
+          if [ "$(psql "$TENANT_URL" -Atc "select count(*) from app.tenants where id='fff24cf5-ce88-4107-af80-eff8bba44d8c'::uuid")" = "0" ]; then
+            psql "$TENANT_URL" -v ON_ERROR_STOP=1 -c "select app.platform_initialize_tenant(
+              'fff24cf5-ce88-4107-af80-eff8bba44d8c'::uuid,
+              'RPT-000001',
+              'Reference Parity Test School',
+              'basic_jhs',
+              'reference@rpt000001.app',
+              'Reference Admin',
+              'professional',
+              '2026-09-20T00:00:00Z'::timestamptz,
+              '2027-09-19T23:59:59Z'::timestamptz
+            );"
+          fi
+
+          test "$(psql "$TENANT_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
+          test "$(psql "$TENANT_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0045"
+          test "$(psql "$TENANT_URL" -Atc "select count(*) from app.tenants where id='fff24cf5-ce88-4107-af80-eff8bba44d8c'::uuid and code='RPT-000001'")" = "1"
+          psql "$TENANT_URL" -Atc "select app.platform_health_snapshot('fff24cf5-ce88-4107-af80-eff8bba44d8c'::uuid);" > /tmp/parity-tenant-health.json
+          test -s /tmp/parity-tenant-health.json
+          echo "Reference Parity Test School isolated database initialized and verified."
