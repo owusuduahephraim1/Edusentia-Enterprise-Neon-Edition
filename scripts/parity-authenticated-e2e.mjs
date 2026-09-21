@@ -91,6 +91,19 @@ try{
   assert(login.payload?.setup?.secret,"MFA enrollment secret was not returned");
   assert(login.payload?.challengeToken,"MFA challenge token was not returned");
 
+  const challengeState=await sql`
+    select c.purpose,c.attempts,c.used_at,c.expires_at,now() db_now,
+           (c.expires_at>now()) unexpired,
+           (c.tenant_id=${TENANT_ID}::uuid) tenant_matches,
+           m.status membership_status
+      from authn.login_challenges c
+      join authn.users u on u.id=c.user_id
+      left join app.tenant_memberships m on m.user_id=c.user_id and m.tenant_id=c.tenant_id
+     where lower(u.email)=lower(${ADMIN_EMAIL})
+     order by c.created_at desc
+     limit 1`;
+  console.error("MFA challenge diagnostic",JSON.stringify(challengeState[0]||{}));
+
   const complete=await http("/api/auth/mfa/complete",{method:"POST",body:{
     challengeToken:login.payload.challengeToken,
     code:totp(login.payload.setup.secret)
