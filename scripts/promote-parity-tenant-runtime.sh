@@ -38,8 +38,8 @@ REFERENCE_URL="$(PARITY_URL="$PARITY_URL" REFERENCE_DB="$REFERENCE_DB" node --in
 echo "::add-mask::$REFERENCE_URL"
 
 test "$(psql "$REFERENCE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
-test "$(psql "$PARITY_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|f"
-test "$(psql "$PARITY_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$REFERENCE_DB'")" = "edusentia_provisioner|t"
+test "$(psql "$PARITY_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|false"
+test "$(psql "$PARITY_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$REFERENCE_DB'")" = "edusentia_provisioner|true"
 
 TARGET_DATABASE_URL="$REFERENCE_URL" node scripts/reference-surface-inventory.mjs | tee /tmp/parity-reference-surface.json
 node - <<'NODE'
