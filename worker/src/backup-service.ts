@@ -46,6 +46,7 @@ type BackupManifest={
 };
 
 const enc=new TextEncoder(),dec=new TextDecoder();
+function ownedBuffer(bytes:Uint8Array):ArrayBuffer{const copy=new Uint8Array(bytes.byteLength);copy.set(bytes);return copy.buffer;}
 
 function fail(message:string,code="backup_failed",status=400):never{
   throw Object.assign(new Error(message),{code,status});
@@ -61,7 +62,7 @@ function encodedPath(path:string){return path.split("/").map(s=>encodeURICompone
 function contentTypeOf(obj:R2ObjectBody){return String(obj.httpMetadata?.contentType||"application/octet-stream");}
 
 async function sha256Bytes(bytes:Uint8Array){
-  const hash=new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));
+  const hash=new Uint8Array(await crypto.subtle.digest("SHA-256",ownedBuffer(bytes)));
   return Array.from(hash,b=>b.toString(16).padStart(2,"0")).join("");
 }
 async function encryptionMaterial(env:Env){
@@ -74,16 +75,16 @@ async function encryptionMaterial(env:Env){
 }
 async function encryptPayload(bytes:Uint8Array,key:CryptoKey){
   const iv=crypto.getRandomValues(new Uint8Array(12));
-  const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,bytes));
+  const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,ownedBuffer(bytes)));
   const magic=enc.encode("NISB2"),out=new Uint8Array(magic.length+iv.length+ciphertext.length);
   out.set(magic);out.set(iv,magic.length);out.set(ciphertext,magic.length+iv.length);return out;
 }
 async function decryptPayload(bytes:Uint8Array,key:CryptoKey){
   if(dec.decode(bytes.slice(0,5))!=="NISB2")fail("Unsupported encrypted backup payload","backup_format_invalid",422);
-  return new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:bytes.slice(5,17)},key,bytes.slice(17)));
+  return new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:ownedBuffer(bytes.slice(5,17))},key,ownedBuffer(bytes.slice(17))));
 }
 async function gzip(bytes:Uint8Array){
-  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+  return new Uint8Array(await new Response(new Blob([ownedBuffer(bytes)]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
 }
 async function gunzip(bytes:Uint8Array){
   return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
