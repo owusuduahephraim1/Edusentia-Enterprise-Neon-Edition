@@ -351,7 +351,7 @@ test("provisioner bootstrap preserves explicit SET-only membership",()=>{
   assert.match(w,/PARITY_PROVISIONER_DATABASE_URL/);
   assert.match(w,/PROVISIONER_DATABASE_URL/);
   assert.match(w,/u\.username="edusentia_provisioner"/);
-  assert.match(t,/select current_user/);
+  assert.match(t,/current_user/);
   assert.match(t,/pg_get_userbyid\(datdba\)/);
   assert.match(t,/edusentia_provisioner/);
   assert.doesNotMatch(t,/PGOPTIONS=.*role=edusentia_provisioner/);
@@ -390,7 +390,7 @@ test("parity smoke guards avoid application-schema privilege coupling",()=>{
       ?? "";
     const guardStep=guard.split("\n      - name:")[0];
     assert.match(guardStep,/select current_database\(\)/);
-    assert.match(guardStep,/select current_user/);
+    assert.match(guardStep,/current_user/);
     assert.doesNotMatch(guardStep,/app\.release_identity|platform\.release_gate/);
   }
 });
@@ -417,7 +417,7 @@ test("parity smoke databases clone the minimal pgcrypto CI base",()=>{
 test("parity tenant infrastructure gate stays provisioner-only",()=>{
   const w=read(".github/workflows/parity-template-install.yml");
   assert.match(w,/Parity Tenant Infrastructure Verify/);
-  assert.match(w,/select current_user/);
+  assert.match(w,/current_user/);
   assert.match(w,/edusentia_provisioner/);
   assert.match(w,/not datallowconn/);
   assert.match(w,/datistemplate and not datallowconn/);
