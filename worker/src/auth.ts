@@ -78,7 +78,7 @@ export async function completeMfa(env:Env,challengeTokenRaw:string,codeRaw:strin
   if(Number(challenge.attempts)>=5)throw Object.assign(new Error("Too many verification attempts. Sign in again."),{code:"mfa_attempts_exceeded",status:429});
 
   const [,contextRows]=await sql.transaction([
-    sql`select app.set_request_context(${challenge.tenant_id}::uuid,${challenge.user_id}::uuid,'mfa_pending',1)`,
+    sql`select app.set_request_context(${challenge.tenant_id}::uuid,${challenge.user_id}::uuid,'mfa_pending'::text,1::smallint)`,
     sql`
       select u.email,u.display_name,t.code tenant_code,t.name tenant_name,m.role,m.status
         from authn.users u
