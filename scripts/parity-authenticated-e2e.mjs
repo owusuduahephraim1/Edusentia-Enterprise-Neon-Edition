@@ -91,10 +91,17 @@ try{
   assert(login.payload?.setup?.secret,"MFA enrollment secret was not returned");
   assert(login.payload?.challengeToken,"MFA challenge token was not returned");
 
+  const workflowPepper=String(process.env.SESSION_PEPPER_VALUE||"");
+  const expectedHash=workflowPepper
+    ? crypto.createHash("sha256").update("edusentia:mfa-challenge:v1:"+String(login.payload.challengeToken)+":"+workflowPepper).digest("hex")
+    : "";
   const challengeState=await sql`
     select c.purpose,c.attempts,c.used_at,c.expires_at,now() db_now,
            (c.expires_at>now()) unexpired,
            (c.tenant_id=${TENANT_ID}::uuid) tenant_matches,
+           (case when ${expectedHash}='' then null else c.token_hash=${expectedHash} end) workflow_pepper_hash_matches,
+           (u.disabled_at is null) user_enabled,
+           exists(select 1 from app.tenants t where t.id=c.tenant_id) tenant_exists,
            m.status membership_status
       from authn.login_challenges c
       join authn.users u on u.id=c.user_id
