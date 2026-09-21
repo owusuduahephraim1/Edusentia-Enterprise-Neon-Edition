@@ -313,3 +313,22 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.doesNotMatch(workflow,/alter role (?!edusentia_worker_runtime)/i);
   assert.match(workflow,/edusentia-enterprise-neon-parity-test/);
 });
+
+
+test("authenticated parity E2E rotates credentials and exercises R2",()=>{
+  const s=read("scripts/parity-authenticated-e2e.mjs");
+  const w=read(".github/workflows/deploy-parity-test.yml");
+  assert.match(s,/platform_set_initial_password_by_email/);
+  assert.match(s,/platform_reset_mfa_by_email/);
+  assert.match(s,/XXXX\.DUMMY\.TOKEN\.XXXX/);
+  assert.match(s,/assuranceLevel===2/);
+  assert.match(s,/\/api\/finance\/summary/);
+  assert.match(s,/\/api\/operations\/overview/);
+  assert.match(s,/register_report_pdf/);
+  assert.match(s,/pdf\/download/);
+  assert.match(s,/r2RoundTrip:true/);
+  assert.doesNotMatch(s,/postgresql:\/\//i);
+  assert.doesNotMatch(s,/Qa!|Nanak2026/i);
+  assert.match(w,/Run authenticated parity end-to-end gate/);
+  assert.match(w,/scripts\/parity-authenticated-e2e\.mjs/);
+});
