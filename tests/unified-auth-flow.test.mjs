@@ -64,3 +64,17 @@ test("Canonical platform console preserves Neon-only operations",()=>{
   assert.match(sw,/platform-saas-admin\.js/);
   assert.match(css,/\.hidden\{display:none!important\}/);
 });
+
+
+test("browser authentication scripts remain syntactically valid",()=>{
+  for(const file of [
+    "frontend/api-client.js",
+    "frontend/app.js",
+    "frontend/platform-api-client.js",
+    "frontend/platform-saas-admin.js",
+    "frontend/admin-setup.js"
+  ]){
+    assert.doesNotThrow(()=>new Function(read(file)),file+" must parse as browser JavaScript");
+  }
+  assert.doesNotMatch(read("frontend/api-client.js"),/\\\\n\s+listFinance/);
+});
