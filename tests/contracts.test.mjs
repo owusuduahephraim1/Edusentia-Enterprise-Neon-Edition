@@ -122,6 +122,19 @@ test("Certified notification publication synchronization stays internal to repor
 });
 
 
+test("Neon report notification recipient compatibility removes missing student profile dependency",()=>{
+  const m=read("database/reference-compat/0041b_neon_notification_recipient_compat.sql");
+  const i=read("database/tenant-template/install.sh");
+  const s=read("database/synthetic-school-lifecycle-smoke.sh");
+  assert.match(m,/create or replace function public\.create_workflow_notifications/i);
+  assert.match(m,/public\.guardian_links/);
+  assert.doesNotMatch(m,/s\.profile_id/);
+  assert.match(m,/revoke all on function public\.create_workflow_notifications\(uuid,public\.report_status\) from edusentia_worker_runtime/i);
+  assert.match(i,/0041b_neon_notification_recipient_compat\.sql/);
+  assert.match(s,/0041b_neon_notification_recipient_compat\.sql/);
+});
+
+
 test("Certified principal academic history search broadens read parity without records-manager access",()=>{
   const m=read("database/reference-compat/0042_certified_principal_academic_history_read.sql");
   const i=read("database/tenant-template/install.sh");
