@@ -731,3 +731,23 @@ test("system health notification compatibility covers retry-state dependencies",
   assert.ok(lifecycle.includes('psql "$db_url" -v ON_ERROR_STOP=1 -f database/reference-compat/0048e_certified_system_health_notification_compat.sql >/dev/null'));
   for(const source of sources) assert.match(source,/0048e_certified_system_health_notification_compat\.sql/);
 });
+
+
+test("backup health metadata compatibility completes system health backup dependencies",()=>{
+  const sql=read("database/reference-compat/0048f_certified_backup_health_metadata_compat.sql");
+  const bulk=read("database/reference-compat/0046_certified_reference_rpc_bulk.sql");
+  const template=read("database/tenant-template/install.sh");
+  const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const updateTemplate=read("scripts/update-parity-tenant-template.sh");
+  const updateReference=read("scripts/update-parity-reference-tenant.sh");
+  for(const column of ["backup_type","completed_at","verification_status","verification_checked_at","offsite_copied_at","offsite_copy_note"]){
+    assert.ok(sql.includes(column),column+" backup metadata compatibility column missing");
+  }
+  assert.match(bulk,/backup_type='full'/i);
+  assert.match(bulk,/verification_status='passed'/i);
+  assert.match(bulk,/offsite_copied_at/i);
+  for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
+    assert.match(source,/0048f_certified_backup_health_metadata_compat\.sql/);
+  }
+});
