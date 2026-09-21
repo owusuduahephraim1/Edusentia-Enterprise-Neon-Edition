@@ -44,6 +44,20 @@ alter database "$TEMPLATE_DB" with allow_connections true;
 SQL
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$TEMPLATE_DB' and pid<>pg_backend_pid();" >/dev/null
 
+cleanup_schema_grant() {
+  psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL' || true
+set role edusentia_provisioner;
+revoke create on schema public from edusentia_runtime;
+SQL
+}
+trap 'cleanup_schema_grant; relock' EXIT
+
+psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+set role edusentia_provisioner;
+grant create on schema public to edusentia_runtime;
+reset role;
+SQL
+
 apply_once() {
   local version="$1"
   local file="$2"
@@ -69,8 +83,17 @@ apply_once "0048e_certified_system_health_notification_compat" "database/referen
 apply_once "0048f_certified_backup_health_metadata_compat" "database/reference-compat/0048f_certified_backup_health_metadata_compat.sql"
 apply_once "0048g_certified_operational_rls_enforcement" "database/reference-compat/0048g_certified_operational_rls_enforcement.sql"
 apply_once "0048h_certified_release_identity" "database/reference-compat/0048h_certified_release_identity.sql"
+apply_once "0048i_historical_provider_bridges" "database/reference-compat/0048i_historical_provider_bridges.sql"
+apply_once "0048j_notification_worker_compat" "database/reference-compat/0048j_notification_worker_compat.sql"
+apply_once "0048k_mfa_recovery_compat" "database/reference-compat/0048k_mfa_recovery_compat.sql"
+apply_once "0048l_backup_worker_api" "database/reference-compat/0048l_backup_worker_api.sql"
+apply_once "0048m_restore_worker_helpers" "database/reference-compat/0048m_restore_worker_helpers.sql"
+apply_once "0048n_backup_maintenance_helpers" "database/reference-compat/0048n_backup_maintenance_helpers.sql"
 
+cleanup_schema_grant
+test "$(psql "$TEMPLATE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" = "f"
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
+test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version in('0048i_historical_provider_bridges','0048j_notification_worker_compat','0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "6"
 
 TARGET_DATABASE_URL="$TEMPLATE_URL" node scripts/reference-surface-inventory.mjs | tee /tmp/parity-template-surface.json
 node - <<'NODE'
