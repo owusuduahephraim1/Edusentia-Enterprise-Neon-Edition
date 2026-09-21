@@ -1,0 +1,128 @@
+name: Deploy Parity Browser Test
+
+on:
+  push:
+    branches: [reference-parity-r42]
+    paths:
+      - "frontend/**"
+      - "worker/**"
+      - ".github/workflows/deploy-parity-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edusentia-parity-browser-test
+  cancel-in-progress: true
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  PARITY_WORKER_DATABASE_URL: ${{ secrets.PARITY_WORKER_DATABASE_URL }}
+  SESSION_PEPPER_VALUE: ${{ secrets.SESSION_PEPPER || secrets.AUTH_SECRET }}
+  BOOTSTRAP_ADMIN_SECRET_VALUE: ${{ secrets.BOOTSTRAP_ADMIN_SECRET }}
+  PARITY_DATABASE_HOST: ep-shy-meadow-b5e4d9e4-pooler.c-7.us-east-2.aws.neon.tech
+  PARITY_ORIGIN: https://edusentia-enterprise-neon-parity-test.edusentia-enterprise-neon.workers.dev
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Full quality gate
+        run: |
+          npm run check
+          npm test
+
+      - id: config
+        name: Check isolated parity deployment configuration
+        shell: bash
+        run: |
+          ready=true
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || ready=false
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || ready=false
+          [ -n "$PARITY_WORKER_DATABASE_URL" ] || ready=false
+          [ -n "$SESSION_PEPPER_VALUE" ] || ready=false
+          [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || ready=false
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != true ]; then
+            echo "Parity browser deployment is safely skipped until PARITY_WORKER_DATABASE_URL and existing deployment secrets are configured."
+          fi
+
+      - name: Verify dedicated parity database URL
+        if: steps.config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            const u=new URL(process.env.PARITY_WORKER_DATABASE_URL);
+            if(u.hostname!==process.env.PARITY_DATABASE_HOST) throw new Error("PARITY_WORKER_DATABASE_URL does not target the non-primary parity endpoint");
+            if(u.pathname!=="/edusentia") throw new Error("PARITY_WORKER_DATABASE_URL must target the edusentia control database");
+            if(u.username!=="edusentia_worker_runtime") throw new Error("PARITY_WORKER_DATABASE_URL must use the least-privilege Worker role");
+            console.log("Dedicated parity Worker database route verified.");
+          '
+
+      - name: Stage parity frontend configuration
+        if: steps.config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > frontend/config.js <<'EOF'
+          window.EDS_MASTER_CONFIG = Object.freeze({
+            apiBaseUrl: "https://edusentia-enterprise-neon-parity-test.edusentia-enterprise-neon.workers.dev",
+            productName: "Edusentia Enterprise Neon Edition",
+            productVersion: "neon-v1.0.0-r42-parity-test",
+            repositoryBasePath: "/",
+            turnstileSiteKey: "1x00000000000000000000AA",
+            environment: "parity-testing"
+          });
+          EOF
+          mkdir -p frontend/assets
+          curl --fail --silent --show-error --location             "https://raw.githubusercontent.com/nduah385/Edusentia-Enterprise/a181e18e0ca044db756193209b5b089cd03efb0f/assets/edusentia-auth-learning.webp"             -o frontend/assets/edusentia-auth-learning.webp
+          test "$(sha256sum frontend/assets/edusentia-auth-learning.webp | awk '{print $1}')" = "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1"
+
+      - name: Ensure isolated parity R2 bucket
+        if: steps.config.outputs.ready == 'true'
+        working-directory: worker
+        run: |
+          if npx wrangler r2 bucket info edusentia-enterprise-neon-parity-test --json >/dev/null 2>&1; then
+            echo "Parity R2 bucket already exists."
+          else
+            npx wrangler r2 bucket create edusentia-enterprise-neon-parity-test
+          fi
+
+      - name: Create parity Worker deployment shell
+        if: steps.config.outputs.ready == 'true'
+        working-directory: worker
+        run: npx wrangler deploy --config wrangler.parity.jsonc
+
+      - name: Install parity Worker secrets
+        if: steps.config.outputs.ready == 'true'
+        working-directory: worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$PARITY_WORKER_DATABASE_URL" | npx wrangler secret put DATABASE_URL --config wrangler.parity.jsonc
+          printf '%s' "$SESSION_PEPPER_VALUE" | npx wrangler secret put SESSION_PEPPER --config wrangler.parity.jsonc
+          printf '%s' "$BOOTSTRAP_ADMIN_SECRET_VALUE" | npx wrangler secret put BOOTSTRAP_ADMIN_SECRET --config wrangler.parity.jsonc
+
+      - name: Final deploy and parity smoke
+        if: steps.config.outputs.ready == 'true'
+        working-directory: worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config wrangler.parity.jsonc
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$PARITY_ORIGIN/api/health" | tee /tmp/parity-health.json
+          node -e 'const fs=require("node:fs");const h=JSON.parse(fs.readFileSync("/tmp/parity-health.json","utf8"));if(!h.ok||!h.database||!h.storage)process.exit(1);console.log("Parity Worker health passed.")'
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/" | grep -q "Edusentia Enterprise"
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" | grep -q "parity-testing"
+          echo "Parity browser test environment is live at $PARITY_ORIGIN"
