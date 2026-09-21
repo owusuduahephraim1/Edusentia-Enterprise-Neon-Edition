@@ -357,7 +357,7 @@ test("provisioner bootstrap preserves explicit SET-only membership",()=>{
   assert.match(w,/PARITY_PROVISIONER_DATABASE_URL/);
   assert.match(w,/PROVISIONER_DATABASE_URL/);
   assert.match(w,/u\.username!=="edusentia_provisioner_login"/);
-  assert.match(w,/role=edusentia_provisioner/);
+  assert.match(w,/inherited_provisioner/);
   assert.match(t,/current_user/);
   assert.match(t,/pg_get_userbyid\(datdba\)/);
   assert.match(t,/edusentia_provisioner/);
