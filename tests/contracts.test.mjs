@@ -577,17 +577,18 @@ test("CI clones grant runtime public-schema migration access",()=>{
 });
 
 
-test("certified RPC registry is fixed to the complete 168-operation reference surface",()=>{
+test("certified RPC registry is fixed to the complete 172-operation reference surface",()=>{
   const registry=read("worker/src/certified-rpc-registry.ts");
   const gateway=read("worker/src/certified-rpc.ts");
   const names=[...registry.matchAll(/^  "([^"]+)": \{$/gm)].map(m=>m[1]);
-  assert.equal(names.length,168);
-  assert.equal(new Set(names).size,168);
+  assert.equal(names.length,172);
+  assert.equal(new Set(names).size,172);
   for(const required of [
     "academic_analytics","get_class_attendance_register","save_class_attendance",
     "get_student_academic_history","get_school_prospectus_console","get_certificate_console",
     "get_id_card_console","get_compliance_console","backup_dashboard","operations_dashboard",
-    "get_platform_license_console","issue_student_transcript","verify_transcript"
+    "get_platform_license_console","issue_student_transcript","verify_transcript",
+    "get_my_emergency_academic_delegations","get_role_dashboard","get_role_workspace","list_my_attendance_classes"
   ]) assert.ok(names.includes(required),required+" missing from certified registry");
   assert.match(registry,/Unknown certified operation argument/);
   assert.match(registry,/CERTIFIED_RPC_REGISTRY\[operation\]/);
@@ -596,6 +597,12 @@ test("certified RPC registry is fixed to the complete 168-operation reference su
   assert.match(gateway,/EXPLICIT_CERTIFIED_RPC_OPERATIONS/);
   assert.match(gateway,/return invokeRegistryCertifiedRpc\(sql,ctx,operation,args\);/);
   assert.ok(gateway.indexOf('case "save_student"')<gateway.indexOf("return invokeRegistryCertifiedRpc(sql,ctx,operation,args);"));
+});
+
+test("reference surface inventory includes cached and all-row RPC wrappers",()=>{
+  const inventory=read("scripts/reference-surface-inventory.mjs");
+  assert.match(inventory,/rpcAllRows/);
+  assert.match(inventory,/cacheableRpc/);
 });
 
 test("full reference compatibility installer orders schema and helper closure before certified RPCs",()=>{
