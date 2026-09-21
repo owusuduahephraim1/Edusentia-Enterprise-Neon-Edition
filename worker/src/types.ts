@@ -23,6 +23,7 @@ export interface Env {
   RCE_PACKAGE_SIGNING_PRIVATE_JWK?: string;
   RCE_PACKAGE_SIGNING_KEY_ID?: string;
   PACKAGE_TRANSFER_SIGNING_SECRET?: string;
+  PACKAGE_SIGNING_ENCRYPTION_SECRET?: string;
   OBJECTS: R2Bucket;
 }
 export type SessionContext = {sessionId:string; userId:string; tenantId:string; tenantCode:string; tenantName:string; databaseName:string; role:string; assuranceLevel:number; email:string; displayName:string};
