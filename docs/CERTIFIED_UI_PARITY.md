@@ -109,9 +109,34 @@ A no-compute rollback branch named `backup-reference-parity-r42-pre-0025-2026092
 
 The parity-only workflow `.github/workflows/parity-template-install.yml` verifies the branch guard, validates and locks the certified tenant template, and idempotently provisions the Reference Parity Test School database without targeting production `main`.
 
-## Deployment/testing note
+## Live parity browser testing environment
 
-The currently public GitHub Pages site and public Cloudflare Worker are still the existing production-oriented deployment. The accelerated `reference-parity-r42` build has not replaced them. A separate parity browser deployment must preserve the project rule that frontend hosting remains GitHub Pages plus Cloudflare Worker services; Cloudflare Pages is not part of this architecture.
+The accelerated `reference-parity-r42` build now has a separate browser-accessible parity environment:
+
+- test URL: `https://edusentia-enterprise-neon-parity-test.edusentia-enterprise-neon.workers.dev/`
+- API health: `ok=true`, database healthy, storage healthy
+- product version: `neon-v1.0.0-r42-parity-test`
+- frontend environment: `parity-testing`
+- database target: non-primary Neon branch `reference-parity-r42-20260920`
+- master/control database: `edusentia`, schema `0025`
+- Reference Parity Test School database: `edusentia_rpt_000001`, runtime `0020`, certified compatibility `0045`
+- storage: isolated Cloudflare R2 bucket `edusentia-enterprise-neon-parity-test`
+- Turnstile: Cloudflare test site key only in the parity harness; production Turnstile validation remains strict
+- successful deployment run: GitHub Actions `35556241733`
+- successful full backend smokes on the parity branch:
+  - Neon Schema Smoke Test `35554699044`
+  - Reference Tenant Compatibility Smoke `35554701202`
+  - Synthetic School Lifecycle Smoke `35554703328`
+- certified authentication hero asset is vendored directly under `frontend/assets/edusentia-auth-learning.webp`; its Git blob is byte-identical to certified source commit `a181e18e0ca044db756193209b5b089cd03efb0f`
+
+The parity deployment rotates only the non-primary branch `edusentia_worker_runtime` login credential during deployment, masks it immediately, installs it directly into the parity Worker secret store, and does not persist it in GitHub. The workflow verifies the parity hostname, master schema `0025`, release gate, runtime role, and database identity before deployment.
+
+Production remains isolated and unchanged:
+
+- primary Neon branch `main`: schema `0019`, 19 master migrations
+- production Worker: healthy on `neon-v1.0.0`
+- production GitHub Pages site and production Worker are not replaced by the parity harness
+- Cloudflare Pages is not used
 
 ## Release rule
 
