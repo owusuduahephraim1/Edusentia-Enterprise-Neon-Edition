@@ -66,14 +66,38 @@ jobs:
         run: |
           set -euo pipefail
           CURRENT_ROLE="$(psql "$PARITY_DATABASE_URL" -Atc "select current_user")"
-          test "$CURRENT_ROLE" = "edusentia_owner"
-          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant edusentia_provisioner to edusentia_owner;"
-          cleanup_role() {
-            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke edusentia_provisioner from edusentia_owner;" >/dev/null 2>&1 || true
+          TEMPLATE_OWNER="$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")"
+          case "$CURRENT_ROLE" in
+            edusentia_owner|edusentia_runtime) ;;
+            *) echo "Unexpected parity deployment role: $CURRENT_ROLE"; exit 1 ;;
+          esac
+          case "$TEMPLATE_OWNER" in
+            edusentia_owner|edusentia_runtime|edusentia_provisioner) ;;
+            *) echo "Unexpected tenant template owner: $TEMPLATE_OWNER"; exit 1 ;;
+          esac
+
+          ADDED_TEMPLATE_OWNER=false
+          ADDED_PROVISIONER=false
+          if [ "$CURRENT_ROLE" != "$TEMPLATE_OWNER" ] && [ "$TEMPLATE_OWNER" != "edusentia_provisioner" ]; then
+            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant $TEMPLATE_OWNER to $CURRENT_ROLE;"
+            ADDED_TEMPLATE_OWNER=true
+          fi
+          if [ "$CURRENT_ROLE" != "edusentia_provisioner" ]; then
+            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant edusentia_provisioner to $CURRENT_ROLE;"
+            ADDED_PROVISIONER=true
+          fi
+
+          cleanup_roles() {
+            if [ "$ADDED_PROVISIONER" = true ]; then
+              psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke edusentia_provisioner from $CURRENT_ROLE;" >/dev/null 2>&1 || true
+            fi
+            if [ "$ADDED_TEMPLATE_OWNER" = true ]; then
+              psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke $TEMPLATE_OWNER from $CURRENT_ROLE;" >/dev/null 2>&1 || true
+            fi
           }
-          trap cleanup_role EXIT
+          trap cleanup_roles EXIT
           BOOTSTRAP_DATABASE_URL="$PARITY_DATABASE_URL" TENANT_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" bash database/tenant-template/install.sh
-          cleanup_role
+          cleanup_roles
           trap - EXIT
 
       - name: Verify certified tenant template
