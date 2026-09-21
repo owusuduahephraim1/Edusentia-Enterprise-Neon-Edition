@@ -17,6 +17,7 @@ export interface Env {
   EMAIL_FROM?: string;
   BACKUP_ENCRYPTION_KEY?: string;
   BACKUP_SIGNING_SECRET?: string;
+  RESTORE_IMPORT_KEY?: string;
   BACKUP_MAX_OBJECTS?: string;
   BACKUP_MAX_BYTES?: string;
   OBJECTS: R2Bucket;

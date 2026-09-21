@@ -11,6 +11,7 @@ import { invokeCertifiedRpc } from "./certified-rpc";
 import { handleLegacyIdentityFunction } from "./identity-admin";
 import { handleTenantAuthRecovery } from "./recovery-compat";
 import { backupDownloadGateway, handleBackupTransfer, handleScheduledBackupCompat } from "./backup-service";
+import { cancelRestore, executeRestore, handleRestoreTransfer, prepareRestore } from "./restore-service";
 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
@@ -20,6 +21,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   const url=new URL(request.url), p=url.pathname, method=request.method.toUpperCase();
   const platformResponse=await platformRoute(request,env,requestId);if(platformResponse)return platformResponse;
   const backupTransfer=await handleBackupTransfer(request,env);if(backupTransfer)return backupTransfer;
+  const restoreTransfer=await handleRestoreTransfer(request,env);if(restoreTransfer)return restoreTransfer;
   if(method==="GET"&&p==="/api/health"){
     const sql=db(env);let database=false;try{const r=await sql`select 1 as ok`;database=Number((r[0] as any)?.ok)===1;}catch{}
     return json({ok:database,service:"edusentia-neon-api",version:env.PRODUCT_VERSION||"dev",database,storage:Boolean(env.OBJECTS),requestId},database?200:503);
@@ -68,6 +70,10 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   }
   if(method==="POST"&&p==="/api/compat/functions/scheduled-backup"){
     const body=await readJson<Record<string,unknown>>(request);
+    const action=String(body.action||"create");
+    if(action==="prepare_restore_import")return json(await prepareRestore(env,sql,ctx,body,url.origin),201);
+    if(action==="execute_restore_import")return json(await executeRestore(env,sql,ctx,body));
+    if(action==="cancel_restore_import")return json(await cancelRestore(env,sql,ctx,body));
     return json(await handleScheduledBackupCompat(env,sql,ctx,body));
   }
   if(method==="POST"&&p==="/api/compat/functions/backup-download-gateway"){
