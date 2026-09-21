@@ -311,8 +311,9 @@ test("parity browser harness is isolated from production configuration",()=>{
   assert.match(workflow,/select current_user/);
   assert.doesNotMatch(workflow,/schema_version from app\.release_identity/);
   assert.doesNotMatch(workflow,/platform\.release_gate\(\)/);
-  assert.match(workflow,/deploy_ready=false/);
-  assert.match(workflow,/reusing the already deployed isolated parity Worker for authenticated release testing/);
+  assert.match(workflow,/code_deploy_ready=false/);
+  assert.match(workflow,/secret_refresh_ready=false/);
+  assert.match(workflow,/Deploying current parity code while preserving the Worker's existing encrypted secrets/);
   assert.match(workflow,/Verify existing isolated parity deployment/);
   assert.match(workflow,/Existing parity Worker health passed/);
   assert.match(workflow,/service-role credentials are managed outside CI/);
