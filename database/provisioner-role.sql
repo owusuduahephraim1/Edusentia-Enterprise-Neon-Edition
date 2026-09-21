@@ -54,7 +54,24 @@ begin
 end
 $provisioner_membership$;
 
-revoke all on schema app,authn,academics,finance,storage,audit,services,documents,ops,platform
-  from edusentia_provisioner;
+do $provisioner_schema_privileges$
+declare
+  s text;
+begin
+  if current_user <> 'edusentia_provisioner' then
+    revoke all on schema app,authn,academics,finance,storage,audit,services,documents,ops,platform
+      from edusentia_provisioner;
+  else
+    foreach s in array array['app','authn','academics','finance','storage','audit','services','documents','ops','platform']
+    loop
+      if has_schema_privilege('edusentia_provisioner',s,'usage')
+         or has_schema_privilege('edusentia_provisioner',s,'create') then
+        raise exception 'edusentia_provisioner unexpectedly has application schema privileges on %',s
+          using errcode='42501';
+      end if;
+    end loop;
+  end if;
+end
+$provisioner_schema_privileges$;
 
 -- CI revalidation anchor: provisioner bootstrap must remain idempotent on persistent parity.
