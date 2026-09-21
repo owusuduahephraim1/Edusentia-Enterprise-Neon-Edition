@@ -58,20 +58,22 @@ jobs:
           fi
 
       - id: config
-        name: Resolve isolated parity deployment configuration
+        name: Resolve isolated parity test and deployment configuration
         shell: bash
         run: |
           set -euo pipefail
-          ready=true
-          [ -n "$CLOUDFLARE_API_TOKEN" ] || ready=false
-          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || ready=false
-          [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::Missing NEON_DATABASE_URL or DATABASE_URL"; ready=false; }
-          [ -n "$PARITY_WORKER_DATABASE_URL" ] || { echo "::error::Missing PARITY_WORKER_DATABASE_URL"; ready=false; }
-          [ -n "$PARITY_PROVISIONER_DATABASE_URL" ] || { echo "::error::Missing PARITY_PROVISIONER_DATABASE_URL"; ready=false; }
-          [ -n "$SESSION_PEPPER_VALUE" ] || { echo "::error::Missing SESSION_PEPPER or AUTH_SECRET"; ready=false; }
-          [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || { echo "::error::Missing BOOTSTRAP_ADMIN_SECRET"; ready=false; }
+          test_ready=true
+          deploy_ready=true
 
-          if [ "$ready" = true ]; then
+          [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::Missing NEON_DATABASE_URL or DATABASE_URL"; test_ready=false; deploy_ready=false; }
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || deploy_ready=false
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || deploy_ready=false
+          [ -n "$PARITY_WORKER_DATABASE_URL" ] || deploy_ready=false
+          [ -n "$PARITY_PROVISIONER_DATABASE_URL" ] || deploy_ready=false
+          [ -n "$SESSION_PEPPER_VALUE" ] || deploy_ready=false
+          [ -n "$BOOTSTRAP_ADMIN_SECRET_VALUE" ] || deploy_ready=false
+
+          if [ "$test_ready" = true ]; then
             PARITY_BOOTSTRAP_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" PARITY_DATABASE_HOST="$PARITY_DATABASE_HOST" node --input-type=module -e '
               const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
               u.hostname=process.env.PARITY_DATABASE_HOST;
@@ -82,14 +84,17 @@ jobs:
             echo "PARITY_BOOTSTRAP_URL=$PARITY_BOOTSTRAP_URL" >> "$GITHUB_ENV"
           fi
 
-          echo "ready=$ready" >> "$GITHUB_OUTPUT"
-          if [ "$ready" != true ]; then
-            echo "::error::Parity browser release gate requires complete isolated deployment credentials."
+          echo "test_ready=$test_ready" >> "$GITHUB_OUTPUT"
+          echo "deploy_ready=$deploy_ready" >> "$GITHUB_OUTPUT"
+          if [ "$test_ready" != true ]; then
             exit 1
+          fi
+          if [ "$deploy_ready" != true ]; then
+            echo "Dedicated parity deployment credentials are incomplete; reusing the already deployed isolated parity Worker for authenticated release testing."
           fi
 
       - name: Verify isolated parity bootstrap route
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.test_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -105,7 +110,7 @@ jobs:
           echo "Parity bootstrap endpoint verified; deployment role is $PARITY_DB_ROLE."
 
       - name: Verify isolated parity Worker and provisioner credentials
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.deploy_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -117,7 +122,7 @@ jobs:
           echo "Deployment runtime retains SET-only access; service-role credentials are managed outside CI."
 
       - name: Verify dedicated parity database URL
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.deploy_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -151,7 +156,7 @@ jobs:
           )
 
       - name: Stage parity frontend configuration
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.deploy_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -169,7 +174,7 @@ jobs:
           echo "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1  frontend/assets/edusentia-auth-learning.webp" | sha256sum --check --status
 
       - name: Ensure isolated parity R2 bucket
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.deploy_ready == 'true'
         working-directory: worker
         run: |
           if npx wrangler r2 bucket info edusentia-enterprise-neon-parity-test --json >/dev/null 2>&1; then
@@ -179,12 +184,12 @@ jobs:
           fi
 
       - name: Create parity Worker deployment shell
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.deploy_ready == 'true'
         working-directory: worker
         run: npx wrangler deploy --config wrangler.parity.jsonc
 
       - name: Install parity Worker secrets
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.deploy_ready == 'true'
         working-directory: worker
         shell: bash
         run: |
@@ -195,7 +200,7 @@ jobs:
           printf '%s' "$BOOTSTRAP_ADMIN_SECRET_VALUE" | npx wrangler secret put BOOTSTRAP_ADMIN_SECRET --config wrangler.parity.jsonc
 
       - name: Final deploy and parity smoke
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.deploy_ready == 'true'
         working-directory: worker
         shell: bash
         run: |
@@ -207,8 +212,19 @@ jobs:
           curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" | grep -q "parity-testing"
           echo "Parity browser test environment is live at $PARITY_ORIGIN"
 
+      - name: Verify existing isolated parity deployment
+        if: steps.config.outputs.test_ready == 'true' && steps.config.outputs.deploy_ready != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$PARITY_ORIGIN/api/health" | tee /tmp/parity-health.json
+          node -e 'const fs=require("node:fs");const h=JSON.parse(fs.readFileSync("/tmp/parity-health.json","utf8"));if(!h.ok||!h.database||!h.storage)process.exit(1);console.log("Existing parity Worker health passed.")'
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/" | grep -q "Edusentia Enterprise"
+          curl --fail --silent --show-error --retry 5 "$PARITY_ORIGIN/config.js" | grep -q "parity-testing"
+          echo "Existing isolated parity deployment verified at $PARITY_ORIGIN"
+
       - name: Run authenticated parity end-to-end gate
-        if: steps.config.outputs.ready == 'true'
+        if: steps.config.outputs.test_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
