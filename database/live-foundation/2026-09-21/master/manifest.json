@@ -1,0 +1,27 @@
+{
+  "snapshotDate": "2026-09-21",
+  "source": "live Supabase SaaS master (read-only catalog export)",
+  "dataIncluded": false,
+  "secretsIncluded": false,
+  "counts": {
+    "tables": 102,
+    "views": 2,
+    "sequences": 24,
+    "functions": 369,
+    "policies": 247,
+    "triggers": 216,
+    "indexes": 310,
+    "constraints": 584,
+    "enums": 3
+  },
+  "canonicalHashes": {
+    "columnsNormalized": "2e7aaab63ad114bacc5477c49a55ce74",
+    "constraints": "de19216d8334e8057f353b106b10ec63",
+    "indexes": "7b02627ed535f03460eb5acc2f8cde91",
+    "functions": "e9e862aa4a3e4ad88c302c6e28b3cde9",
+    "views": "d30b1213cf934af4c9bfa745f7f90fa6",
+    "policies": "4796d372fc2704f877790d6783aef812",
+    "triggers": "615d6fdba4373f878a66241ea6d02af3",
+    "rls": "ee483b6cee414e2847f256943e69096c"
+  }
+}
