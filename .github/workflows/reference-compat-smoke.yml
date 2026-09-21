@@ -163,6 +163,9 @@ jobs:
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql
           psql "$URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql
 
+          # Trace only post-install assertions. GitHub masks the database URL while
+          # preserving the exact assertion that fails.
+          set -x
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='students'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from information_schema.tables where table_schema='public' and table_name='profiles'")" = "1"
           test "$(psql "$URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
@@ -198,6 +201,7 @@ jobs:
           test "$(psql "$URL" -Atc "select position('public.digest' in pg_get_functiondef(p.oid))>0 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='verify_transcript' limit 1")" = "t"
           test "$(psql "$URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 
+          set +x
           echo "::group::Disposable certified RPC inventory"
           TARGET_DATABASE_URL="$URL" node scripts/reference-surface-inventory.mjs | tee /tmp/disposable-reference-surface.json
           node - <<'NODE'
