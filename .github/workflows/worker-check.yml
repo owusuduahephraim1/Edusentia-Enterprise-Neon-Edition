@@ -1,3 +1,4 @@
+# final production candidate gate: r42-20260921
 name: Worker Quality Gate
 on:
   pull_request: {paths: ["frontend/**","worker/**","database/**","scripts/**","tests/**",".github/workflows/worker-check.yml"]}
