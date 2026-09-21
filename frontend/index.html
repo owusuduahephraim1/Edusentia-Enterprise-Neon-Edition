@@ -5,7 +5,7 @@
 <title>Edusentia Enterprise Neon Edition</title>
 <link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="r37-final-ui.css"><link rel="stylesheet" href="neon-edition.css">
+<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="r37-final-ui.css"><link rel="stylesheet" href="registration-form.css"><link rel="stylesheet" href="neon-edition.css">
 </head><body>
 <a class="skip-link" href="#content">Skip to main content</a>
 <div id="loader" class="loader-screen" aria-live="polite"><img data-school-logo src="assets/edusentia-mark.svg" alt="Edusentia"><span class="spinner"></span></div>
@@ -15,18 +15,21 @@
   <aside class="auth-journey" aria-labelledby="authJourneyTitle"><p id="authJourneyTitle" class="auth-journey-heading">From operations to outcomes</p><ol><li><span class="auth-journey-icon" aria-hidden="true">▦</span><strong>Manage</strong></li><li><span class="auth-journey-icon" aria-hidden="true">◇</span><strong>Teach</strong></li><li><span class="auth-journey-icon" aria-hidden="true">✓</span><strong>Assess</strong></li><li><span class="auth-journey-icon" aria-hidden="true">▥</span><strong>Report</strong></li></ol></aside>
   <aside class="auth-story" aria-labelledby="authStoryTitle"><p class="auth-story-kicker">The Edusentia promise</p><h2 id="authStoryTitle">Education, Intelligently Connected.</h2><p class="auth-story-summary">One secure platform connecting school operations, educators, learners, families, and better decisions.</p></aside>
   <section class="auth-card">
-    <div class="brand-lockup"><img src="assets/edusentia-mark.svg" alt="Edusentia"><div><h1 id="loginTitle">Edusentia Enterprise</h1><p>Secure Neon Edition sign in</p></div></div>
+    <div class="brand-lockup"><img id="authBrandLogo" src="assets/edusentia-mark.svg" alt="Edusentia"><div><h1 id="authBrandName">Edusentia</h1><p id="authBrandTagline">The Academic Operations Platform</p></div></div>
     <form id="loginForm" class="form-stack">
-      <label class="field" for="tenantCode"><span>School / institution code</span><input id="tenantCode" name="tenantCode" autocomplete="organization" required></label>
+      <input id="tenantCode" name="tenantCode" type="hidden">
+      <label id="tenantCodeField" class="field hidden" for="tenantCodeFallback"><span>School / institution code</span><input id="tenantCodeFallback" autocomplete="organization" inputmode="text"></label>
       <label class="field" for="email"><span>Email address</span><input id="email" name="email" type="email" autocomplete="username" required></label>
-      <label class="field" for="password"><span>Password</span><input id="password" name="password" type="password" autocomplete="current-password" required></label>
+      <label class="field" for="password"><span>Password</span><span class="password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" required><button id="togglePassword" class="icon-button password-toggle" type="button" aria-label="Show password">◉</button></span></label>
       <div id="turnstileWidget" class="turnstile-slot" aria-label="Human verification"></div>
       <button class="button primary full" type="submit">Sign in</button>
+      <button id="forgotPasswordButton" class="auth-link-button" type="button">Forgot password?</button>
+      <button id="registerSchoolButton" class="button ghost full auth-register-button" type="button">Register new school</button>
+      <nav class="auth-footer-links" aria-label="Edusentia information"><a href="#about">About</a><a href="#support">Support</a><a href="#privacy">Privacy</a><a href="#terms">Terms</a></nav>
     </form>
     <section id="mfaPanel" class="hidden" aria-labelledby="mfaTitle"><h2 id="mfaTitle">Two-step verification</h2><p id="mfaHelp" class="muted"></p><div id="mfaSetup" class="mfa-setup hidden"><p>Add this account to your authenticator app using the setup key:</p><code id="mfaSecret"></code><p class="auth-note">Use a time-based (TOTP), 6-digit, 30-second account.</p></div><form id="mfaForm" class="form-stack"><label class="field" for="mfaCode"><span>Authenticator or recovery code</span><input id="mfaCode" name="mfaCode" autocomplete="one-time-code" inputmode="numeric" required></label><button class="button primary full" type="submit">Verify and continue</button><button id="mfaBack" class="button ghost full" type="button">Back to sign in</button></form></section>
     <section id="recoveryPanel" class="hidden" aria-labelledby="recoveryTitle"><h2 id="recoveryTitle">Save your recovery codes</h2><p class="muted">Store these one-time codes somewhere secure. They will not be shown again.</p><pre id="recoveryCodes" class="recovery-codes"></pre><button id="recoveryContinue" class="button primary full" type="button">I saved these codes</button></section>
     <p id="authMessage" class="form-message hidden" role="alert" aria-live="polite"></p>
-    <nav class="auth-public-links" aria-label="Edusentia public access"><a href="register.html">Register school</a><a href="platform-admin.html">Platform administration</a></nav>
   </section>
 </main>
 
@@ -34,6 +37,53 @@
   <aside id="sidebar" class="sidebar"><div class="sidebar-brand"><img id="brandLogo" src="assets/edusentia-mark.svg" alt="Edusentia"><div><strong id="brandName">Edusentia Enterprise</strong><small>Enterprise Administration</small></div></div><nav id="mainNav" class="nav-list" aria-label="Primary"></nav><div class="sidebar-foot"><div class="profile-chip"><span id="userAvatar" class="avatar">E</span><span class="profile-copy"><strong id="userName">User</strong><small id="userRole">Member</small></span><button id="logoutButton" class="icon-button inverse" type="button" aria-label="Sign out">↪</button></div></div></aside>
   <section class="workspace"><header class="topbar"><div class="topbar-title"><button id="menuButton" class="icon-button mobile" type="button" aria-label="Open menu">☰</button><div><h2 id="pageTitle">Dashboard</h2><p id="pageSubtitle">Academic performance overview</p></div></div><div class="topbar-actions"><button id="notificationButton" class="icon-button badge-button" type="button" aria-label="Notifications"><span aria-hidden="true">◆</span><b id="notificationBadge" class="badge hidden">0</b></button><div id="syncIndicator" class="sync-pill pending"><span class="sync-dot"></span><span id="syncLabel">Connecting</span></div><button id="refreshButton" class="icon-button" type="button" aria-label="Refresh">↻</button></div></header><main id="content" class="content" tabindex="-1"></main></section>
 </div>
+
+<dialog id="registrationDialog" class="modal" aria-labelledby="registrationTitle">
+  <div class="modal-frame registration-frame" role="document">
+    <header class="modal-header registration-header">
+      <div><span class="registration-kicker">New school onboarding</span><h3 id="registrationTitle">Register your school</h3><p>Provide the school and primary contact details used for approval and workspace setup.</p></div>
+      <button id="registrationClose" class="icon-button" type="button" aria-label="Close registration">×</button>
+    </header>
+    <form id="registrationForm" class="registration-form">
+      <section id="registrationBody" class="registration-body">
+        <div class="registration-plan-row"><div><strong>Initial licence plan</strong><small>Every approved school begins on Starter and can upgrade securely later.</small></div><span class="registration-plan-chip">Starter</span></div>
+        <fieldset class="registration-fieldset"><legend><span class="registration-step">01</span><span><strong>School details</strong><small>The official identity of the school being registered.</small></span></legend>
+          <div class="registration-grid">
+            <label class="field registration-wide"><span>School name</span><input name="schoolName" required></label>
+            <label class="field registration-wide"><span>Institution type <small>Choose Basic / Junior High School or Senior High School.</small></span><select name="institutionType" required><option value="basic_jhs">Basic / Junior High School</option><option value="senior_high">Senior High School</option></select></label>
+          </div>
+        </fieldset>
+        <fieldset class="registration-fieldset"><legend><span class="registration-step">02</span><span><strong>Primary contact</strong></span></legend>
+          <div class="registration-grid">
+            <label class="field"><span>Contact name</span><input name="contactName" required></label>
+            <label class="field"><span>Contact email</span><input name="contactEmail" type="email" required></label>
+            <label class="field"><span>Contact phone</span><input name="contactPhone"></label>
+            <label class="field"><span>Country (optional)</span><input name="country"></label>
+          </div>
+        </fieldset>
+        <div class="registration-verification"><div><strong>Security verification</strong><span>Complete the verification before submitting your registration.</span></div><div id="registrationTurnstile" aria-label="Registration human verification"></div></div>
+        <p id="registrationMessage" class="form-message" role="alert" aria-live="polite"></p>
+      </section>
+      <footer class="registration-footer"><button id="registrationCancel" class="button ghost" type="button">Cancel</button><button class="button primary" type="submit">Submit registration</button></footer>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="accessRecoveryDialog" class="modal small" aria-labelledby="accessRecoveryTitle">
+  <div class="modal-frame" role="document">
+    <header class="modal-header"><div><h3 id="accessRecoveryTitle">Recover school access</h3><p>Submit a protected recovery request for the school administrator account.</p></div><button id="accessRecoveryClose" class="icon-button" type="button" aria-label="Close recovery">×</button></header>
+    <form id="accessRecoveryForm">
+      <section class="modal-body form-stack">
+        <label class="field"><span>School code or administrator email</span><input name="identifier" required></label>
+        <label class="field"><span>Registered primary contact email</span><input name="contactEmail" type="email" required></label>
+        <label class="field"><span>Recovery type</span><select name="recoveryType"><option value="password">Password</option><option value="mfa">MFA</option><option value="both">Password and MFA</option></select></label>
+        <div id="accessRecoveryTurnstile" class="turnstile-slot" aria-label="Recovery human verification"></div>
+        <p id="accessRecoveryMessage" class="form-message" role="alert" aria-live="polite"></p>
+      </section>
+      <footer class="modal-footer"><button id="accessRecoveryCancel" class="button ghost" type="button">Cancel</button><button class="button primary" type="submit">Submit recovery request</button></footer>
+    </form>
+  </div>
+</dialog>
 
 <dialog id="modal" class="modal"><div class="modal-frame" role="document"><header class="modal-header"><div><h3 id="modalTitle"></h3><p id="modalSubtitle"></p></div><button id="modalClose" class="icon-button" type="button" aria-label="Close">×</button></header><section id="modalBody" class="modal-body"></section><footer id="modalFooter" class="modal-footer"></footer></div></dialog>
 <main id="fatalView" class="standalone-view hidden"><section class="auth-card"><div class="brand-lockup compact"><img src="assets/edusentia-mark.svg" alt="Edusentia"><div><h1>Application unavailable</h1><p>A secure service could not be initialized.</p></div></div></section></main>
