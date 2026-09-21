@@ -34,3 +34,32 @@ grant execute on function platform.issue_admin_setup_token(uuid,uuid,text,timest
 grant select,insert,update,delete on platform.login_directory,platform.tenant_admin_handoff_tokens to edusentia_worker_runtime;
 grant select on platform.plan_authorizations,platform.plan_authorization_attempts,platform.release_catalog,platform.tenant_releases,platform.tenant_release_migrations,platform.tenant_release_worker_functions,platform.release_gate_runs,platform.health_display_state,platform.school_deletion_jobs to edusentia_worker_runtime;
 grant execute on function platform.mark_isolated_tenant_ready(uuid,uuid,text,text,text),platform.resolve_login_route(text,text),platform.issue_tenant_admin_handoff(uuid,uuid,text,text,timestamptz,uuid),platform.inspect_tenant_admin_handoff(text),platform.consume_tenant_admin_handoff(text),platform.claim_access_recovery(uuid,uuid,text),platform.complete_access_recovery(uuid,uuid,text) to edusentia_worker_runtime;
+
+
+-- Deployment runtime may assume the narrower Worker role only when rotating
+-- Worker credentials. It must not inherit Worker privileges or administer
+-- role membership in steady state.
+do $worker_runtime_membership$
+begin
+  if not exists(
+    select 1
+    from pg_auth_members m
+    join pg_roles granted on granted.oid=m.roleid
+    join pg_roles member_role on member_role.oid=m.member
+    where granted.rolname='edusentia_worker_runtime'
+      and member_role.rolname='edusentia_runtime'
+      and m.set_option
+      and not m.inherit_option
+      and not m.admin_option
+  ) then
+    begin
+      execute 'grant edusentia_worker_runtime to edusentia_runtime with admin false, inherit false, set true';
+    exception
+      when insufficient_privilege then
+        raise exception 'edusentia_worker_runtime membership requires one-time database-owner bootstrap'
+          using errcode='42501',
+                hint='Grant edusentia_worker_runtime to edusentia_runtime with ADMIN FALSE, INHERIT FALSE, SET TRUE using the Neon database owner, then rerun deployment.';
+    end;
+  end if;
+end
+$worker_runtime_membership$;
