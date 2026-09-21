@@ -667,3 +667,19 @@ test("academic certified browser ACL reconciliation stays explicit",()=>{
     "generate_subject_code(text,uuid)"
   ]) assert.ok(sql.includes("grant execute on function public."+signature+" to edusentia_worker_runtime;"),signature+" Worker grant missing");
 });
+
+test("certificate settings compatibility hotfix completes the console schema",()=>{
+  const sql=read("database/reference-compat/0048b_certified_certificate_settings_compat.sql");
+  const template=read("database/tenant-template/install.sh");
+  const lifecycle=read("database/synthetic-school-lifecycle-smoke.sh");
+  const compat=read(".github/workflows/reference-compat-smoke.yml");
+  const updateTemplate=read("scripts/update-parity-tenant-template.sh");
+  const updateReference=read("scripts/update-parity-reference-tenant.sh");
+  assert.match(sql,/certificate_completion_class_id uuid/i);
+  assert.match(sql,/certificate_footer_text text[\s\S]*Issued under the authority of the school administration/i);
+  assert.match(sql,/school_settings_certificate_completion_class_id_fkey/i);
+  assert.match(sql,/references public\.classes\(id\)[\s\S]*on delete set null/i);
+  for(const source of [template,lifecycle,compat,updateTemplate,updateReference]){
+    assert.match(source,/0048b_certified_certificate_settings_compat\.sql/);
+  }
+});
