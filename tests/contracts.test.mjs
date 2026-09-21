@@ -915,3 +915,40 @@ test("certified 0048h finalizes production identity across all tenant install pa
   ]) assert.match(read(file),/0048h_certified_release_identity/);
   assert.match(read("scripts/final-parity-database-gates.sh"),/neon-v1\.0\.0-r42/);
 });
+
+
+test("native package distribution stays Neon/R2 only",()=>{
+  const service=read("worker/src/platform-package-service.ts");
+  const routes=read("worker/src/platform-routes.ts");
+  const schema=read("database/migrations/0025b_platform_package_distribution.sql");
+  const client=read("frontend/platform-api-client.js");
+  const html=read("frontend/platform-admin.html");
+  const ui=read("frontend/platform-admin.js");
+  for(const source of [service,routes,schema,client,html,ui]) assert.doesNotMatch(source,/@supabase\/supabase-js|supabase\.co\/functions\/v1|SUPABASE_URL|storage\.objects/i);
+  assert.match(service,/cloudflare-r2/);
+  assert.match(service,/ECDSA/);
+  assert.match(service,/P-256/);
+  assert.match(service,/AES-GCM/);
+  assert.match(service,/private_jwk_ciphertext/);
+  assert.match(service,/EDUSENTIA_NEON_PACKAGE_SIGNATURE\.json/);
+  assert.match(service,/package\.artifact\.download_authorized/);
+  assert.match(schema,/platform\.package_signing_keys/);
+  assert.match(schema,/platform\.package_templates/);
+  assert.match(schema,/platform\.package_artifacts/);
+  assert.match(schema,/platform\.package_reconciliation/);
+  assert.match(client,/packageStatus/);
+  assert.match(client,/packageAction/);
+  assert.match(html,/data-view="packages"/);
+  assert.match(ui,/package-template-upload/);
+  assert.match(ui,/package-generate/);
+  assert.match(ui,/package-download/);
+  assert.match(ui,/package-maintain/);
+});
+
+test("additive package migration preserves certified control schema 0025",()=>{
+  const migration=read("database/migrations/0025b_platform_package_distribution.sql");
+  const installer=read("database/install-master.sh");
+  assert.doesNotMatch(migration,/set schema_version='0025b'|schema_version\s*=\s*'0025b'/);
+  assert.match(migration,/0025b_platform_package_distribution/);
+  assert.match(installer,/grep -oE '\^\[0-9\]\+'/);
+});
