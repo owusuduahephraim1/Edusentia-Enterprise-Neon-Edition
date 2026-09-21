@@ -78,7 +78,7 @@ jobs:
           fi
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PARITY_TEMPLATE_DATABASE'")" = "edusentia_provisioner"
 
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections true;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections true;"
           TEMPLATE_URL="$(PARITY_DATABASE_URL="$PARITY_DATABASE_URL" PARITY_TEMPLATE_DATABASE="$PARITY_TEMPLATE_DATABASE" node --input-type=module -e '
             const u=new URL(process.env.PARITY_DATABASE_URL);
             u.pathname="/"+process.env.PARITY_TEMPLATE_DATABASE;
@@ -94,19 +94,19 @@ jobs:
           test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
           test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
 
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$PARITY_TEMPLATE_DATABASE' and pid<>pg_backend_pid();" >/dev/null
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEMPLATE_DATABASE\" from public;"
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_runtime;"
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_worker_runtime;"
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_provisioner;"
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$PARITY_TEMPLATE_DATABASE' and pid<>pg_backend_pid();" >/dev/null
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "revoke connect on database \"$PARITY_TEMPLATE_DATABASE\" from public;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_runtime;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_worker_runtime;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "grant connect on database \"$PARITY_TEMPLATE_DATABASE\" to edusentia_provisioner;"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "alter database \"$PARITY_TEMPLATE_DATABASE\" with allow_connections false;"
 
           PROBE_DB="edusentia_provisioner_probe_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
           PROBE_DB="${PROBE_DB//-/_}"; PROBE_DB="${PROBE_DB:0:60}"
-          cleanup_probe(){ PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true; }
+          cleanup_probe(){ psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "drop database if exists \"$PROBE_DB\" with (force);" >/dev/null 2>&1 || true; }
           trap cleanup_probe EXIT
           cleanup_probe
-          PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PROBE_DB\" template \"$PARITY_TEMPLATE_DATABASE\";"
+          psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "create database \"$PROBE_DB\" template \"$PARITY_TEMPLATE_DATABASE\";"
           test "$(psql "$PARITY_DATABASE_URL" -Atc "select pg_get_userbyid(datdba) from pg_database where datname='$PROBE_DB'")" = "edusentia_provisioner"
           cleanup_probe
           trap - EXIT
@@ -117,7 +117,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$(psql "$PARITY_DATABASE_URL" -Atc "select count(*) from pg_database where datname='$PARITY_TEST_TENANT_DATABASE'")" = "0" ]; then
-            PGOPTIONS='-c role=edusentia_provisioner' psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "create database \"$PARITY_TEST_TENANT_DATABASE\" template \"$PARITY_TEMPLATE_DATABASE\";"
+            psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_provisioner;" -c "create database \"$PARITY_TEST_TENANT_DATABASE\" template \"$PARITY_TEMPLATE_DATABASE\";"
           fi
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "revoke connect on database \"$PARITY_TEST_TENANT_DATABASE\" from public;"
           psql "$PARITY_DATABASE_URL" -v ON_ERROR_STOP=1 -c "grant connect on database \"$PARITY_TEST_TENANT_DATABASE\" to edusentia_runtime;"
