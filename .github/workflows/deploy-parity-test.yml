@@ -191,6 +191,14 @@ jobs:
             '
           )
 
+      - name: Inventory certified reference RPC surface on live tenant
+        if: steps.config.outputs.secret_refresh_ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/reference-surface-inventory.mjs | tee /tmp/reference-surface-inventory.json
+          node -e 'const fs=require("node:fs");const r=JSON.parse(fs.readFileSync("/tmp/reference-surface-inventory.json","utf8").trim().split(/\n/).at(-1));console.log("Reference RPC inventory: "+r.executableReferenceRpcCount+"/"+r.referenceRpcCount+" executable; "+r.missingCount+" missing; "+r.blockedCount+" blocked.");'
+
       - name: Verify provisioner wrapper can create and remove an isolated database
         if: steps.config.outputs.secret_refresh_ready == 'true'
         shell: bash
