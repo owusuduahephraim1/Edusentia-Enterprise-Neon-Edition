@@ -24,8 +24,8 @@ test "$(psql "$PARITY_URL" -Atc "select session_user||'|'||current_user||'|'||cu
 test "$(psql "$PARITY_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_provisioner','set')")" = "t"
 test "$(psql "$PARITY_URL" -Atc "select pg_has_role('edusentia_runtime','edusentia_worker_runtime','set')")" = "t"
 
-# Update and relock the non-primary tenant template.
-BOOTSTRAP_DATABASE_URL="$PARITY_URL" TENANT_TEMPLATE_DATABASE="$TEMPLATE_DB" bash database/tenant-template/install.sh
+# Update and relock the non-primary tenant template incrementally.
+BOOTSTRAP_DATABASE_URL="$PARITY_URL" bash scripts/update-parity-tenant-template.sh
 
 # Update the persistent non-primary reference tenant only.
 BOOTSTRAP_DATABASE_URL="$PARITY_URL" PARITY_REFERENCE_DATABASE="$REFERENCE_DB" bash scripts/update-parity-reference-tenant.sh
