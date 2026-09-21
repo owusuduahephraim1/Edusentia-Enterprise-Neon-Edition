@@ -157,9 +157,8 @@ jobs:
             environment: "parity-testing"
           });
           EOF
-          mkdir -p frontend/assets
-          curl --fail --silent --show-error --location             "https://raw.githubusercontent.com/nduah385/Edusentia-Enterprise/a181e18e0ca044db756193209b5b089cd03efb0f/assets/edusentia-auth-learning.webp"             -o frontend/assets/edusentia-auth-learning.webp
-          test "$(sha256sum frontend/assets/edusentia-auth-learning.webp | awk '{print $1}')" = "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1"
+          test -f frontend/assets/edusentia-auth-learning.webp
+          test "$(sha256sum frontend/assets/edusentia-auth-learning.webp | awk '{print test "$(sha256sum frontend/assets/edusentia-auth-learning.webp | awk '{print $1}')" = "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1"}')" = "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1"
 
       - name: Ensure isolated parity R2 bucket
         if: steps.config.outputs.ready == 'true'
