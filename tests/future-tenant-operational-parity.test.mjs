@@ -54,6 +54,8 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(grants,/edusentia_worker_runtime/);
   assert.match(grants,/student_services_%/);
   assert.match(grants,/finance_%/);
+  assert.match(installer,/reconcile_once_recorded "0049v_live_plan_feature_parity"/);
+  assert.doesNotMatch(installer,/run_once "0049v_live_plan_feature_parity"/);
   assert.equal(installer.includes("\\nrun_once"),false,"installer must not contain a literal backslash-n escape between migration calls");
   assert.equal(template.includes("\\ntest"),false,"tenant template must not contain a literal backslash-n escape between validation checks");
   const upgrader=read("scripts/update-isolated-operational-tenants.sh");
