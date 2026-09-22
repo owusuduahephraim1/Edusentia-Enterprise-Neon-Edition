@@ -73,6 +73,7 @@ run_reference_once "0049t_student_portal" "$BLUEPRINT/student_portal_v1.sql"
 run_reference_once "0049u_student_portal_report_attendance_fix" "$BLUEPRINT/student_portal_v2_report_attendance_fix.sql"
 
 reconcile_once_recorded "0049v_live_plan_feature_parity" "$DIR/0049v_live_plan_feature_parity.sql"
+run_once "0049w_school_identity_logo_parity" "$DIR/0049w_school_identity_logo_parity.sql"
 run_once "0049z_operational_runtime_grants" "$DIR/0049z_operational_runtime_grants.sql"
 
 test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE') and (p.proname like 'finance_%' or p.proname like 'hr_%' or p.proname like 'student_services_%' or p.proname like 'admissions_%' or p.proname like 'discipline_%' or p.proname like 'welfare_%' or p.proname like 'health_%' or p.proname like 'communications_%' or p.proname like 'hostel_%' or p.proname like 'alumni_%' or p.proname in ('get_my_student_portal','get_my_student_portal_v2'))")" -ge 85
