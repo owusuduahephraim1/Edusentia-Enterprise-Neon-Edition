@@ -31,9 +31,9 @@ const expectedPlans={
   }
 };
 
-function quotedJsonAfterPlan(code){
+function quotedJsonAfterPlan(code,source=sql){
   const marker="'"+code+"'";
-  const start=sql.indexOf(marker);
+  const start=source.indexOf(marker);
   assert.notEqual(start,-1,"missing "+code+" plan");
   const segment=source.slice(start,start+3500);
   const matches=[...segment.matchAll(/'(\{[^']*\})'::jsonb/g)].map(m=>JSON.parse(m[1]));
