@@ -48,8 +48,8 @@
       finally{button.disabled=false;}
     };
   }
-  async function archivePrincipal(id){if(!confirm("Remove this Principal record?"))return;try{await certified("archive_headteacher",{target_headteacher_id:id,reason_text:"Principal removed from active records"});await loadAdvancedPrincipals();}catch(error){alert(friendly(error));}}
-  async function restorePrincipal(id){try{await certified("restore_headteacher",{target_headteacher_id:id,reason_text:"Principal restored to active records"});await loadAdvancedPrincipals();}catch(error){alert(friendly(error));}}
+  async function archivePrincipal(id){if(!confirm("Remove this Principal record?"))return;try{const removed=await certified("archive_headteacher",{target_headteacher_id:id,reason_text:"Principal removed from active records"});if(removed!==true)throw new Error("The remove operation did not complete.");await loadAdvancedPrincipals();}catch(error){alert(friendly(error));}}
+  async function restorePrincipal(id){try{const restored=await certified("restore_headteacher",{target_headteacher_id:id,reason_text:"Principal restored to active records"});if(restored!==true)throw new Error("The restore operation did not complete.");await loadAdvancedPrincipals();}catch(error){alert(friendly(error));}}
 
   async function renderMySignature(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>My Principal Signature</h3><p>Manage the authenticated Principal signature used by protected report workflows.</p></div></div>${loading("Loading signature state")}`;

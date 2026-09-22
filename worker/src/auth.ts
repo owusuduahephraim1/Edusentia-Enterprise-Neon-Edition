@@ -9,6 +9,7 @@ const COOKIE_DEFAULT="__Host-edusentia_session";
 export function sessionCookieName(env:Env){return env.SESSION_COOKIE_NAME||COOKIE_DEFAULT;}
 export function clearCookie(env:Env){return `${sessionCookieName(env)}=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0`;}
 export function setCookie(env:Env,token:string){const ttl=Math.max(300,Number(env.SESSION_TTL_SECONDS||28800));return `${sessionCookieName(env)}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${ttl}`;}
+function privilegedRoleRequiresMfa(role:unknown){return ["system_admin","platform_super_admin"].includes(String(role||"").trim());}
 
 async function routeForLogin(env:Env,email:string,tenantCode:string){
   const master=db(env);
@@ -43,9 +44,11 @@ export async function login(env:Env,emailRaw:string,password:string,tenantCodeRa
     throw Object.assign(new Error("The email or password is incorrect"),{code:"invalid_credentials",status:401});
   }
   if(!row.mfa_required){
-    const issued=await issueSession(env,sql,row,1);
-    await sql`select audit.record_auth_event(${row.tenant_id}::uuid,${row.user_id}::uuid,'auth.login.success','{"aal":1}'::jsonb)`;
-    return {mfaRequired:false,...issued};
+    if(!privilegedRoleRequiresMfa(row.role)){
+      const issued=await issueSession(env,sql,row,1);
+      await sql`select audit.record_auth_event(${row.tenant_id}::uuid,${row.user_id}::uuid,'auth.login.success','{"aal":1}'::jsonb)`;
+      return {mfaRequired:false,...issued};
+    }
   }
 
   await sql`update authn.login_challenges set used_at=coalesce(used_at,now()) where user_id=${row.user_id}::uuid and tenant_id=${row.tenant_id}::uuid and used_at is null`;
@@ -152,8 +155,9 @@ export async function authenticate(request:Request,env:Env):Promise<SessionConte
        limit 1`
   ]);
   const context=contextRows[0] as any;
-  if(!context||context.status!=="active"||(context.mfa_required&&Number(session.assurance_level)<2))return null;
-  return {sessionId:session.session_id,userId:session.user_id,tenantId:session.tenant_id,tenantCode:context.tenant_code,tenantName:context.tenant_name,databaseName:String(route.database_name),role:context.role,assuranceLevel:Number(session.assurance_level),email:session.email,displayName:session.display_name};
+  if(!context||context.status!=="active"||(context.mfa_required&&Number(session.assurance_level)<2)||(privilegedRoleRequiresMfa(context.role)&&Number(session.assurance_level)<2))return null;
+  const assuranceLevel=Number(session.assurance_level);
+  return {sessionId:session.session_id,userId:session.user_id,tenantId:session.tenant_id,tenantCode:context.tenant_code,tenantName:context.tenant_name,databaseName:String(route.database_name),role:context.role,assuranceLevel,email:session.email,displayName:session.display_name};
 }
 export async function logout(request:Request,env:Env){
   const token=cookieValue(request,sessionCookieName(env)),tenantCode=tokenTenantCode(token||"");if(!token||!tenantCode)return;
