@@ -45,7 +45,7 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/count\(distinct p\.proname\)[\s\S]*258/);
   for(const migration of [
-    "0049a_operational_finance_reference.sql","0049v_live_plan_feature_parity.sql","0049w_school_identity_logo_parity.sql","0049x_class_scoped_student_admission_numbers.sql","hr_staff_management_v1.sql",
+    "0049a_operational_finance_reference.sql","0049v_live_plan_feature_parity.sql","0049w_school_identity_logo_parity.sql","0049x_class_scoped_student_admission_numbers.sql","0049y_audit_permanent_reset.sql","hr_staff_management_v1.sql",
     "student_services_foundation_v1.sql","admissions_applicant_management_v1.sql",
     "discipline_welfare_management_v1.sql","health_clinic_management_v1.sql",
     "communications_messaging_centre_v1.sql","hostel_boarding_management_v1.sql",
@@ -59,6 +59,14 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.doesNotMatch(installer,/run_once "0049w_school_identity_logo_parity"/);
   assert.match(installer,/reconcile_once_recorded "0049x_class_scoped_student_admission_numbers"/);
   assert.doesNotMatch(installer,/run_once "0049x_class_scoped_student_admission_numbers"/);
+  assert.match(installer,/reconcile_once_recorded "0049y_audit_permanent_reset"/);
+  assert.doesNotMatch(installer,/run_once "0049y_audit_permanent_reset"/);
+  const auditReset=read("database/reference-compat/0049y_audit_permanent_reset.sql");
+  assert.match(auditReset,/RESET ACTIVE AUDIT/);
+  assert.match(auditReset,/DELETE ALL AUDIT ARCHIVES/);
+  assert.match(auditReset,/RESET ALL AUDIT HISTORY/);
+  assert.match(auditReset,/Only the System Administrator can permanently reset audit history/);
+  assert.match(auditReset,/require_sensitive_access/);
   const admissionParity=read("database/reference-compat/0049x_class_scoped_student_admission_numbers.sql");
   assert.match(admissionParity,/NIS000001-STU-BS3001/);
   assert.match(admissionParity,/generate_class_student_identifier/);
