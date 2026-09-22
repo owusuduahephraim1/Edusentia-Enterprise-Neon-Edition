@@ -1014,3 +1014,64 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(max-width:760px){
   .history-scroll,.backup-history,.class-progress-scroll,.correction-history-scroll,.recovery-history-scroll,.restore-history-scroll{max-height:55vh}
 }
+
+
+/* v10.2 compact bounded tenant lists */
+#content .grid.two{align-items:start}
+#content .grid.two>.panel,
+#content .grid.two>.grid{align-self:start;height:auto;min-height:0}
+#content .panel>.table-wrap,
+#content .bounded-scroll,
+#content .stack-list,
+#content .history-scroll,
+#content .audit-scroll,
+#studentResults .table-wrap,
+#teacherResults .table-wrap,
+#headteacherResults .table-wrap,
+#userResults .table-wrap,
+#reportResults .table-wrap,
+#auditRows .table-wrap,
+.modal-body .table-wrap{
+  max-height:clamp(220px,40vh,380px);
+  overflow-x:auto;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable both-edges;
+  -webkit-overflow-scrolling:touch;
+}
+#content .panel>.table-wrap thead th,
+#content .bounded-scroll thead th,
+#studentResults .table-wrap thead th,
+#teacherResults .table-wrap thead th,
+#headteacherResults .table-wrap thead th,
+#userResults .table-wrap thead th,
+#reportResults .table-wrap thead th,
+#auditRows .table-wrap thead th,
+.modal-body .table-wrap thead th{
+  position:sticky;
+  top:0;
+  z-index:6;
+  background:#f4f7fb;
+  box-shadow:0 1px 0 var(--line);
+}
+#content .panel>.table-wrap th,
+#content .panel>.table-wrap td,
+.modal-body .table-wrap th,
+.modal-body .table-wrap td{
+  padding-top:8px;
+  padding-bottom:8px;
+}
+@media(max-width:760px){
+  #content .panel>.table-wrap,
+  #content .bounded-scroll,
+  #content .stack-list,
+  #content .history-scroll,
+  #content .audit-scroll,
+  #studentResults .table-wrap,
+  #teacherResults .table-wrap,
+  #headteacherResults .table-wrap,
+  #userResults .table-wrap,
+  #reportResults .table-wrap,
+  #auditRows .table-wrap,
+  .modal-body .table-wrap{max-height:46vh}
+}
