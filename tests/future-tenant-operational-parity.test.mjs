@@ -56,6 +56,11 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(grants,/finance_%/);
   assert.equal(installer.includes("\\nrun_once"),false,"installer must not contain a literal backslash-n escape between migration calls");
   assert.equal(template.includes("\\ntest"),false,"tenant template must not contain a literal backslash-n escape between validation checks");
+  const upgrader=read("scripts/update-isolated-operational-tenants.sh");
+  assert.match(upgrader,/tenant_commercial_plan_parity_verified/);
+  assert.match(upgrader,/0049v_live_plan_feature_parity/);
+  assert.match(upgrader,/feature_count',27/);
+  assert.match(upgrader,/rpc_count',258/);
 });
 
 test("reference module navigation remains feature and role scoped",()=>{
