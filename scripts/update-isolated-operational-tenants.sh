@@ -95,8 +95,30 @@ for row in "${TENANTS[@]}"; do
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
 
-  echo "Applying operational compatibility to $tenant_code ($database_name) ..."
-  TARGET_DATABASE_URL="$TENANT_DATABASE_URL" bash database/reference-compat/install-operational-parity.sh
+  (
+    restore_public_create=false
+    cleanup_public_create() {
+      if [ "$restore_public_create" = true ]; then
+        psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL' || true
+set role edusentia_provisioner;
+revoke create on schema public from edusentia_runtime;
+SQL
+      fi
+    }
+    trap cleanup_public_create EXIT
+
+    if [ "$(psql "$TENANT_DATABASE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" != "t" ]; then
+      psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+set role edusentia_provisioner;
+grant usage,create on schema public to edusentia_runtime;
+reset role;
+SQL
+      restore_public_create=true
+    fi
+
+    echo "Applying operational compatibility to $tenant_code ($database_name) ..."
+    TARGET_DATABASE_URL="$TENANT_DATABASE_URL" bash database/reference-compat/install-operational-parity.sh
+  )
 
   migration_count="$(psql "$TENANT_DATABASE_URL" -Atc "
     select count(*) from app.schema_migrations
