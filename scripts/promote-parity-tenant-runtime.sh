@@ -41,7 +41,7 @@ REFERENCE_URL="$(PARITY_URL="$PARITY_URL" REFERENCE_DB="$REFERENCE_DB" node --in
 echo "::add-mask::$REFERENCE_URL"
 
 test "$(psql "$REFERENCE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
-test "$(psql "$REFERENCE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%'")" = "25"
+test "$(psql "$REFERENCE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%'")" = "26"
 test "$(psql "$REFERENCE_URL" -Atc "select count(*) from app.schema_migrations where version='0049_operational_blueprint_parity'")" = "1"
 test "$(psql "$REFERENCE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")" -ge 258
 test "$(psql "$PARITY_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|false"
