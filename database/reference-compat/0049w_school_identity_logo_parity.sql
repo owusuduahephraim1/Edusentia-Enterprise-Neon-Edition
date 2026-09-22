@@ -30,55 +30,48 @@ create or replace function public.set_school_logo_reference(target_logo_url text
 returns jsonb
 language plpgsql
 security definer
-set search_path to 'public','app','pg_catalog'
+set search_path to 'public','app','storage','pg_catalog','extensions'
 as $function$
 declare
   tenant_id uuid:=app.current_tenant_id();
   school_id uuid;
   clean_logo text:=btrim(coalesce(target_logo_url,''));
 begin
-  if tenant_id is null then
-    raise exception 'Tenant context is required' using errcode='42501';
+  if tenant_id is null or auth.uid() is null then
+    raise exception 'Authenticated tenant context is required' using errcode='42501';
   end if;
-  -- Match the certified Supabase blueprint authorization path. The active
-  -- profile is authoritative and legacy admin roles are normalized there.
   if not public.is_system_admin() then
-    raise exception 'Only the School System Administrator can update the official school logo' using errcode='42501';
+    raise exception 'Only the School System Administrator can change the official school logo' using errcode='42501';
   end if;
   perform public.require_sensitive_access();
-  if clean_logo='' then
-    raise exception 'The school logo reference is required';
-  end if;
-  if clean_logo<>'assets/school-logo.png' then
-    if clean_logo not like ('tenants/'||tenant_id::text||'/school-branding/%') or clean_logo like '%..%' then
-      raise exception 'The school logo must use the tenant school-branding storage scope' using errcode='22023';
-    end if;
-    if not exists(
-      select 1 from storage.object_metadata m
-      where m.tenant_id=tenant_id and m.object_key=clean_logo and m.status='active' and lower(m.content_type)='image/png'
-    ) then
-      raise exception 'The uploaded school logo is not available in protected storage' using errcode='22023';
-    end if;
-  end if;
-  if not exists(
-    select 1
-    from app.tenant_licenses tl
-    where tl.tenant_id=tenant_id
-      and tl.status='active'
-      and (tl.starts_at is null or tl.starts_at<=now())
-      and (tl.expires_at is null or tl.expires_at>=now())
-  ) then
-    raise exception 'The current licence does not allow school-setting changes' using errcode='42501';
+  if not public.license_write_allowed() then
+    raise exception 'LICENSE_WRITE_RESTRICTED: The current licence does not permit school logo changes' using errcode='42501';
   end if;
 
   select id into school_id
   from public.school_settings
-  order by created_at
+  order by created_at,id
   limit 1
   for update;
 
   if school_id is null then
-    raise exception 'School settings are unavailable';
+    raise exception 'School identity is unavailable' using errcode='P0002';
+  end if;
+
+  if clean_logo='assets/school-logo.png' then
+    null;
+  elsif clean_logo like ('tenants/'||tenant_id::text||'/school-branding/%') and clean_logo not like '%..%' then
+    if not exists(
+      select 1 from storage.object_metadata m
+      where m.tenant_id=tenant_id
+        and m.object_key=clean_logo
+        and m.status='active'
+        and lower(m.content_type)='image/png'
+    ) then
+      raise exception 'The uploaded school logo was not found in protected R2 storage' using errcode='22023';
+    end if;
+  else
+    raise exception 'Invalid school logo reference' using errcode='22023';
   end if;
 
   update public.school_settings
@@ -86,15 +79,11 @@ begin
       updated_at=now()
   where id=school_id;
 
-  update app.tenants
-  set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{logo_url}',to_jsonb(clean_logo),true),
-      updated_at=now()
-  where id=tenant_id;
-
   return jsonb_build_object(
-    'ok',true,
+    'saved',true,
     'school_id',school_id,
-    'logo_url',clean_logo
+    'logo_url',clean_logo,
+    'message','Official school logo saved for future school documents.'
   );
 end
 $function$;
