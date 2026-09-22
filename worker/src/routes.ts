@@ -249,7 +249,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       txn`select coalesce(jsonb_object_agg(permission_code,true),'{}'::jsonb) permissions
         from app.role_permissions where role=${ctx.role}`
     ]);
-    // Expose certified blueprint permission aliases while retaining Neon-native dotted permissions.\n    // Blueprint System Administrator permission inheritance is intentional and regression-tested.
+    // Expose certified blueprint permission aliases while retaining Neon-native dotted permissions.\n    // Blueprint System Administrator permission inheritance is intentional and regression-tested.\n    // School-logo parity is reconciled during every isolated-tenant upgrade.
     const rawPermissions={...((permissionRows[0] as any)?.permissions||{})};
     const isSystemAdmin=ctx.role==="system_admin";
     const permissions={
