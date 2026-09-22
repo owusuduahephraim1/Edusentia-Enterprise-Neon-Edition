@@ -557,6 +557,8 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/version like '0049%'/);
   assert.match(template,/has_function_privilege\('edusentia_worker_runtime'/);
+  assert.ok(!template.includes("version like '0049%')"),"parity template migration-count SQL contains an extra closing parenthesis");
+  assert.ok(!promote.includes("version like '0049%')"),"parity promotion migration-count SQL contains an extra closing parenthesis");
 });
 
 test("runtime-owned CI seed preserves migration and Worker grant ownership",()=>{
