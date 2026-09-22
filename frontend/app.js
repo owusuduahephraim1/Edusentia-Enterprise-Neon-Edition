@@ -80,6 +80,44 @@
   }
   function canCreateStudent(){return ["system_admin","principal","academic_admin","records_officer"].includes(role());}
   function friendly(error){return error?.message || "The requested operation could not be completed.";}
+  function notifyAction(title,detail="",kind="success"){
+    let root=byId("toastStack");
+    if(!root){root=document.createElement("div");root.id="toastStack";root.className="toast-stack";root.setAttribute("role","status");root.setAttribute("aria-live","polite");document.body.appendChild(root);}
+    const node=document.createElement("div");node.className="toast "+(kind||"success");
+    node.innerHTML="<div><strong>"+escapeHtml(title||"Notice")+"</strong>"+(detail?"<span>"+escapeHtml(detail)+"</span>":"")+"</div>";
+    root.appendChild(node);setTimeout(()=>node.remove(),6500);return node;
+  }
+  function confirmAction(messageText,{title="Confirm action",confirmLabel="Continue",kind="danger"}={}){
+    return new Promise(resolve=>{
+      const dialog=document.createElement("dialog");dialog.className="modal small action-confirm-dialog";
+      dialog.innerHTML='<div class="modal-frame" role="document"><header class="modal-header"><div><h3>'+escapeHtml(title)+'</h3><p>Please confirm before the system changes this record.</p></div></header><section class="modal-body"><p class="action-confirm-message">'+escapeHtml(messageText||"Continue with this action?")+'</p></section><footer class="modal-footer"><button class="button ghost" type="button" data-action-cancel>Cancel</button><button class="button '+(kind==="danger"?"danger":"primary")+'" type="button" data-action-confirm>'+escapeHtml(confirmLabel)+'</button></footer></div>';
+      document.body.appendChild(dialog);let settled=false;
+      const finish=value=>{if(settled)return;settled=true;try{if(dialog.open)dialog.close();}catch{}dialog.remove();resolve(value);};
+      dialog.querySelector("[data-action-cancel]").addEventListener("click",()=>finish(false));
+      dialog.querySelector("[data-action-confirm]").addEventListener("click",()=>finish(true));
+      dialog.addEventListener("cancel",event=>{event.preventDefault();finish(false);});
+      dialog.addEventListener("click",event=>{if(event.target===dialog)finish(false);});
+      if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
+      setTimeout(()=>dialog.querySelector("[data-action-cancel]")?.focus(),0);
+    });
+  }
+  function promptAction(messageText,defaultValue="",{title="Provide details",confirmLabel="Continue",required=false}={}){
+    return new Promise(resolve=>{
+      const dialog=document.createElement("dialog");dialog.className="modal small action-prompt-dialog";
+      dialog.innerHTML='<div class="modal-frame" role="document"><header class="modal-header"><div><h3>'+escapeHtml(title)+'</h3><p>'+escapeHtml(messageText||"Enter the requested information.")+'</p></div></header><section class="modal-body"><label class="field"><span>Response</span><textarea data-action-prompt rows="4" '+(required?"required":"")+'>'+escapeHtml(defaultValue||"")+'</textarea></label><p class="form-message hidden" data-action-prompt-message></p></section><footer class="modal-footer"><button class="button ghost" type="button" data-action-cancel>Cancel</button><button class="button primary" type="button" data-action-confirm>'+escapeHtml(confirmLabel)+'</button></footer></div>';
+      document.body.appendChild(dialog);let settled=false;const input=dialog.querySelector("[data-action-prompt]");
+      const finish=value=>{if(settled)return;settled=true;try{if(dialog.open)dialog.close();}catch{}dialog.remove();resolve(value);};
+      dialog.querySelector("[data-action-cancel]").addEventListener("click",()=>finish(null));
+      dialog.querySelector("[data-action-confirm]").addEventListener("click",()=>{const value=String(input.value||"");if(required&&!value.trim()){const msg=dialog.querySelector("[data-action-prompt-message]");msg.textContent="A response is required.";msg.classList.remove("hidden");input.focus();return;}finish(value);});
+      dialog.addEventListener("cancel",event=>{event.preventDefault();finish(null);});
+      if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
+      setTimeout(()=>{input.focus();input.select();},0);
+    });
+  }
+  window.EdusentiaConfirm=confirmAction;
+  window.EdusentiaPrompt=promptAction;
+  window.EdusentiaNotify=notifyAction;
+  window.alert=messageText=>notifyAction("Notice",String(messageText||""),"warning");
   function show(view){for(const id of ["loader","authView","appShell","fatalView"])byId(id)?.classList.add("hidden");byId(view)?.classList.remove("hidden");}
   function showAuthStep(step){for(const id of ["loginForm","mfaPanel","recoveryPanel"])byId(id)?.classList.add("hidden");byId(step)?.classList.remove("hidden");}
   function message(text,kind=""){const el=byId("authMessage");if(!el)return;el.textContent=text||"";el.dataset.kind=kind;el.classList.toggle("hidden",!text);}
@@ -202,7 +240,8 @@
 
   window.EdusentiaShell=Object.freeze({
     registerView,navigate,api,certified,role,state,escapeHtml,status,formatDate,formatDateTime,formatAmount,
-    loading,empty,pageError,fullName,friendly,byId,featureEnabled,permissionEnabled,orderedNavItems
+    loading,empty,pageError,fullName,friendly,byId,featureEnabled,permissionEnabled,orderedNavItems,
+    confirmAction,promptAction,notifyAction
   });
 
   async function renderDashboard(){

@@ -168,9 +168,9 @@
   }
 
   async function deleteApplicant(record){
-    const reason=prompt(`Reason for deleting ${record.application_no} from the active applicant register:`);
+    const reason=await window.EdusentiaPrompt(`Reason for deleting ${record.application_no} from the active applicant register:`);
     if(reason===null)return;
-    if(!confirm(`Delete ${record.application_no} from the active applicant register?\n\nThe record will be withdrawn and retained in the audit history.`))return;
+    if(!await window.EdusentiaConfirm(`Delete ${record.application_no} from the active applicant register?\n\nThe record will be withdrawn and retained in the audit history.`))return;
     try{
       await rpc("admissions_delete_application",{target_application_id:record.id,reason:String(reason).trim()||null});
       toast("Applicant deleted from register",record.application_no);
@@ -185,13 +185,13 @@
       toast("Student is still active","Withdraw or remove the linked student from Student Directory before reopening this admission.","warning");
       return;
     }
-    const reason=prompt(`Reason for marking ${record.application_no} as Not enrolled:`);
+    const reason=await window.EdusentiaPrompt(`Reason for marking ${record.application_no} as Not enrolled:`);
     if(reason===null)return;
     if(String(reason).trim().length<5){
       toast("Status change cancelled","Enter a reason of at least 5 characters.","warning");
       return;
     }
-    if(!confirm(`Mark ${record.application_no} as Not enrolled?\n\nThe historical student link will be retained for audit purposes.`))return;
+    if(!await window.EdusentiaConfirm(`Mark ${record.application_no} as Not enrolled?\n\nThe historical student link will be retained for audit purposes.`))return;
     try{
       await rpc("admissions_mark_not_enrolled",{target_application_id:record.id,reason:String(reason).trim()});
       toast("Application reopened","Status changed to Not enrolled.");
@@ -202,19 +202,19 @@
   }
 
   async function permanentlyRemoveApplicant(record){
-    const typed=prompt(`PERMANENT REMOVAL\n\nType the application number exactly to continue:\n${record.application_no}`);
+    const typed=await window.EdusentiaPrompt(`PERMANENT REMOVAL\n\nType the application number exactly to continue:\n${record.application_no}`);
     if(typed===null)return;
     if(String(typed).trim()!==String(record.application_no)){
       toast("Permanent removal cancelled","Application number did not match.","warning");
       return;
     }
-    const reason=prompt("State the reason for permanent removal (required):");
+    const reason=await window.EdusentiaPrompt("State the reason for permanent removal (required):");
     if(reason===null)return;
     if(String(reason).trim().length<5){
       toast("Permanent removal cancelled","Enter a reason of at least 5 characters.","warning");
       return;
     }
-    if(!confirm(`Permanently remove ${record.application_no}?\n\nThis deletes the applicant and linked admission rows and cannot be undone.`))return;
+    if(!await window.EdusentiaConfirm(`Permanently remove ${record.application_no}?\n\nThis deletes the applicant and linked admission rows and cannot be undone.`))return;
     try{
       await rpc("admissions_permanently_remove_application",{
         target_application_id:record.id,

@@ -69,11 +69,11 @@
     }catch(error){alert(friendly(error));}
   }
   async function archiveStudent(id){
-    if(!confirm("Remove this student from the current directory? Historical records and reports remain preserved."))return;
-    try{const removed=await certified("archive_student",{target_student_id:id,reason_text:"Student removed from active records"});if(removed!==true)throw new Error("The remove operation did not complete.");await loadCertifiedStudents();}catch(error){alert(friendly(error));}
+    if(!await window.EdusentiaConfirm("Remove this student from the current directory? Historical records and reports remain preserved."))return;
+    try{const removed=await certified("archive_student",{target_student_id:id,reason_text:"Student removed from active records"});if(removed!==true)throw new Error("The remove operation did not complete.");window.EdusentiaNotify("Student removed","The student was removed from the active directory and historical records were preserved.","success");await loadCertifiedStudents();}catch(error){window.EdusentiaNotify("Student not removed",friendly(error),"error");}
   }
   async function restoreStudent(id){
-    if(!confirm("Restore this student to the current directory?"))return;
+    if(!await window.EdusentiaConfirm("Restore this student to the current directory?"))return;
     try{await certified("restore_student",{target_student_id:id,reason_text:"Student restored to active records"});await loadCertifiedStudents();}catch(error){alert(friendly(error));}
   }
   async function exportStudentsCsv(){

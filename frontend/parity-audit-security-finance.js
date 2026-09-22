@@ -86,7 +86,7 @@
     try{
       const data=await api().mfaFactors(),rows=Array.isArray(data?.factors)?data.factors:Array.isArray(data)?data:[];
       box.innerHTML=rows.length?`<section class="panel"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Created</th><th>Last used</th><th>Actions</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.friendlyName||x.friendly_name||"Authenticator")}</td><td>${status(x.verified_at||x.verified?"verified":"pending")}</td><td>${formatDateTime(x.created_at||x.createdAt)}</td><td>${formatDateTime(x.last_used_at||x.lastUsedAt)}</td><td><button class="button danger small" data-mfa-remove="${esc(x.id)}">Remove</button></td></tr>`).join("")}</tbody></table></div></section>`:empty("No authenticator factors are configured.");
-      box.querySelectorAll("[data-mfa-remove]").forEach(b=>b.onclick=async()=>{if(!confirm("Remove this authenticator factor?"))return;try{await api().mfaRemove(b.dataset.mfaRemove);await loadMfaFactors();}catch(error){alert(friendly(error));}});
+      box.querySelectorAll("[data-mfa-remove]").forEach(b=>b.onclick=async()=>{if(!await window.EdusentiaConfirm("Remove this authenticator factor?"))return;try{await api().mfaRemove(b.dataset.mfaRemove);await loadMfaFactors();}catch(error){alert(friendly(error));}});
     }catch(error){box.innerHTML=pageError(error);}
   }
   function openMfaEnrollment(){

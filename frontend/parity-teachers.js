@@ -64,7 +64,7 @@
       finally{button.disabled=false;}
     };
   }
-  async function archiveTeacher(id){if(!confirm("Remove this teacher from active records?"))return;try{const removed=await certified("archive_teacher",{target_teacher_id:id,reason_text:"Teacher removed from active records"});if(removed!==true)throw new Error("The remove operation did not complete.");await loadAdvancedTeachers();}catch(error){alert(friendly(error));}}
+  async function archiveTeacher(id){if(!await window.EdusentiaConfirm("Remove this teacher from active records?"))return;try{const removed=await certified("archive_teacher",{target_teacher_id:id,reason_text:"Teacher removed from active records"});if(removed!==true)throw new Error("The remove operation did not complete.");await loadAdvancedTeachers();}catch(error){alert(friendly(error));}}
   async function restoreTeacher(id){try{const restored=await certified("restore_teacher",{target_teacher_id:id,reason_text:"Teacher restored to active records"});if(restored!==true)throw new Error("The restore operation did not complete.");await loadAdvancedTeachers();}catch(error){alert(friendly(error));}}
 
   registerView({id:"teachers",label:"Teachers",icon:"♜",subtitle:"Teacher records and assignments",permission:"manage_teachers",render:renderTeachers});
