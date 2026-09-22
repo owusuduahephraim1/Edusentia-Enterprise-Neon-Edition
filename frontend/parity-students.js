@@ -35,6 +35,7 @@
 
   async function loadCertifiedStudents(){
     const box=byId("studentCertifiedResults");if(!box)return;
+    const canManage=isSystemAdmin()||["principal","academic_admin","records_officer"].includes(currentRole());
     box.innerHTML=loading("Loading students");
     try{
       const data=await certified("search_students_v5",{
