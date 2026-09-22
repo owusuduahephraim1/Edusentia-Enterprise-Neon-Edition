@@ -146,7 +146,7 @@
   async function renderUsers(){
     byId("content").innerHTML=sectionHead("Users and Access","Accounts, credentials, roles, classes, and security",'<button class="button primary" id="userAdd">Create user</button>')+loading("Loading users");
     try{
-      const data=await certified("list_profiles_with_access",{}),profiles=arr(data?.profiles||firstArray(data));local.users.data=data;local.users.search="";local.users.role="";local.users.status="";
+      const [data,guardians]=await Promise.all([certified("list_profiles_with_access",{}),certified("list_guardian_portal_accounts",{search_text:""})]),profiles=arr(data?.profiles||firstArray(data));local.users.data=data;local.users.guardians=guardians;local.users.search="";local.users.role="";local.users.status="";
       byId("content").innerHTML=sectionHead("Users and Access","Accounts, credentials, roles, classes, and security",'<button class="button primary" id="userAdd">Create user</button>')+
         '<section class="panel"><div class="toolbar"><label class="search"><input id="userSearch" type="search" placeholder="Search name or email"></label><select id="userRoleFilter"><option value="">All roles</option>'+["system_admin","principal","class_teacher","subject_teacher","parent_guardian","accountant","student"].map(r=>'<option value="'+r+'">'+esc(ROLE_LABELS[r]||title(r))+'</option>').join("")+'</select><select id="userStatusFilter"><option value="">All accounts</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div><div id="userResults"></div></section>';
       const renderRows=()=>{
