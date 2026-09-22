@@ -3,21 +3,64 @@
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   // ---------- Reports ----------
+  let reportConfig=null;
   async function renderReports(){
-    byId("content").innerHTML=`<div class="page-head"><div><h3>Reports</h3><p>Certified assessment, workflow and official R2 PDF workspace.</p></div></div>${loading("Loading report workspace")}`;
+    byId("content").innerHTML=`<div class="page-head"><div><h3>Report Cards</h3><p>Transactional assessment, review, approval, and publication</p></div></div>${loading("Loading report cards")}`;
     try{
-      const [config,students]=await Promise.all([
-        academicConfig(),
-        certified("search_students_v5",{search_text:"",target_class_id:null,target_status:"active",archive_filter:"active",page_number:1,page_size:100})
-      ]);
-      const terms=Array.isArray(config?.terms)?config.terms:[],rows=Array.isArray(students?.rows)?students.rows:[];
-      byId("content").innerHTML=`<div class="page-head"><div><h3>Reports</h3><p>Certified assessment, workflow and official R2 PDF workspace.</p></div></div>
-        <section class="panel"><form id="reportOpenForm" class="toolbar"><select id="reportStudentEnrollment" required><option value="">Select student / current enrolment</option>${rows.filter(x=>x.enrollment_id).map(x=>`<option value="${esc(x.enrollment_id)}" data-year="${esc(x.academic_year_id||"")}">${esc([x.first_name,x.middle_name,x.last_name].filter(Boolean).join(" "))} • ${esc(x.class_name||"No class")}</option>`).join("")}</select><select id="reportTerm" required>${optionRows(terms,"id","name")}</select><button class="button primary" type="submit">Open report</button></form><div id="reportWorkspace">${rows.length?empty("Select a student and term to open or create a report."):empty("No enrolled students are available yet.")}</div></section>`;
-      const filterTerms=()=>{const opt=byId("reportStudentEnrollment")?.selectedOptions?.[0],year=opt?.dataset?.year||"";byId("reportTerm").innerHTML=optionRows(terms.filter(t=>!year||String(t.academic_year_id)===String(year)),"id","name");};
-      byId("reportStudentEnrollment").onchange=filterTerms;
-      byId("reportOpenForm").onsubmit=async e=>{e.preventDefault();await openReportEditor(null,byId("reportStudentEnrollment").value,byId("reportTerm").value);};
+      reportConfig=await academicConfig();
+      const terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[],classes=Array.isArray(reportConfig?.classes)?reportConfig.classes:[],activeTerm=terms.find(x=>x.is_active)?.id||"";
+      byId("content").innerHTML=`
+        <div class="page-head"><div><h3>Report Cards</h3><p>Transactional assessment, review, approval, and publication</p></div>
+          <div class="page-actions"><button id="reportTemplate" class="button outline" type="button">Manage template</button><button id="reportExport" class="button outline" type="button">Export list</button><button id="reportBulkDownload" class="button secondary" type="button">Bulk class PDFs</button><button id="reportBulkPublish" class="button success" type="button">Publish class reports</button><button id="reportNew" class="button primary" type="button">New report</button></div></div>
+        <section class="panel"><div class="toolbar"><label class="search"><input id="reportSearch" type="search" placeholder="Search student or report number"></label><select id="reportTerm"><option value="">All terms</option>${terms.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(activeTerm)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportClass"><option value="">All classes</option>${classes.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}</select><select id="reportStatus"><option value="">All statuses</option>${["draft","submitted","class_reviewed","approved","published","returned","withdrawn"].map(v=>`<option value="${v}">${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></div><div id="reportResults">${loading("Loading report cards")}</div></section>`;
+      byId("reportTemplate").onclick=()=>window.EdusentiaShell?.navigate?.("settings");
+      byId("reportExport").onclick=exportReportList;
+      byId("reportBulkDownload").onclick=bulkDownloadPublishedReports;
+      byId("reportBulkPublish").onclick=()=>bulkTransitionReports("published");
+      byId("reportNew").onclick=openNewReportPicker;
+      let timer;byId("reportSearch").oninput=()=>{clearTimeout(timer);timer=setTimeout(loadReportList,250);};
+      ["reportTerm","reportClass","reportStatus"].forEach(id=>byId(id).onchange=loadReportList);
+      await loadReportList();
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
+  async function loadReportList(){
+    const box=byId("reportResults");if(!box)return;box.innerHTML=loading("Loading report cards");
+    try{
+      const data=await certified("list_report_cards_v6",{target_term_id:byId("reportTerm")?.value||null,target_class_id:byId("reportClass")?.value||null,target_status:byId("reportStatus")?.value||null,search_text:byId("reportSearch")?.value?.trim()||"",archive_filter:"active",page_number:1,page_size:100}),rows=Array.isArray(data?.rows)?data.rows:[];
+      box.innerHTML=rows.length?`<div class="table-wrap"><table><thead><tr><th>Student</th><th>Class</th><th>Term</th><th>Average</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-copy"><strong>${esc(row.student_name||"Student")}</strong><small>${esc(row.report_number||row.admission_no||"")}</small></div></td><td>${esc(row.class_name||"—")}</td><td>${esc(row.term_name||"—")}</td><td><strong>${Number(row.average||0).toFixed(1)}%</strong></td><td>${status(row.status||"draft")}</td><td>${formatDateTime(row.updated_at)}</td><td><button class="button secondary small" data-report-open="${esc(row.id)}">Open</button>${["draft","returned"].includes(String(row.status||""))?'<button class="button danger small" data-report-delete="'+esc(row.id)+'">Delete</button>':""}</td></tr>`).join("")}</tbody></table></div>`:empty("No report cards match the current filters.");
+      box.querySelectorAll("[data-report-open]").forEach(b=>b.onclick=()=>openReportEditor(b.dataset.reportOpen,null,null));
+      box.querySelectorAll("[data-report-delete]").forEach(b=>b.onclick=async()=>{if(!confirm("Permanently delete this never-approved draft report?"))return;try{await certified("delete_report_card_permanently",{target_report_id:b.dataset.reportDelete,reason_text:"Draft report deleted by authorised school user"});await loadReportList();}catch(error){alert(friendly(error));}});
+    }catch(error){box.innerHTML=pageError(error);}
+  }
+  async function openNewReportPicker(){
+    try{
+      const students=await certified("search_students_v5",{search_text:"",target_class_id:null,target_status:"active",archive_filter:"active",page_number:1,page_size:500}),rows=Array.isArray(students?.rows)?students.rows:[],terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[];
+      openModal("New Report Card","Select a current student enrolment and term.",`<form id="newReportForm" class="form-stack"><label class="field"><span>Student</span><select name="enrollment_id" size="10" required><option value="">Select student</option>${rows.filter(x=>x.enrollment_id).map(x=>`<option value="${esc(x.enrollment_id)}" data-year="${esc(x.academic_year_id||"")}">${esc([x.first_name,x.middle_name,x.last_name].filter(Boolean).join(" "))} • ${esc(x.class_name||"No class")}</option>`).join("")}</select></label><label class="field"><span>Term</span><select name="term_id" required>${optionRows(terms,"id","name",terms.find(x=>x.is_active)?.id||"")}</select></label><p id="newReportMessage" class="form-message hidden"></p></form>`,'<button class="button ghost" id="newReportCancel">Cancel</button><button class="button primary" id="newReportOpen">Open report</button>');
+      const form=byId("newReportForm");byId("newReportCancel").onclick=closeModal;form.elements.enrollment_id.onchange=()=>{const year=form.elements.enrollment_id.selectedOptions[0]?.dataset.year||"";form.elements.term_id.innerHTML=optionRows(terms.filter(t=>!year||String(t.academic_year_id)===String(year)),"id","name",terms.find(t=>t.is_active&&(!year||String(t.academic_year_id)===String(year)))?.id||"");};
+      byId("newReportOpen").onclick=async()=>{if(!form.reportValidity())return;const v=formValues(form);closeModal();await openReportEditor(null,v.enrollment_id,v.term_id);};
+    }catch(error){alert(friendly(error));}
+  }
+  async function exportReportList(){
+    try{
+      const data=await certified("list_report_cards_v6",{target_term_id:byId("reportTerm")?.value||null,target_class_id:byId("reportClass")?.value||null,target_status:byId("reportStatus")?.value||null,search_text:byId("reportSearch")?.value?.trim()||"",archive_filter:"active",page_number:1,page_size:500}),rows=Array.isArray(data?.rows)?data.rows:[],cell=v=>'"'+String(v??"").replaceAll('"','""')+'"',lines=["report_number,student,class,term,average,status,updated_at"];
+      rows.forEach(r=>lines.push([r.report_number,r.student_name,r.class_name,r.term_name,r.average,r.status,r.updated_at].map(cell).join(",")));
+      downloadBlob("report-cards.csv",new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"}));
+    }catch(error){alert(friendly(error));}
+  }
+  async function bulkTransitionReports(targetStatus){
+    const termId=byId("reportTerm")?.value||"",classId=byId("reportClass")?.value||"";if(!termId||!classId){alert("Select one term and one class before using a bulk workflow action.");return;}
+    const action=targetStatus==="published"?"Publish":"Update";if(!confirm(action+" every eligible report in the selected class? Incomplete or ineligible reports remain unchanged."))return;
+    try{const result=await certified("bulk_transition_class_reports",{target_term_id:termId,target_class_id:classId,target_status:targetStatus,comment_text:"Bulk "+targetStatus+" from Report Cards workspace"});alert(String(result?.transitioned_reports||0)+" report(s) "+targetStatus+".");await loadReportList();}catch(error){alert(friendly(error));}
+  }
+  async function bulkDownloadPublishedReports(){
+    const termId=byId("reportTerm")?.value||"",classId=byId("reportClass")?.value||"";if(!termId||!classId){alert("Select one term and one class before downloading a class package.");return;}
+    try{
+      const data=await certified("list_report_cards_v6",{target_term_id:termId,target_class_id:classId,target_status:"published",search_text:"",archive_filter:"active",page_number:1,page_size:100}),rows=Array.isArray(data?.rows)?data.rows:[];
+      if(!rows.length){alert("No published reports are available for this class and term.");return;}
+      for(const row of rows){try{downloadBlob(`${safeName(row.report_number||row.student_name||"report")}.pdf`,await api().downloadReportPdf(row.id));await new Promise(r=>setTimeout(r,120));}catch{}}
+    }catch(error){alert(friendly(error));}
+  }
+
   async function openReportEditor(reportId,enrollmentId,termId){
     const box=byId("reportWorkspace");if(box)box.innerHTML=loading("Opening report");
     try{
