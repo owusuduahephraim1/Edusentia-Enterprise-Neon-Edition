@@ -11,13 +11,9 @@
   const messageOf=value=>String(value?.message||value||"Request failed").replaceAll("_"," ");
 
   function client(){
-    const cfg=window.RCE_CONFIG||window.NIS_CONFIG||{};
-    if(!window.supabase?.createClient||!cfg.supabaseUrl||!cfg.supabaseAnonKey||cfg.masterEdition===true)return null;
-    if(STATE.client&&STATE.clientUrl===cfg.supabaseUrl&&STATE.clientKey===cfg.supabaseAnonKey)return STATE.client;
-    STATE.client?.auth?.stopAutoRefresh?.();
-    STATE.clientUrl=cfg.supabaseUrl;STATE.clientKey=cfg.supabaseAnonKey;
+    if(STATE.client)return STATE.client;
     STATE.session=null;STATE.sessionAt=0;
-    STATE.client=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+    STATE.client=window.EdusentiaCompatClient||null;
     return STATE.client;
   }
 
