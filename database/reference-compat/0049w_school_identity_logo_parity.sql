@@ -2,6 +2,7 @@
 -- Accepts only tenant-scoped R2 object keys and keeps both the compatibility school settings
 -- record and the Neon tenant metadata in sync.
 begin;
+set role edusentia_provisioner;
 
 create or replace function public.set_school_logo_reference(target_logo_url text)
 returns jsonb
@@ -76,4 +77,5 @@ insert into app.schema_migrations(version)
 values ('0049w_school_identity_logo_parity')
 on conflict do nothing;
 
+reset role;
 commit;
