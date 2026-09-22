@@ -58,6 +58,6 @@
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
 
-  registerView({id:"principal",label:"Principal",icon:"★",subtitle:"Certified Principal record and leadership controls",roles:["system_admin"],render:renderPrincipal});
+  registerView({id:"headteachers",label:"Principals",icon:"★",subtitle:"Principal records and appointments",permission:"manage_headteachers",render:renderPrincipal});
   registerView({id:"principal-signature",label:"My Signature",icon:"✎",subtitle:"Principal signing identity for reports",roles:["principal"],render:renderMySignature});
 })();

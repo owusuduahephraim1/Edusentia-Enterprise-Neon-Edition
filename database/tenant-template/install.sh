@@ -94,12 +94,14 @@ psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048l_backup_worker_api.sql
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048m_restore_worker_helpers.sql
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048n_backup_maintenance_helpers.sql
+TARGET_DATABASE_URL="$TEMPLATE_URL" bash database/reference-compat/install-operational-parity.sh
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
 
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 test "$(psql "$TEMPLATE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
 test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
+test "$(psql "$TEMPLATE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")" -ge 258
 test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
 
 if [ "$(template_owner)" = "edusentia_runtime" ]; then

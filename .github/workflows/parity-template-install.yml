@@ -10,8 +10,11 @@ on:
       - ".github/workflows/parity-template-install.yml"
       - "database/provisioner-role.sql"
       - "database/tenant-template/install.sh"
+      - "database/reference-compat/**"
+      - "reference/future-tenant-rpc-surface.json"
       - "scripts/update-parity-tenant-template.sh"
       - "scripts/update-parity-reference-tenant.sh"
+      - "scripts/update-isolated-operational-tenants.sh"
       - "scripts/promote-parity-tenant-runtime.sh"
       - "scripts/reference-surface-inventory.mjs"
   workflow_dispatch:

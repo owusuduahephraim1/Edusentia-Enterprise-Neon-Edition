@@ -45,5 +45,5 @@
     };
   }
 
-  registerView({id:"timetable",label:"Timetable",icon:"▤",subtitle:"Class timetable and assigned teaching periods",render:renderTimetable});
+  registerView({id:"timetable",label:"Timetable",icon:"▦",subtitle:"Class timetable, subjects, teachers, and teaching periods",roles:["system_admin","principal","class_teacher","subject_teacher"],feature:"timetable",render:renderTimetable});
 })();

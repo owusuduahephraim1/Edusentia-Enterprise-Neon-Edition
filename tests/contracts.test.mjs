@@ -528,6 +528,43 @@ test("production deployment separates direct admin and pooled Worker routes with
 });
 
 
+test("existing isolated tenants are upgraded additively before production deployment",()=>{
+  const u=read("scripts/update-isolated-operational-tenants.sh");
+  const deploy=read(".github/workflows/deploy-worker.yml");
+  const promote=read("scripts/promote-parity-tenant-runtime.sh");
+  const template=read("scripts/update-parity-tenant-template.sh");
+
+  assert.match(u,/database_state='isolated_ready'/);
+  assert.match(u,/select current_user/);
+  assert.match(u,/EXPECTED_RUNTIME_USER/);
+  assert.match(u,/app\.tenants/);
+  assert.match(u,/Edusentia Enterprise Neon Tenant Runtime/);
+  assert.match(u,/Edusentia Enterprise Neon Edition/);
+  assert.match(u,/install-operational-parity\.sh/);
+  assert.match(u,/future-tenant-rpc-surface\.json/);
+  assert.match(u,/258\/258 executable/);
+  assert.match(u,/0049a_operational_finance_reference/);
+  assert.match(u,/0049z_operational_runtime_grants/);
+  assert.match(u,/test "\$migration_count" = "22"/);
+  assert.match(u,/set role edusentia_provisioner;[\s\S]*grant usage,create on schema public to edusentia_runtime/i);
+  assert.match(u,/revoke create on schema public from edusentia_runtime/i);
+  assert.doesNotMatch(u,/drop database|create database|delete from platform\.tenant_control|update platform\.tenant_control/i);
+
+  assert.match(deploy,/scripts\/update-isolated-operational-tenants\.sh/);
+  assert.ok(deploy.indexOf('TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"') < deploy.indexOf('bash scripts/update-isolated-operational-tenants.sh'));
+  assert.match(promote,/bash scripts\/update-isolated-operational-tenants\.sh/);
+  assert.match(promote,/version like '0049%'/);
+  assert.ok(promote.split("\n").some(line=>line.includes("version like '0049%'")&&line.trim().endsWith('= "23"')),"parity promotion must verify 23 total 0049 migration markers");
+  assert.match(promote,/0049_operational_blueprint_parity/);
+  assert.match(template,/install-operational-parity\.sh/);
+  assert.match(template,/version like '0049%'/);
+  assert.ok(template.split("\n").some(line=>line.includes("version like '0049%'")&&line.trim().endsWith('= "23"')),"parity template must verify 23 total 0049 migration markers");
+  assert.match(template,/0049_operational_blueprint_parity/);
+  assert.match(template,/has_function_privilege\('edusentia_worker_runtime'/);
+  assert.ok(!template.includes("version like '0049%')"),"parity template migration-count SQL contains an extra closing parenthesis");
+  assert.ok(!promote.includes("version like '0049%')"),"parity promotion migration-count SQL contains an extra closing parenthesis");
+});
+
 test("runtime-owned CI seed preserves migration and Worker grant ownership",()=>{
   const schema=read(".github/workflows/schema-smoke.yml");
   const compat=read(".github/workflows/reference-compat-smoke.yml");
@@ -581,26 +618,33 @@ test("CI clones grant runtime public-schema migration access",()=>{
 });
 
 
-test("certified RPC registry is fixed to the complete 172-operation reference surface",()=>{
+test("future tenant RPC surface is fixed to 258 blueprint operations",()=>{
   const registry=read("worker/src/certified-rpc-registry.ts");
   const gateway=read("worker/src/certified-rpc.ts");
+  const future=JSON.parse(read("reference/future-tenant-rpc-surface.json"));
   const names=[...registry.matchAll(/^  "([^"]+)": \{$/gm)].map(m=>m[1]);
-  assert.equal(names.length,172);
-  assert.equal(new Set(names).size,172);
+  assert.equal(future.rpcCount,258);
+  assert.equal(future.operations.length,258);
+  assert.equal(new Set(future.operations).size,258);
+  assert.equal(names.length,257);
+  assert.equal(new Set(names).size,257);
+  const registrySet=new Set(names);
+  const explicit=future.operations.filter(name=>!registrySet.has(name));
+  assert.deepEqual(explicit,["get_academic_calendar_context"]);
+  assert.match(gateway,/get_academic_calendar_context/);
   for(const required of [
     "academic_analytics","get_class_attendance_register","save_class_attendance",
-    "get_student_academic_history","get_school_prospectus_console","get_certificate_console",
-    "get_id_card_console","get_compliance_console","backup_dashboard","operations_dashboard",
-    "get_platform_license_console","issue_student_transcript","verify_transcript",
-    "get_my_emergency_academic_delegations","get_role_dashboard","get_role_workspace","list_my_attendance_classes"
-  ]) assert.ok(names.includes(required),required+" missing from certified registry");
+    "hr_staff_directory","student_services_session","admissions_dashboard","health_dashboard",
+    "communications_dashboard","hostel_dashboard","alumni_dashboard","finance_accounts_console",
+    "finance_payroll_console","get_my_student_portal_v2"
+  ]) assert.ok(future.operations.includes(required),required+" missing from future tenant surface");
   assert.match(registry,/Unknown certified operation argument/);
   assert.match(registry,/CERTIFIED_RPC_REGISTRY\[operation\]/);
+  assert.match(registry,/case "numeric"/);
   assert.match(registry,/select public\."?\+fn\+"?\(/);
   assert.doesNotMatch(registry,/from request|eval\(|new Function|execute\s+immediate/i);
   assert.match(gateway,/EXPLICIT_CERTIFIED_RPC_OPERATIONS/);
   assert.match(gateway,/return invokeRegistryCertifiedRpc\(sql,ctx,operation,args\);/);
-  assert.ok(gateway.indexOf('case "save_student"')<gateway.indexOf("return invokeRegistryCertifiedRpc(sql,ctx,operation,args);"));
 });
 
 test("reference surface inventory includes cached and all-row RPC wrappers",()=>{
