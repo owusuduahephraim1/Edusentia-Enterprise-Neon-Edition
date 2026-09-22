@@ -144,7 +144,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({license:rows[0]||null});
   }
   if(method==="GET"&&p==="/api/bootstrap"){
-    const [tenant,metrics]=await tenantTx<any[]>(sql,ctx,txn=>[
+    const [tenant,metrics,licenseRows,permissionRows]=await tenantTx<any[]>(sql,ctx,txn=>[
       txn`select id,code,name,institution_type,settings from app.tenants where id=${ctx.tenantId}::uuid`,
       txn`select
         (select count(*)::int from app.students where tenant_id=${ctx.tenantId}::uuid and archived_at is null) students,
@@ -152,9 +152,34 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
         (select count(*)::int from academics.classes where tenant_id=${ctx.tenantId}::uuid and archived_at is null) classes,
         (select count(*)::int from academics.subjects where tenant_id=${ctx.tenantId}::uuid and archived_at is null) subjects,
         (select count(*)::int from academics.attendance_entries where tenant_id=${ctx.tenantId}::uuid and attendance_date=current_date) attendance_today,
-        (select count(*)::int from academics.student_reports where tenant_id=${ctx.tenantId}::uuid and status in ('draft','submitted','class_reviewed')) pending_reports`
+        (select count(*)::int from academics.student_reports where tenant_id=${ctx.tenantId}::uuid and status in ('draft','submitted','class_reviewed')) pending_reports`,
+      txn`select
+        tl.status,tl.starts_at,tl.expires_at,
+        coalesce(lp.code,'') plan_code,coalesce(lp.name,'') plan_name,
+        coalesce(lp.feature_flags,'{}'::jsonb)||coalesce(tl.feature_overrides,'{}'::jsonb) feature_flags,
+        coalesce(lp.limits,'{}'::jsonb)||coalesce(tl.limits_override,'{}'::jsonb) limits
+        from app.tenant_licenses tl
+        left join platform.license_plans lp on lp.id=tl.plan_id
+        where tl.tenant_id=${ctx.tenantId}::uuid
+        order by tl.updated_at desc limit 1`,
+      txn`select coalesce(jsonb_object_agg(permission_code,true),'{}'::jsonb) permissions
+        from app.role_permissions where role=${ctx.role}`
     ]);
-    return json({tenant:(tenant[0]||null),metrics:metrics[0]||{},capabilities:{role:ctx.role,assuranceLevel:ctx.assuranceLevel}});
+    const licenseRow=(licenseRows[0]||{}) as any;
+    const now=Date.now(),expires=licenseRow.expires_at?Date.parse(String(licenseRow.expires_at)):NaN;
+    const license={
+      status:String(licenseRow.status||"unknown"),
+      read_allowed:String(licenseRow.status||"").toLowerCase()!=="revoked",
+      write_allowed:String(licenseRow.status||"").toLowerCase()==="active" && (!Number.isFinite(expires)||expires>=now),
+      starts_at:licenseRow.starts_at||null,expires_at:licenseRow.expires_at||null,
+      plan:{code:licenseRow.plan_code||"",name:licenseRow.plan_name||"",feature_flags:licenseRow.feature_flags||{},limits:licenseRow.limits||{}}
+    };
+    return json({
+      tenant:(tenant[0]||null),metrics:metrics[0]||{},
+      permissions:(permissionRows[0] as any)?.permissions||{},
+      license,
+      capabilities:{role:ctx.role,assuranceLevel:ctx.assuranceLevel}
+    });
   }
   if(method==="GET"&&p==="/api/students"){
     const q=(url.searchParams.get("q")||"").trim(),limit=Math.min(100,Math.max(1,Number(url.searchParams.get("limit")||25))),offset=Math.max(0,Number(url.searchParams.get("offset")||0));
