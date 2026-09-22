@@ -67,6 +67,7 @@ psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-comp
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0048m_restore_worker_helpers.sql"
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0048n_backup_maintenance_helpers.sql"
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0051_r2_upload_metadata_api.sql"
+psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/reference-compat/0052_school_logo_tenant_context_fix.sql"
 
 psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ROOT/database/tenant-template/runtime-role.sql"
 
