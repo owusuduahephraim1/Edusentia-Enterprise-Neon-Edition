@@ -87,3 +87,19 @@ test("System Administrator operational workspaces preserve blueprint UI actions"
   assert.match(enterprise,/replace_student_id_card/);
   assert.match(enterprise,/updateSchoolSettings/);
 });
+
+
+test("Users and Access preserves blueprint directory-linked account creation",()=>{
+  const ui=read("frontend/parity-enterprise-workspaces.js");
+  const api=read("frontend/api-client.js");
+  const routes=read("worker/src/routes.ts");
+  for(const label of ["Parent / Guardian record","Student record","Accounts Office Staff record","Credentials"])assert.ok(ui.includes(label),label);
+  assert.match(ui,/directoryUserManagement/);
+  assert.match(ui,/guardian_record_id/);
+  assert.match(ui,/student_id/);
+  assert.match(ui,/staff_record_id/);
+  assert.match(api,/guardianAccountRecords:\(\)=>request\("\/api\/admin\/guardian-account-records"\)/);
+  assert.match(routes,/p==="\/api\/admin\/guardian-account-records"/);
+  assert.match(routes,/public\.student_guardians/);
+  assert.match(routes,/public\.guardian_links/);
+});
