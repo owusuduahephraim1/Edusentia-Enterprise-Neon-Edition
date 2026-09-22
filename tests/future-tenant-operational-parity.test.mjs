@@ -55,7 +55,8 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(grants,/student_services_%/);
   assert.match(grants,/finance_%/);
   assert.match(installer,/reconcile_once_recorded "0049v_live_plan_feature_parity"/);
-  assert.match(installer,/run_once "0049w_school_identity_logo_parity"/);
+  assert.match(installer,/reconcile_once_recorded "0049w_school_identity_logo_parity"/);
+  assert.doesNotMatch(installer,/run_once "0049w_school_identity_logo_parity"/);
   const logoParity=read("database/reference-compat/0049w_school_identity_logo_parity.sql");
   assert.match(logoParity,/create or replace function public\.set_school_logo_reference/);
   assert.match(logoParity,/school-branding/);
