@@ -30,6 +30,9 @@ test("school website accepts a typed address and normalizes missing scheme",()=>
   assert.ok(ui.includes('inputmode="url"'));
   assert.ok(ui.includes('"https://"+raw'));
   assert.ok(routes.includes("website:webAddress(b.website,500)"));
+  assert.ok(routes.includes("verification_base_url:webAddress(b.verification_base_url,500)"));
+  assert.ok(ui.includes('field("verification_base_url","Verification base URL",settings.verification_base_url,"text"'));
+  assert.ok(!ui.includes('id="schoolLogoFile" type="file" accept="image/png" required'));
 });
 
 test("long tenant listings are compact and vertically scrollable",()=>{
@@ -45,4 +48,22 @@ test("explicit database validation failures are not rendered as generic internal
   assert.ok(worker.includes('"P0001":422'));
   assert.ok(worker.includes('"42501":403'));
   assert.ok(worker.includes('"40001":409'));
+});
+
+
+test("privileged administrators always require verified MFA for destructive operations",()=>{
+  const auth=read("worker/src/auth.ts");
+  const routes=read("worker/src/routes.ts");
+  assert.ok(auth.includes("privilegedRoleRequiresMfa"));
+  assert.ok(auth.includes("Boolean(row.mfa_required)||privilegedRoleRequiresMfa(row.role)"));
+  assert.ok(auth.includes("Boolean(context?.mfa_required)||privilegedRoleRequiresMfa(context?.role)"));
+  assert.ok(routes.includes("destructiveMutation"));
+  assert.ok(routes.includes("mutation_not_applied"));
+});
+
+test("core archive UIs reject silent false mutation results",()=>{
+  for(const path of ["frontend/parity-academics.js","frontend/parity-teachers.js","frontend/parity-students.js","frontend/parity-principal.js"]){
+    const source=read(path);
+    assert.ok(source.includes("The remove operation did not complete."),path);
+  }
 });
