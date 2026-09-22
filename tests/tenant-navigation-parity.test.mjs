@@ -24,7 +24,7 @@ test("bootstrap returns effective plan features and role permissions",()=>{
   assert.match(routes,/left join platform\.license_plans lp/);
   assert.match(routes,/coalesce\(lp\.feature_flags,'\{\}'::jsonb\)\|\|coalesce\(tl\.feature_overrides,'\{\}'::jsonb\) feature_flags/);
   assert.match(routes,/from app\.role_permissions where role=\$\{ctx\.role\}/);
-  assert.match(routes,/permissions:\(permissionRows\[0\] as any\)\?\.permissions\|\|\{\}/);
+  assert.match(routes,/const rawPermissions=\{\.\.\.\(\(permissionRows\[0\] as any\)\?\.permissions\|\|\{\}\)\}/);\n  assert.match(routes,/permissions,/);
   assert.match(routes,/license,/);
 });
 
