@@ -6,7 +6,7 @@ let hrAuthBound=false,hrNavBound=false,hrObserver=null,hrRefreshing=false,hrAuth
 const byId=id=>document.getElementById(id), esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
 const date=v=>v?new Date(`${String(v).slice(0,10)}T00:00:00`).toLocaleDateString("en-GH",{year:"numeric",month:"short",day:"numeric"}):"—";
 const label=v=>String(v||"—").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
-function cli(){if(window.EdusentiaFinanceRuntime?.S?.client)return window.EdusentiaFinanceRuntime.S.client;if(S.client)return S.client;if(!window.supabase?.createClient||!C.supabaseUrl||!C.supabaseAnonKey)return null;return S.client=window.supabase.createClient(C.supabaseUrl,C.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});}
+function cli(){if(window.EdusentiaFinanceRuntime?.S?.client)return window.EdusentiaFinanceRuntime.S.client;if(S.client)return S.client;return S.client=window.EdusentiaCompatClient||null;}
 async function rpc(name,args={}){const c=cli();if(!c)throw new Error("Staff & HR service unavailable");const{data,error}=await c.rpc(name,args);if(error)throw error;return data;}
 function friendly(e){return String(e?.message||e||"Request failed").replace(/^PGRST\d+:\s*/i,"").replaceAll("_"," ");}
 function toast(title,message="",kind="info"){const stack=byId("toastStack");if(!stack){console.log(title,message);return}const n=document.createElement("div");n.className=`toast ${kind}`;n.innerHTML=`<strong>${esc(title)}</strong>${message?`<span>${esc(message)}</span>`:""}`;stack.appendChild(n);setTimeout(()=>n.remove(),4500);}
