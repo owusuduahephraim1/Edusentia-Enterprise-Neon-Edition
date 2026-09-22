@@ -37,8 +37,7 @@ begin
         or p.proname in ('get_my_student_portal','get_my_student_portal_v2')
       )
   loop
-    execute format('revoke all on function %s from public,anon,authenticated',r.signature);
-    execute format('grant execute on function %s to service_role',r.signature);
+    execute format('revoke all on function %s from public',r.signature);
     execute format('grant execute on function %s to edusentia_worker_runtime',r.signature);
   end loop;
 end
