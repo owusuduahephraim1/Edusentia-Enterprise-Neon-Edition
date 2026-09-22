@@ -1003,3 +1003,14 @@ test("additive package migration preserves certified control schema 0025",()=>{
   assert.match(migration,/0025b_platform_package_distribution/);
   assert.match(installer,/grep -oE '\^\[0-9\]\+'/);
 });
+
+
+test("legacy tenant roles are canonicalized before database authorization",()=>{
+  const db=read("worker/src/db.ts");
+  const auth=read("worker/src/auth.ts");
+  assert.match(db,/value==="admin".*return "system_admin"/s);
+  assert.match(db,/value==="teacher".*return "class_teacher"/s);
+  assert.match(db,/app\.set_request_context\([^\n]+\$\{role\}/);
+  assert.match(auth,/canonicalAppRole\(context\.role\)/);
+  assert.match(auth,/canonicalAppRole\(row\.role\)/);
+});

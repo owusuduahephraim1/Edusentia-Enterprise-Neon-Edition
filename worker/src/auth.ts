@@ -1,5 +1,5 @@
 import type { Env, SessionContext } from "./types";
-import { db } from "./db";
+import { canonicalAppRole, db } from "./db";
 import { cookieValue } from "./http";
 import { randomToken, sha256Hex, verifyPassword } from "./crypto";
 import { tenantDb, routedToken, tokenTenantCode } from "./tenant-db";
@@ -9,7 +9,7 @@ const COOKIE_DEFAULT="__Host-edusentia_session";
 export function sessionCookieName(env:Env){return env.SESSION_COOKIE_NAME||COOKIE_DEFAULT;}
 export function clearCookie(env:Env){return `${sessionCookieName(env)}=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0`;}
 export function setCookie(env:Env,token:string){const ttl=Math.max(300,Number(env.SESSION_TTL_SECONDS||28800));return `${sessionCookieName(env)}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${ttl}`;}
-function privilegedRoleRequiresMfa(role:unknown){return ["system_admin","platform_super_admin"].includes(String(role||"").trim());}
+function privilegedRoleRequiresMfa(role:unknown){return ["system_admin","platform_super_admin"].includes(canonicalAppRole(role));}
 
 async function routeForLogin(env:Env,email:string,tenantCode:string){
   const master=db(env);
@@ -27,9 +27,9 @@ async function routeForCode(env:Env,tenantCode:string){
 }
 async function issueSession(env:Env,sql:any,row:any,assuranceLevel:number){
   const opaque=randomToken(32),token=routedToken(String(row.tenant_code),opaque),tokenHash=await sha256Hex(`${token}.${env.SESSION_PEPPER}`);
-  const ttl=Math.max(300,Number(env.SESSION_TTL_SECONDS||28800)),sessionId=crypto.randomUUID();
-  await sql`insert into authn.sessions(id,user_id,tenant_id,token_hash,role,assurance_level,expires_at) values(${sessionId}::uuid,${row.user_id}::uuid,${row.tenant_id}::uuid,${tokenHash},${row.role},${assuranceLevel},now()+(${ttl}::text||' seconds')::interval)`;
-  return {token,session:{authenticated:true,user:{id:row.user_id,email:row.email,displayName:row.display_name},membership:{tenantId:row.tenant_id,tenantCode:row.tenant_code,tenantName:row.tenant_name,role:row.role,roleLabel:String(row.role).replaceAll('_',' ')},session:{id:sessionId,assuranceLevel}}};
+  const ttl=Math.max(300,Number(env.SESSION_TTL_SECONDS||28800)),sessionId=crypto.randomUUID(),role=canonicalAppRole(row.role);
+  await sql`insert into authn.sessions(id,user_id,tenant_id,token_hash,role,assurance_level,expires_at) values(${sessionId}::uuid,${row.user_id}::uuid,${row.tenant_id}::uuid,${tokenHash},${role},${assuranceLevel},now()+(${ttl}::text||' seconds')::interval)`;
+  return {token,session:{authenticated:true,user:{id:row.user_id,email:row.email,displayName:row.display_name},membership:{tenantId:row.tenant_id,tenantCode:row.tenant_code,tenantName:row.tenant_name,role,roleLabel:String(role).replaceAll('_',' ')},session:{id:sessionId,assuranceLevel}}};
 }
 async function challengeHash(token:string){return sha256Hex(`edusentia:mfa-challenge:v2:${token}`);}
 
@@ -126,9 +126,10 @@ export async function completeMfa(env:Env,challengeTokenRaw:string,codeRaw:strin
     queries.push(sql`delete from authn.mfa_totp_factors where user_id=${row.user_id}::uuid`);
     queries.push(sql`delete from authn.mfa_recovery_codes where user_id=${row.user_id}::uuid`);
   }
-  queries.push(sql`insert into authn.sessions(id,user_id,tenant_id,token_hash,role,assurance_level,expires_at) values(${sessionId}::uuid,${row.user_id}::uuid,${row.tenant_id}::uuid,${sessionHash},${row.role},2,now()+(${ttl}::text||' seconds')::interval)`);
+  const role=canonicalAppRole(row.role);
+  queries.push(sql`insert into authn.sessions(id,user_id,tenant_id,token_hash,role,assurance_level,expires_at) values(${sessionId}::uuid,${row.user_id}::uuid,${row.tenant_id}::uuid,${sessionHash},${role},2,now()+(${ttl}::text||' seconds')::interval)`);
   await sql.transaction(queries);
-  return {token:sessionToken,recoveryCodes,session:{authenticated:true,user:{id:row.user_id,email:row.email,displayName:row.display_name},membership:{tenantId:row.tenant_id,tenantCode:row.tenant_code,tenantName:row.tenant_name,role:row.role,roleLabel:String(row.role).replaceAll('_',' ')},session:{id:sessionId,assuranceLevel:2}}};
+  return {token:sessionToken,recoveryCodes,session:{authenticated:true,user:{id:row.user_id,email:row.email,displayName:row.display_name},membership:{tenantId:row.tenant_id,tenantCode:row.tenant_code,tenantName:row.tenant_name,role,roleLabel:String(role).replaceAll('_',' ')},session:{id:sessionId,assuranceLevel:2}}};
 }
 
 export async function authenticate(request:Request,env:Env):Promise<SessionContext|null>{
@@ -156,8 +157,8 @@ export async function authenticate(request:Request,env:Env):Promise<SessionConte
   ]);
   const context=contextRows[0] as any;
   if(!context||context.status!=="active"||(context.mfa_required&&Number(session.assurance_level)<2)||(privilegedRoleRequiresMfa(context.role)&&Number(session.assurance_level)<2))return null;
-  const assuranceLevel=Number(session.assurance_level);
-  return {sessionId:session.session_id,userId:session.user_id,tenantId:session.tenant_id,tenantCode:context.tenant_code,tenantName:context.tenant_name,databaseName:String(route.database_name),role:context.role,assuranceLevel,email:session.email,displayName:session.display_name};
+  const assuranceLevel=Number(session.assurance_level),role=canonicalAppRole(context.role);
+  return {sessionId:session.session_id,userId:session.user_id,tenantId:session.tenant_id,tenantCode:context.tenant_code,tenantName:context.tenant_name,databaseName:String(route.database_name),role,assuranceLevel,email:session.email,displayName:session.display_name};
 }
 export async function logout(request:Request,env:Env){
   const token=cookieValue(request,sessionCookieName(env)),tenantCode=tokenTenantCode(token||"");if(!token||!tenantCode)return;
