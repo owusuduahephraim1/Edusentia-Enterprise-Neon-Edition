@@ -1,6 +1,20 @@
 -- Edusentia Neon operational parity runtime grants.
 begin;
 
+do $integrity$
+begin
+  if not exists(
+    select 1 from pg_constraint
+    where conrelid='public.finance_payroll_profiles'::regclass
+      and conname='finance_payroll_profiles_hr_staff_member_id_fkey'
+  ) then
+    alter table public.finance_payroll_profiles
+      add constraint finance_payroll_profiles_hr_staff_member_id_fkey
+      foreign key (hr_staff_member_id) references public.hr_staff_members(id) on delete restrict;
+  end if;
+end
+$integrity$;
+
 do $grant$
 declare r record;
 begin
