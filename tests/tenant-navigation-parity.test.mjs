@@ -44,3 +44,15 @@ test("core registered views carry reference blueprint gating metadata",()=>{
   assert.match(files,/id:"reports",label:"Report Cards"/);
   assert.match(files,/id:"compliance",label:"Privacy and Security"/);
 });
+
+
+test("legacy blueprint modules receive unwrapped Worker RPC results",()=>{
+  const compat=read("frontend/neon-supabase-compat.js");
+  assert.match(compat,/response\?\.result\?\?response/);
+  const routes=read("worker/src/routes.ts");
+  assert.match(routes,/manage_academics:Boolean\(rawPermissions\["academics\.write"\]\)/);
+  assert.match(routes,/manage_teachers:Boolean\(rawPermissions\["staff\.write"\]\)/);
+  assert.match(routes,/manage_headteachers:Boolean\(rawPermissions\["admin\.tenant"\]\)/);
+  assert.match(routes,/manage_users:Boolean\(rawPermissions\["admin\.users"\]\)/);
+  assert.match(routes,/view_audit:Boolean\(rawPermissions\["admin\.tenant"\]\)/);
+});
