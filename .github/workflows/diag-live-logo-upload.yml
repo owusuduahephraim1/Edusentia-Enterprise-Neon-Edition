@@ -1,0 +1,142 @@
+name: Diagnostic Live Logo Upload
+
+on:
+  push:
+    branches:
+      - diag/logo-upload-live-20260922
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client >/dev/null
+
+      - name: Diagnose Nipe official-logo transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::Production database secret is unavailable"; exit 1; }
+          TENANT_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.pathname="/edusentia_nis_000001";
+            console.log(u.toString());
+          ')"
+          echo "::add-mask::$TENANT_DATABASE_URL"
+
+          psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          begin;
+          do $diag$
+          declare
+            tenant_id uuid;
+            admin_id uuid;
+            admin_role text;
+            logo_key text;
+            logo_status text;
+            logo_type text;
+            logo_size bigint;
+            logo_created timestamptz;
+            license_state jsonb;
+            rpc_result jsonb;
+            err_state text;
+            err_message text;
+            err_detail text;
+            err_hint text;
+            err_constraint text;
+            err_table text;
+            err_column text;
+          begin
+            select id into tenant_id
+            from app.tenants
+            where code='NIS-000001'
+            limit 1;
+
+            if tenant_id is null then
+              raise notice 'DIAG tenant_found=false';
+              return;
+            end if;
+            raise notice 'DIAG tenant_found=true';
+
+            select p.id,public.current_app_role_for(p.role)
+            into admin_id,admin_role
+            from public.profiles p
+            where p.active
+              and public.current_app_role_for(p.role)='system_admin'
+            order by p.created_at
+            limit 1;
+
+            raise notice 'DIAG admin_found=% canonical_role=%',admin_id is not null,coalesce(admin_role,'none');
+
+            select m.object_key,m.status,m.content_type,m.size_bytes,m.created_at
+            into logo_key,logo_status,logo_type,logo_size,logo_created
+            from storage.object_metadata m
+            where m.tenant_id=tenant_id
+              and m.object_key like ('tenants/'||tenant_id::text||'/school-branding/%')
+            order by m.created_at desc
+            limit 1;
+
+            raise notice 'DIAG recent_logo_object=% status=% content_type=% size=% age_seconds=%',
+              logo_key is not null,
+              coalesce(logo_status,'none'),
+              coalesce(logo_type,'none'),
+              coalesce(logo_size,0),
+              case when logo_created is null then null else extract(epoch from(now()-logo_created))::bigint end;
+
+            if admin_id is null then
+              return;
+            end if;
+
+            perform app.set_request_context(tenant_id,admin_id,'system_admin',2::smallint);
+
+            begin
+              license_state:=public.license_snapshot_for_role('system_admin');
+              raise notice 'DIAG license configured=% write_allowed=% computed_status=%',
+                coalesce(license_state->>'configured','null'),
+                coalesce(license_state->>'write_allowed','null'),
+                coalesce(license_state->>'computed_status','null');
+            exception when others then
+              get stacked diagnostics
+                err_state=returned_sqlstate,
+                err_message=message_text,
+                err_detail=pg_exception_detail,
+                err_hint=pg_exception_hint,
+                err_constraint=constraint_name,
+                err_table=table_name,
+                err_column=column_name;
+              raise notice 'DIAG license_error state=% message=% detail=% hint=% constraint=% table=% column=%',
+                err_state,err_message,err_detail,err_hint,err_constraint,err_table,err_column;
+            end;
+
+            if logo_key is null then
+              return;
+            end if;
+
+            begin
+              rpc_result:=public.set_school_logo_reference(logo_key);
+              raise notice 'DIAG logo_rpc_ok=true saved=% message=%',
+                coalesce(rpc_result->>'saved','null'),
+                coalesce(rpc_result->>'message','');
+            exception when others then
+              get stacked diagnostics
+                err_state=returned_sqlstate,
+                err_message=message_text,
+                err_detail=pg_exception_detail,
+                err_hint=pg_exception_hint,
+                err_constraint=constraint_name,
+                err_table=table_name,
+                err_column=column_name;
+              raise notice 'DIAG logo_rpc_ok=false state=% message=% detail=% hint=% constraint=% table=% column=%',
+                err_state,err_message,err_detail,err_hint,err_constraint,err_table,err_column;
+            end;
+          end
+          $diag$;
+          rollback;
+          SQL
