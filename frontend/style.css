@@ -87,27 +87,10 @@ textarea{min-height:92px;resize:vertical}
 .profile-copy strong,.profile-copy small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .profile-copy small{color:#bcd3f7;text-transform:capitalize}
 
-/* Blueprint tenant sidebar geometry with explicit two-axis navigation scrolling. */
-#sidebar{overflow:hidden;height:100vh;height:100dvh;max-height:100dvh;overscroll-behavior:contain}
-#sidebar .sidebar-brand{flex:0 0 auto;min-width:0}
-#sidebar .sidebar-foot{flex:0 0 auto;margin-top:0}
-#sidebar .profile-chip,#sidebar .profile-copy{min-width:0}
-#mainNav.nav-list{
-  flex:1 1 auto;
-  min-height:0;
-  min-width:0;
-  width:100%;
-  max-width:100%;
-  overflow-y:auto!important;
-  overflow-x:auto!important;
-  scrollbar-width:auto;
-  scrollbar-gutter:stable both-edges;
-  overscroll-behavior:contain;
-}
-#mainNav.nav-list::-webkit-scrollbar{width:12px;height:12px}
-#mainNav.nav-list::-webkit-scrollbar-corner{background:rgba(255,255,255,.06)}
-#mainNav .nav-item{width:max-content;min-width:100%}
-#mainNav .nav-label{overflow:visible;text-overflow:clip;white-space:nowrap}
+/* Tenant navigation follows the Supabase blueprint geometry. Scrolling remains available
+   for long role menus, but browser scrollbar tracks are intentionally hidden. */
+#mainNav.nav-list{overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+#mainNav.nav-list::-webkit-scrollbar{display:none;width:0;height:0}
 
 .workspace{min-width:0}
 .topbar{height:80px;position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);backdrop-filter:blur(13px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 25px}

@@ -9,7 +9,7 @@ test("shared uploads use canonical tenant-scoped R2 storage",()=>{
   const routes=read("worker/src/routes.ts");
   const metadata=read("database/reference-compat/0051_r2_upload_metadata_api.sql");
   assert.ok(api.includes("function uploadContentType(file)"));
-  assert.ok(routes.includes("tenants/${ctx.tenantId}/${kind}/"));
+  assert.ok(routes.includes("tenants/${ctx.tenantId}/${kind}${subfolder}/"));
   assert.ok(routes.includes("object_storage_write_failed"));
   assert.ok(routes.includes("upload_finalize_failed"));
   assert.ok(routes.includes("public.prepare_object_upload"));
@@ -88,4 +88,24 @@ test("official school logo save follows blueprint licence and R2 validation sema
   assert.match(sql,/Official school logo saved for future school documents/);
   assert.doesNotMatch(sql,/update app\.tenants/);
   assert.doesNotMatch(sql,/from app\.tenant_licenses/);
+});
+
+
+test("report-card template upload preserves blueprint class-range paths inside tenant R2",()=>{
+  const api=read("frontend/api-client.js");
+  const routes=read("worker/src/routes.ts");
+  const ui=read("frontend/parity-enterprise-workspaces.js");
+  const migration=read("database/reference-compat/0053_blueprint_template_path_parity.sql");
+  assert.match(api,/uploadFile\(file,kind="document",options=\{\}\)/);
+  assert.match(api,/subfolder:String\(options\?\.subfolder\|\|""\)/);
+  assert.match(routes,/kind!=="report-card-templates"/);
+  assert.match(routes,/\["early_years","basic_1_6","basic_7_9"\]\.includes\(rawSubfolder\)/);
+  assert.match(routes,/\$\{kind\}\$\{subfolder\}/);
+  assert.ok(ui.includes('uploadFile(file,"report-card-templates",{subfolder:key})'));
+  assert.ok(ui.includes("Upload one A4 portrait PDF or DOCX design for each fixed class range."));
+  assert.ok(ui.includes("data-template-file"));
+  assert.ok(ui.includes("data-template-upload"));
+  assert.match(migration,/report-card-templates\/['"]?\|\|range_key\|\|['"]?\//);
+  assert.match(migration,/m\.tenant_id=v_tenant_id/);
+  assert.match(migration,/m\.status='active'/);
 });
