@@ -9,7 +9,7 @@ export type CertifiedRegistrySpec=Readonly<{args:readonly CertifiedRegistryArgum
 // nduah385/Edusentia-Enterprise @ a181e18e0ca044db756193209b5b089cd03efb0f.
 // Includes direct rpc()/rpcAllRows() calls and cacheableRpc() operation arguments.
 // Names, argument names and casts below are trusted build-time metadata, never request-provided SQL.
-export const CERTIFIED_RPC_REGISTRY=Object.freeze({
+const CERTIFIED_RPC_REGISTRY_BASE=Object.freeze({
   "academic_analytics": {
     "args": [
       {
@@ -2738,6 +2738,1105 @@ export const CERTIFIED_RPC_REGISTRY=Object.freeze({
     "setof": false
   }
 }) as Readonly<Record<string,CertifiedRegistrySpec>>;
+
+const OPERATIONAL_RPC_REGISTRY=Object.freeze({
+  "admin_accounts_staff_directory": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "include_inactive",
+        "type": "boolean",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admin_deactivate_accounts_staff": {
+    "args": [
+      {
+        "name": "target_staff_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "reason_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "boolean",
+    "setof": false
+  },
+  "admin_save_accounts_staff": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_accept_offer": {
+    "args": [
+      {
+        "name": "target_offer_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "void",
+    "setof": false
+  },
+  "admissions_application_detail": {
+    "args": [
+      {
+        "name": "target_application_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_application_register": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_dashboard": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_decide_application": {
+    "args": [
+      {
+        "name": "target_application_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "decision",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "offered_academic_year_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "offered_class_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "decision_notes",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "offer_expires_at",
+        "type": "date",
+        "required": false
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "admissions_delete_application": {
+    "args": [
+      {
+        "name": "target_application_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "void",
+    "setof": false
+  },
+  "admissions_enroll_application": {
+    "args": [
+      {
+        "name": "target_application_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_mark_not_enrolled": {
+    "args": [
+      {
+        "name": "target_application_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_permanently_remove_application": {
+    "args": [
+      {
+        "name": "target_application_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "confirmation_application_no",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "reason",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_reference_data": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "admissions_save_application": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "admissions_submit_application": {
+    "args": [
+      {
+        "name": "target_application_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "void",
+    "setof": false
+  },
+  "alumni_candidate_register": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "alumni_create_from_student": {
+    "args": [
+      {
+        "name": "target_student_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "graduation_academic_year_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "final_class_id",
+        "type": "uuid",
+        "required": false
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "alumni_dashboard": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "alumni_my_record": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "alumni_register": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "communications_campaign_options": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "communications_campaign_register": {
+    "args": [
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "communications_dashboard": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "communications_my_threads": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "communications_publish_campaign": {
+    "args": [
+      {
+        "name": "target_campaign_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "communications_save_campaign": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "discipline_dashboard": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "discipline_incident_register": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "discipline_save_incident": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "finance_accounts_console": {
+    "args": [
+      {
+        "name": "target_academic_year_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "target_class_id",
+        "type": "uuid",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_approve_payroll": {
+    "args": [
+      {
+        "name": "target_run_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_calculate_payroll": {
+    "args": [
+      {
+        "name": "target_year",
+        "type": "integer",
+        "required": true
+      },
+      {
+        "name": "target_month",
+        "type": "integer",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_class_fee_statement": {
+    "args": [
+      {
+        "name": "target_academic_year_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "target_class_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_clear_hold_override": {
+    "args": [
+      {
+        "name": "target_student_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "reason_text",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_deactivate_accounts_staff": {
+    "args": [
+      {
+        "name": "target_staff_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "reason_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "boolean",
+    "setof": false
+  },
+  "finance_invoice_detail": {
+    "args": [
+      {
+        "name": "target_invoice_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_invoice_register": {
+    "args": [
+      {
+        "name": "target_academic_year_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "target_class_id",
+        "type": "uuid",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_lock_payroll": {
+    "args": [
+      {
+        "name": "target_run_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "boolean",
+    "setof": false
+  },
+  "finance_mark_salary_paid": {
+    "args": [
+      {
+        "name": "target_item_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "payment_reference_text",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "payment_date_value",
+        "type": "date",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_my_children_fees": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_my_invoices": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_payment_candidates": {
+    "args": [
+      {
+        "name": "target_academic_year_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "target_class_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_payment_register": {
+    "args": [
+      {
+        "name": "target_academic_year_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "target_term_id",
+        "type": "uuid",
+        "required": false
+      },
+      {
+        "name": "target_class_id",
+        "type": "uuid",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_payroll_console": {
+    "args": [
+      {
+        "name": "target_year",
+        "type": "integer",
+        "required": false
+      },
+      {
+        "name": "target_month",
+        "type": "integer",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_portal_account_candidates": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_portal_report_detail": {
+    "args": [
+      {
+        "name": "target_report_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_record_payment": {
+    "args": [
+      {
+        "name": "target_student_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "target_account_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "amount_value",
+        "type": "numeric",
+        "required": true
+      },
+      {
+        "name": "payment_method_text",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "payment_reference_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "payment_date_value",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "notes_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_reverse_payment": {
+    "args": [
+      {
+        "name": "target_transaction_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "reason_text",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_save_accounts_staff": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_save_fee_schedule": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_save_hold_policy": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_save_payroll_profile": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_save_payroll_rule": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_save_salary_grade": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_save_teacher_loan": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_session_capabilities": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_set_hold_override": {
+    "args": [
+      {
+        "name": "target_student_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "mode_text",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "reason_text",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "ends_at_value",
+        "type": "timestamp with time zone",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_student_statement": {
+    "args": [
+      {
+        "name": "target_student_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "finance_teacher_salary_history": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "get_my_student_portal": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "get_my_student_portal_v2": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "health_dashboard": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "health_save_visit": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "health_visit_register": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "date_from",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "date_to",
+        "type": "date",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hostel_allocate_student": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "hostel_allocation_register": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hostel_dashboard": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hostel_register": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hostel_save_house": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "hr_cancel_leave": {
+    "args": [
+      {
+        "name": "target_request_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "cancellation_reason",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_decide_leave": {
+    "args": [
+      {
+        "name": "target_request_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "decision",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "decision_reason_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_leave_register": {
+    "args": [
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_save_document": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_save_qualification": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_save_staff": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_staff_detail": {
+    "args": [
+      {
+        "name": "target_staff_id",
+        "type": "uuid",
+        "required": true
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_staff_directory": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "department_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "hr_submit_leave_for_staff": {
+    "args": [
+      {
+        "name": "target_staff_id",
+        "type": "uuid",
+        "required": true
+      },
+      {
+        "name": "leave_kind",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "start_on",
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "end_on",
+        "type": "date",
+        "required": true
+      },
+      {
+        "name": "reason_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "student_services_save_staff_access": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  },
+  "student_services_session": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "student_services_staff_candidates": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "student_services_staff_register": {
+    "args": [],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "student_services_student_picker": {
+    "args": [
+      {
+        "name": "target_domain",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "welfare_case_register": {
+    "args": [
+      {
+        "name": "search_text",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "status_filter",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "resultType": "jsonb",
+    "setof": false
+  },
+  "welfare_save_case": {
+    "args": [
+      {
+        "name": "payload",
+        "type": "jsonb",
+        "required": true
+      }
+    ],
+    "resultType": "uuid",
+    "setof": false
+  }
+}) as Readonly<Record<string,CertifiedRegistrySpec>>;
+export const CERTIFIED_RPC_REGISTRY=Object.freeze({...CERTIFIED_RPC_REGISTRY_BASE,...OPERATIONAL_RPC_REGISTRY}) as Readonly<Record<string,CertifiedRegistrySpec>>;
 export const CERTIFIED_RPC_REGISTRY_NAMES=Object.freeze(Object.keys(CERTIFIED_RPC_REGISTRY).sort());
 
 type Args=Record<string,unknown>;
@@ -2764,6 +3863,10 @@ function normalizeValue(value:unknown,type:string,name:string):unknown{
     }
     case "boolean":
       if(typeof value!=="boolean")invalid(name+" must be Boolean");return value;
+    case "numeric":{
+      if(typeof value==="number"){if(!Number.isFinite(value))invalid(name+" is invalid");return String(value);}
+      const v=scalarText(value,name,128);if(!/^[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(v))invalid(name+" is invalid");return v;
+    }
     case "jsonb":
       if(typeof value!=="object"||value===null)invalid(name+" must be JSON");return JSON.stringify(value);
     case "date":{
