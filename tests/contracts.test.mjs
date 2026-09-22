@@ -545,8 +545,9 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.match(u,/258\/258 executable/);
   assert.match(u,/0049a_operational_finance_reference/);
   assert.match(u,/0049v_live_plan_feature_parity/);
+  assert.match(u,/0049w_school_identity_logo_parity/);
   assert.match(u,/0049z_operational_runtime_grants/);
-  assert.match(u,/test "\$migration_count" = "23"/);
+  assert.match(u,/test "\$migration_count" = "24"/);
   assert.match(u,/plan_parity_count/);
   assert.match(u,/set role edusentia_provisioner;[\s\S]*grant usage,create on schema public to edusentia_runtime/i);
   assert.match(u,/revoke create on schema public from edusentia_runtime/i);
@@ -556,7 +557,7 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.ok(deploy.indexOf('TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"') < deploy.indexOf('bash scripts/update-isolated-operational-tenants.sh'));
   assert.match(promote,/bash scripts\/update-isolated-operational-tenants\.sh/);
   assert.match(promote,/version like '0049%'/);
-  assert.ok(promote.split("\n").some(line=>line.includes("version like '0049%'")&&line.trim().endsWith('= "23"')),"parity promotion must verify 23 total 0049 migration markers");
+  assert.ok(promote.split("\n").some(line=>line.includes("version like '0049%'")&&line.trim().endsWith('= "24"')),"parity promotion must verify 24 total 0049 migration markers");
   assert.match(promote,/0049_operational_blueprint_parity/);
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/version like '0049%'/);
