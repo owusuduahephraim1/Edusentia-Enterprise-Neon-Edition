@@ -43,11 +43,12 @@ export async function login(env:Env,emailRaw:string,password:string,tenantCodeRa
     await sql`select audit.record_auth_event(null,null,'auth.login.failed',${JSON.stringify({email,tenantCode:route.tenant_code})}::jsonb)`;
     throw Object.assign(new Error("The email or password is incorrect"),{code:"invalid_credentials",status:401});
   }
-  const mfaRequired=Boolean(row.mfa_required)||privilegedRoleRequiresMfa(row.role);
-  if(!mfaRequired){
-    const issued=await issueSession(env,sql,row,1);
-    await sql`select audit.record_auth_event(${row.tenant_id}::uuid,${row.user_id}::uuid,'auth.login.success','{"aal":1}'::jsonb)`;
-    return {mfaRequired:false,...issued};
+  if(!row.mfa_required){
+    if(!privilegedRoleRequiresMfa(row.role)){
+      const issued=await issueSession(env,sql,row,1);
+      await sql`select audit.record_auth_event(${row.tenant_id}::uuid,${row.user_id}::uuid,'auth.login.success','{"aal":1}'::jsonb)`;
+      return {mfaRequired:false,...issued};
+    }
   }
 
   await sql`update authn.login_challenges set used_at=coalesce(used_at,now()) where user_id=${row.user_id}::uuid and tenant_id=${row.tenant_id}::uuid and used_at is null`;
@@ -154,8 +155,9 @@ export async function authenticate(request:Request,env:Env):Promise<SessionConte
        limit 1`
   ]);
   const context=contextRows[0] as any,assuranceLevel=Number(session.assurance_level);
-  const mfaRequired=Boolean(context?.mfa_required)||privilegedRoleRequiresMfa(context?.role);
-  if(!context||context.status!=="active"||(mfaRequired&&assuranceLevel<2))return null;
+  if(!context||context.status!=="active")return null;
+  const mfaRequired=Boolean(context.mfa_required)||privilegedRoleRequiresMfa(context.role);
+  if(mfaRequired&&assuranceLevel<2)return null;
   return {sessionId:session.session_id,userId:session.user_id,tenantId:session.tenant_id,tenantCode:context.tenant_code,tenantName:context.tenant_name,databaseName:String(route.database_name),role:context.role,assuranceLevel,email:session.email,displayName:session.display_name};
 }
 export async function logout(request:Request,env:Env){
