@@ -34,30 +34,31 @@ set search_path to 'public','app','pg_catalog'
 as $function$
 declare
   tenant_id uuid:=app.current_tenant_id();
-  current_role text:=app.current_role();
-  current_aal smallint:=app.current_aal();
   school_id uuid;
+  clean_logo text:=btrim(coalesce(target_logo_url,''));
 begin
   if tenant_id is null then
     raise exception 'Tenant context is required' using errcode='42501';
   end if;
-  if current_role<>'system_admin' then
+  -- Match the certified Supabase blueprint authorization path. The active
+  -- profile is authoritative and legacy admin roles are normalized there.
+  if not public.is_system_admin() then
     raise exception 'Only the School System Administrator can update the official school logo' using errcode='42501';
   end if;
-  if current_aal<2 then
-    raise exception 'A verified MFA session is required to update the official school logo' using errcode='42501';
-  end if;
-  if coalesce(btrim(target_logo_url),'')='' then
+  perform public.require_sensitive_access();
+  if clean_logo='' then
     raise exception 'The school logo reference is required';
   end if;
-  if target_logo_url not like ('tenants/'||tenant_id::text||'/school-branding/%') or target_logo_url like '%..%' then
-    raise exception 'The school logo must use the tenant school-branding storage scope' using errcode='22023';
-  end if;
-  if not exists(
-    select 1 from storage.object_metadata m
-    where m.tenant_id=tenant_id and m.object_key=btrim(target_logo_url) and m.status='active' and lower(m.content_type)='image/png'
-  ) then
-    raise exception 'The uploaded school logo is not available in protected storage' using errcode='22023';
+  if clean_logo<>'assets/school-logo.png' then
+    if clean_logo not like ('tenants/'||tenant_id::text||'/school-branding/%') or clean_logo like '%..%' then
+      raise exception 'The school logo must use the tenant school-branding storage scope' using errcode='22023';
+    end if;
+    if not exists(
+      select 1 from storage.object_metadata m
+      where m.tenant_id=tenant_id and m.object_key=clean_logo and m.status='active' and lower(m.content_type)='image/png'
+    ) then
+      raise exception 'The uploaded school logo is not available in protected storage' using errcode='22023';
+    end if;
   end if;
   if not exists(
     select 1
@@ -81,19 +82,19 @@ begin
   end if;
 
   update public.school_settings
-  set logo_url=target_logo_url,
+  set logo_url=clean_logo,
       updated_at=now()
   where id=school_id;
 
   update app.tenants
-  set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{logo_url}',to_jsonb(target_logo_url),true),
+  set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{logo_url}',to_jsonb(clean_logo),true),
       updated_at=now()
   where id=tenant_id;
 
   return jsonb_build_object(
     'ok',true,
     'school_id',school_id,
-    'logo_url',target_logo_url
+    'logo_url',clean_logo
   );
 end
 $function$;
