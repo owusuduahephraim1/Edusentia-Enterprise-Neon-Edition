@@ -31,10 +31,12 @@ test("school logo authorization follows the blueprint active-profile role path",
   assert.doesNotMatch(sql,/m\.tenant_id=tenant_id/);
 });
 
-test("bootstrap projects the canonical saved school logo into tenant settings",()=>{
+test("bootstrap projects the canonical saved school logo without direct table access",()=>{
   const routes=read("worker/src/routes.ts");
-  assert.match(routes,/select s\.logo_url from public\.school_settings s/);
-  assert.match(routes,/jsonb_build_object\([\s\S]*'logo_url'/);
+  assert.match(routes,/select public\.get_bootstrap_data\(\) result/);
+  assert.match(routes,/certifiedBootstrap\?\.school\?\.logo_url/);
+  assert.match(routes,/settings:\{\.\.\.\(tenantRow\.settings\|\|\{\}\),logo_url:canonicalLogo\}/);
+  assert.doesNotMatch(routes,/select s\.logo_url from public\.school_settings s/);
   assert.match(routes,/assets\/school-logo\.png/);
 });
 
