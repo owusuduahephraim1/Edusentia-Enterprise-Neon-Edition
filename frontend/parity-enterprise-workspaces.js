@@ -249,21 +249,21 @@
     }catch(e){byId("content").innerHTML=sectionHead("Settings","School identity, security, health, and resilience")+pageError(e);}
   }
 
-  registerView({id:"teacher_profile",label:"My Profile",icon:"♙",subtitle:"Teacher profile, qualifications, and assignments",roles:["class_teacher","subject_teacher"],render:renderTeacherProfile});
+  registerView({id:"teacher_profile",label:"My Profile",icon:"♙",subtitle:"Teacher profile, photograph, qualifications, and assignments",roles:["class_teacher","subject_teacher"],render:renderTeacherProfile});
   registerView({id:"my_class",label:"My Class",icon:"▣",subtitle:"Assigned class, learners, and report progress",roles:["class_teacher"],render:renderMyClass});
   registerView({id:"my_subjects",label:"My Subjects",icon:"⌘",subtitle:"Assigned subjects, classes, and assessment progress",roles:["class_teacher","subject_teacher"],render:renderMySubjects});
-  registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class registers and term attendance",roles:["class_teacher"],render:renderAttendance});
-  registerView({id:"history",label:"Academic History",icon:"◷",subtitle:"Published results, lifecycle, and transcripts",roles:["system_admin","principal","class_teacher","subject_teacher"],render:renderHistory});
-  registerView({id:"prospectus",label:"School Prospectus",icon:"▤",subtitle:"Fees, requirements, transport, policies, and revisions",roles:["system_admin"],render:renderProspectus});
+  registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class attendance and automatic term totals",roles:["class_teacher"],feature:"attendance",render:renderAttendance});
+  registerView({id:"history",label:"Academic History",icon:"▧",subtitle:"Cumulative transcripts, lifecycle, transfers, and verification",roles:["system_admin","principal","class_teacher","subject_teacher"],feature:"academic_history",render:renderHistory});
+  registerView({id:"prospectus",label:"School Prospectus",icon:"▤",subtitle:"Academic-year fees, requirements, transportation, policies, revisions, and PDF output",roles:["system_admin"],feature:"school_prospectus",render:renderProspectus});
   registerView({id:"delegations",label:"Emergency Delegation",icon:"⚑",subtitle:"Temporary academic access and continuity",roles:["system_admin","principal"],render:renderDelegations});
-  registerView({id:"certificates",label:"Certificates",icon:"✦",subtitle:"Promotion, completion, and recognition awards",roles:["system_admin","principal"],render:renderCertificates});
-  registerView({id:"id_cards",label:"ID Card Management",icon:"▥",subtitle:"Student and staff identity cards",roles:["system_admin"],render:renderIdCards});
-  registerView({id:"insights",label:"Insights",icon:"◩",subtitle:"Performance, attendance, and completion trends",roles:["system_admin","principal","class_teacher","subject_teacher"],render:renderInsights});
+  registerView({id:"certificates",label:"Certificates",icon:"✦",subtitle:"Promotion, completion, and teacher recognition awards",roles:["system_admin","principal"],feature:"certificates",render:renderCertificates});
+  registerView({id:"id_cards",label:"ID Card Management",icon:"▥",subtitle:"Professional student and staff ID cards, QR verification, printing, and lifecycle",roles:["system_admin"],feature:"id_cards",render:renderIdCards});
+  registerView({id:"insights",label:"Insights",icon:"◩",subtitle:"Performance, attendance, completion, and class trends",roles:["system_admin","principal","class_teacher","subject_teacher"],feature:"analytics",render:renderInsights});
   registerView({id:"children",label:"My Children",icon:"♥",subtitle:"Published academic records",roles:["parent_guardian"],render:renderChildren});
-  registerView({id:"users",label:"Users and Access",icon:"♟",subtitle:"Accounts and delegated access",roles:["system_admin"],render:renderUsers});
-  registerView({id:"compliance",label:"Compliance",icon:"⚿",subtitle:"Privacy, retention, and security evidence",roles:["system_admin","principal"],render:renderCompliance});
-  registerView({id:"backup_restore",label:"Backup & Recovery",icon:"↻",subtitle:"Backup history and recovery readiness",roles:["system_admin"],render:renderBackup});
-  registerView({id:"plan_upgrade",label:"Upgrade Plan",icon:"◇",subtitle:"Verify and activate an authorized plan upgrade",roles:["system_admin"],render:renderPlanUpgrade});
+  registerView({id:"users",label:"Users and Access",icon:"♟",subtitle:"Roles, classes, and security",permission:"manage_users",render:renderUsers});
+  registerView({id:"compliance",label:"Privacy and Security",icon:"◈",subtitle:"Retention, privacy requests, security events, and verification",roles:["system_admin","principal"],feature:"governance",render:renderCompliance});
+  registerView({id:"backup_restore",label:"Backup & Restore",icon:"↻",subtitle:"Downloadable full-school continuity and disaster recovery",roles:["system_admin"],render:renderBackup});
+  registerView({id:"plan_upgrade",label:"Upgrade Plan",icon:"◇",subtitle:"Verify and activate a platform-authorized plan upgrade",roles:["system_admin"],render:renderPlanUpgrade});
   registerView({id:"settings",label:"Settings",icon:"⚙",subtitle:"School identity, security, and resilience",roles:["system_admin"],render:renderSettings});
-  registerView({id:"license_capacity",label:"Licence Capacity",icon:"◇",subtitle:"Entitlement and capacity usage",roles:["system_admin"],render:renderLicenseCapacity});
+  registerView({id:"license_capacity",label:"Licence and Capacity",icon:"◫",subtitle:"Read-only licence status, limits, usage, and verification",roles:["system_admin"],render:renderLicenseCapacity});
 })();

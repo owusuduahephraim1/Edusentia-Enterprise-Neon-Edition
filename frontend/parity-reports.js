@@ -61,5 +61,5 @@
     byId("reportPdfForm").onsubmit=async e=>{e.preventDefault();const file=byId("reportPdfFile").files?.[0],button=byId("reportPdfSave");if(!file)return;button.disabled=true;let objectKey="";try{const uploaded=await api().uploadReportPdf(report.id,file);objectKey=uploaded.objectKey;await certified("register_report_pdf",{target_report_id:report.id,target_storage_path:objectKey,target_checksum:await sha256(file),target_page_count:1});closeModal();await openReportEditor(report.id,null,null);}catch(error){if(objectKey)await api().deleteReportPdfObject(report.id,objectKey).catch(()=>{});showMessage("reportPdfMessage",friendly(error));}finally{button.disabled=false;}};
   }
 
-  registerView({id:"reports",label:"Reports",icon:"▥",subtitle:"Assessment workflow and official report PDFs",roles:["system_admin","principal","class_teacher","subject_teacher"],render:renderReports});
+  registerView({id:"reports",label:"Report Cards",icon:"▤",subtitle:"Assessment, approval, and publication",hideFor:["parent_guardian"],feature:"report_cards",render:renderReports});
 })();

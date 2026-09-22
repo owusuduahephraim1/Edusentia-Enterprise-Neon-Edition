@@ -60,7 +60,7 @@
         <section class="panel"><div class="panel-header"><div><h3>Payments</h3><p>Latest 100 non-reversed and reversed receipts</p></div></div><div class="table-wrap"><table><thead><tr><th>Receipt</th><th>Student</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Reference</th><th>Received</th><th>Status</th></tr></thead><tbody>${paymentRows.length?paymentRows.map(x=>`<tr><td>${esc(x.receipt_no||"")}</td><td>${esc(x.student_name||x.student_id||"")}</td><td>${esc(x.invoice_no||"—")}</td><td>${formatAmount(x.amount)}</td><td>${esc(x.method||"")}</td><td>${esc(x.reference||"")}</td><td>${formatDateTime(x.received_at)}</td><td>${status(x.reversed_at?"reversed":"received")}</td></tr>`).join(""):'<tr><td colspan="8">No payments.</td></tr>'}</tbody></table></div></section>`;
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
-  registerView({id:"audit",label:"Audit",icon:"◌",subtitle:"Certified audit events and archive history",roles:["system_admin"],render:renderAudit});
+  registerView({id:"audit",label:"Audit Trail",icon:"◎",subtitle:"Record changes and accountability",permission:"view_audit",feature:"governance",render:renderAudit});
   registerView({id:"security",label:"Security",icon:"⌾",subtitle:"Multi-factor authentication and account security",render:renderSecurity});
-  registerView({id:"finance",label:"Finance",icon:"¤",subtitle:"Invoices, payments and fee position",roles:["system_admin","principal","accountant"],render:renderFinance});
+  registerView({id:"finance",label:"Finance",icon:"¤",subtitle:"Fees, statements and payroll operations",feature:"finance_fees",roles:["system_admin","accountant","accounts_office","parent_guardian","student","class_teacher","subject_teacher"],render:renderFinance});
 })();

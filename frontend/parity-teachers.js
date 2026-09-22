@@ -63,5 +63,5 @@
   async function archiveTeacher(id){if(!confirm("Remove this teacher from active records?"))return;try{await certified("archive_teacher",{target_teacher_id:id,reason_text:"Teacher removed from active records"});await loadAdvancedTeachers();}catch(error){alert(friendly(error));}}
   async function restoreTeacher(id){try{await certified("restore_teacher",{target_teacher_id:id,reason_text:"Teacher restored to active records"});await loadAdvancedTeachers();}catch(error){alert(friendly(error));}}
 
-  registerView({id:"teachers",label:"Teachers",icon:"♜",subtitle:"Certified teacher lifecycle and photographs",roles:["system_admin"],render:renderTeachers});
+  registerView({id:"teachers",label:"Teachers",icon:"♜",subtitle:"Teacher records and assignments",permission:"manage_teachers",render:renderTeachers});
 })();

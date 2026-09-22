@@ -29,5 +29,5 @@
         <section class="panel"><div class="panel-header"><div><h3>Imports & Continuity</h3><p>Latest protected import batches</p></div></div>${table(["Type","File","Status","Rows","Success","Errors","Created"],data.continuity||[],x=>`<tr><td>${esc(x.import_type||"")}</td><td>${esc(x.file_name||"")}</td><td>${status(x.status)}</td><td>${esc(x.row_count||0)}</td><td>${esc(x.success_count||0)}</td><td>${esc(x.error_count||0)}</td><td>${formatDateTime(x.created_at)}</td></tr>`,"No import batches.")}</section>`;
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
-  registerView({id:"operations",label:"Operations",icon:"▦",subtitle:"Admissions, attendance, services, payroll and continuity",roles:["system_admin","principal"],render:renderOperations});
+  registerView({id:"operations",label:"Operations",icon:"◫",subtitle:"Deadlines, health, corrections, and recovery readiness",roles:["system_admin","principal"],feature:"governance",render:renderOperations});
 })();
