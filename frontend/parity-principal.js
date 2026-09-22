@@ -22,10 +22,14 @@
     }catch(error){box.innerHTML=pageError(error);}
   }
   async function openPrincipalEditor(id=""){
-    let row={};if(id){const data=await certified("get_headteacher_record",{target_headteacher_id:id});row=data?.headteacher||data||{};}
+    let row={};
+    if(id){
+      const data=await certified("get_headteacher_record",{target_headteacher_id:id});row=data?.headteacher||data||{};
+    }else{
+      try{row.staff_no=await certified("generate_school_identifier",{identifier_kind:"principal"});}catch(_){row.staff_no="";}
+    }
     openModal(id?"Edit Principal":"Add Principal","Single-current-Principal protection remains enforced by the certified database.",`
-      <form id="principalAdvancedForm" class="form-stack"><input type="hidden" name="id" value="${esc(row.id||"")}"><input type="hidden" name="updated_at" value="${esc(row.updated_at||"")}"><div class="form-grid">
-        <label class="field"><span>Staff number</span><input name="staff_no" value="${esc(row.staff_no||"")}"></label>
+      <form id="principalAdvancedForm" class="form-stack"><input type="hidden" name="id" value="${esc(row.id||"")}"><input type="hidden" name="updated_at" value="${esc(row.updated_at||"")}"><input type="hidden" name="staff_no" value="${esc(row.staff_no||"")}"><div class="form-grid">
         <label class="field"><span>Full name</span><input name="full_name" value="${esc(row.full_name||[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}" required></label>
         <label class="field"><span>Contact phone</span><input name="contact" value="${esc(row.phone||row.contact||"")}" required></label>
         <label class="field full"><span>Photograph</span><input id="principalPhotoAdvanced" type="file" accept="image/jpeg,image/png,image/webp"></label>
