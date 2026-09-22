@@ -47,12 +47,22 @@
   }
   function can(item){
     const r=role();
-    if(item.permission&&!permissionEnabled(item.permission))return false;
+    if(item.permission&&!permissionEnabled(item.permission)&&r!=="system_admin")return false;
     if(item.roles&&!item.roles.includes(r))return false;
     if(item.hideFor?.includes(r))return false;
-    if(item.feature&&!featureEnabled(item.feature))return false;
+    if(item.feature&&!featureEnabled(item.feature)&&r!=="system_admin")return false;
     if(typeof item.when==="function"&&!item.when(state.boot,state.session))return false;
     return true;
+  }
+  function planUpgradeRequired(item){return role()==="system_admin"&&Boolean(item?.feature)&&!featureEnabled(item.feature);}
+  function renderPlanUpgradeRequired(item){
+    const plan=state.boot?.license?.plan||{};
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>${escapeHtml(item.label)}</h3><p>${escapeHtml(item.subtitle||"Licensed school module")}</p></div></div>
+      <section class="panel pad"><div class="license-banner warning"><div><strong>Plan upgrade required</strong><span>This operational workspace is part of the original Edusentia blueprint, but the <b>${escapeHtml(item.feature)}</b> entitlement is not enabled on the current ${escapeHtml(plan.name||plan.code||"school")} plan.</span></div></div>
+      <p class="muted">The navigation section remains visible so the System Administrator has the same blueprint workspace structure. Data-changing operations stay disabled until the required plan entitlement is activated.</p>
+      <div class="button-row"><button class="button primary" id="openUpgradePlan" type="button">Open Upgrade Plan</button></div></section>`;
+    byId("openUpgradePlan")?.addEventListener("click",()=>navigate("plan_upgrade"));
   }
   function orderedNavItems(){
     const order=ROLE_NAV_IDS[role()]||["dashboard"];
@@ -160,7 +170,7 @@
   function renderNav(){
     const nav=byId("mainNav");
     const items=orderedNavItems();
-    nav.innerHTML=items.map(item=>`<button class="nav-item" type="button" data-view="${item.id}" title="${escapeHtml(item.subtitle||item.label)}"><span class="nav-icon" aria-hidden="true">${item.icon}</span><span class="nav-label">${escapeHtml(navLabel(item))}</span><span class="nav-active-dot" aria-hidden="true"></span></button>`).join("");
+    nav.innerHTML=items.map(item=>`<button class="nav-item ${planUpgradeRequired(item)?"upgrade-required":""}" type="button" data-view="${item.id}" title="${escapeHtml(item.subtitle||item.label)}${planUpgradeRequired(item)?" • Plan upgrade required":""}"><span class="nav-icon" aria-hidden="true">${item.icon}</span><span class="nav-label">${escapeHtml(navLabel(item))}${planUpgradeRequired(item)?'<small class="nav-upgrade-badge">Plan upgrade required</small>':""}</span><span class="nav-active-dot" aria-hidden="true"></span></button>`).join("");
     nav.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>navigate(button.dataset.view)));
   }
 
@@ -173,7 +183,7 @@
     byId("sidebar")?.classList.remove("open");
     setBusy(true);
     let failed=false;
-    try{await item.render();}
+    try{if(planUpgradeRequired(item))renderPlanUpgradeRequired(item);else await item.render();}
     catch(error){failed=true;byId("content").innerHTML=pageError(error);setSync("error","Service issue");}
     finally{
       byId("content")?.setAttribute("aria-busy","false");
