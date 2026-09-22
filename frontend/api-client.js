@@ -52,6 +52,12 @@
   }
 
 
+  async function downloadFile(objectKey){
+    const response=await fetch(`${apiBase}/api/files/download?key=${encodeURIComponent(String(objectKey||""))}`,{credentials:"include"});
+    if(!response.ok){const payload=await response.json().catch(()=>({}));const e=payload?.error||{};throw new ApiError(e.message||`Download failed (${response.status})`,response.status,e.code||"download_failed",e.details);}
+    return response.blob();
+  }
+
   window.EdusentiaApi=Object.freeze({
     request,health:()=>request("/api/health"),
 
@@ -66,6 +72,7 @@
     completeMfa:(challengeToken,code)=>post("/api/auth/mfa/complete",{challengeToken,code}),
     logout:()=>post("/api/auth/logout"),
     bootstrap:()=>request("/api/bootstrap"),
+    updateSchoolSettings:(payload)=>post("/api/settings/school",payload),
     certifiedRpc:(operation,args={})=>post(`/api/compat/rpc/${encodeURIComponent(String(operation||""))}`,{args}),
     adminUserManagement:(action,payload={})=>post("/api/compat/functions/admin-user-management",{action,payload}),
     directoryUserManagement:(action,payload={})=>post("/api/compat/functions/directory-user-management",{action,payload}),
@@ -87,6 +94,7 @@
     listOperationsOverview:()=>request("/api/operations/overview"),
     prepareUpload:(payload)=>post("/api/files/upload-url",payload),
     uploadFile,
+    downloadFile,
     uploadReportPdf,
     downloadReportPdf,
     deleteReportPdfObject,
