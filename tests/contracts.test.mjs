@@ -544,8 +544,10 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.match(u,/future-tenant-rpc-surface\.json/);
   assert.match(u,/258\/258 executable/);
   assert.match(u,/0049a_operational_finance_reference/);
+  assert.match(u,/0049v_live_plan_feature_parity/);
   assert.match(u,/0049z_operational_runtime_grants/);
-  assert.match(u,/test "\$migration_count" = "22"/);
+  assert.match(u,/test "\$migration_count" = "23"/);
+  assert.match(u,/plan_parity_count/);
   assert.match(u,/set role edusentia_provisioner;[\s\S]*grant usage,create on schema public to edusentia_runtime/i);
   assert.match(u,/revoke create on schema public from edusentia_runtime/i);
   assert.doesNotMatch(u,/drop database|create database|delete from platform\.tenant_control|update platform\.tenant_control/i);
