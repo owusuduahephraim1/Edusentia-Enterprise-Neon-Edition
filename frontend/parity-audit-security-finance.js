@@ -4,20 +4,74 @@
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   // ---------- Audit ----------
   async function renderAudit(){
-    byId("content").innerHTML=`<div class="page-head"><div><h3>Audit Trail</h3><p>Certified tenant audit events and immutable archive batches.</p></div></div>${loading("Loading audit trail")}`;
+    byId("content").innerHTML=`<div class="page-head"><div><h3>Audit Trail</h3><p>Certified tenant audit events and protected archive batches.</p></div></div>${loading("Loading audit trail")}`;
     try{
-      const [events,archives]=await Promise.all([certified("list_audit_events_v2",{target_table:"",target_action:"",target_actor_id:null,target_record_id:null,page_number:1,page_size:100}),certified("list_audit_archives_v1",{page_number:1,page_size:50})]);
+      const [events,archives]=await Promise.all([
+        certified("list_audit_events_v2",{target_table:"",target_action:"",target_actor_id:null,target_record_id:null,page_number:1,page_size:100}),
+        certified("list_audit_archives_v1",{page_number:1,page_size:50})
+      ]);
       const rows=Array.isArray(events?.rows)?events.rows:[],batches=Array.isArray(archives?.rows)?archives.rows:[];
-      byId("content").innerHTML=`<div class="page-head"><div><h3>Audit Trail</h3><p>Certified tenant audit events and immutable archive batches.</p></div></div>
-        <section class="panel"><div class="panel-header"><div><h3>Recent events</h3><p>${esc(events?.total??rows.length)} matching events</p></div></div><div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Table</th><th>Record</th><th>Actor</th><th>Reason</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${formatDateTime(x.created_at)}</td><td>${esc(x.action||"")}</td><td>${esc(x.table_name||"")}</td><td>${esc(x.record_id||"—")}</td><td>${esc(x.actor_name||x.actor_id||"System")}</td><td>${esc(x.reason||"")}</td></tr>`).join(""):'<tr><td colspan="6">No audit events.</td></tr>'}</tbody></table></div></section>
-        <section class="panel"><div class="panel-header"><div><h3>Audit archives</h3><p>Protected historical audit batches</p></div></div><div class="table-wrap"><table><thead><tr><th>Archive</th><th>Created</th><th>Rows</th><th>Actions</th></tr></thead><tbody>${batches.length?batches.map(x=>`<tr><td>${esc(x.id||"")}</td><td>${formatDateTime(x.created_at)}</td><td>${esc(x.entry_count??x.row_count??"—")}</td><td><button class="button secondary small" data-audit-archive="${esc(x.id)}">View</button></td></tr>`).join(""):'<tr><td colspan="4">No archives.</td></tr>'}</tbody></table></div></section>`;
+      byId("content").innerHTML=`
+        <div class="page-head"><div><h3>Audit Trail</h3><p>Certified tenant audit events and protected archive batches.</p></div>
+          <div class="page-actions">${isSystemAdmin()?'<button id="auditResetAll" class="button danger" type="button">Reset all audit history</button>':""}</div>
+        </div>
+        <div class="license-banner restricted"><div><strong>Permanent deletion control</strong><span>Audit reset actions permanently delete the selected Audit Trail history. They require System Administrator access, verified MFA, and typed confirmation.</span></div></div>
+        <section class="panel"><div class="panel-header"><div><h3>Recent events</h3><p>${esc(events?.total??rows.length)} matching events</p></div>${isSystemAdmin()?'<button id="auditResetActive" class="button danger small" type="button">Reset recent events</button>':""}</div><div id="auditRows" class="table-wrap audit-scroll"><table><thead><tr><th>Time</th><th>Action</th><th>Table</th><th>Record</th><th>Actor</th><th>Reason</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${formatDateTime(x.created_at)}</td><td>${esc(x.action||"")}</td><td>${esc(x.table_name||"")}</td><td>${esc(x.record_id||"—")}</td><td>${esc(x.actor_name||x.actor_id||"System")}</td><td>${esc(x.reason||"")}</td></tr>`).join(""):'<tr><td colspan="6">No audit events.</td></tr>'}</tbody></table></div></section>
+        <section class="panel"><div class="panel-header"><div><h3>Audit archives</h3><p>Historical audit batches previously moved out of the active console</p></div>${isSystemAdmin()?'<button id="auditResetArchives" class="button danger small" type="button">Delete all archives</button>':""}</div><div id="auditArchiveRows" class="table-wrap audit-scroll"><table><thead><tr><th>Archive</th><th>Created</th><th>Rows</th><th>Actions</th></tr></thead><tbody>${batches.length?batches.map(x=>`<tr><td>${esc(x.id||"")}</td><td>${formatDateTime(x.created_at)}</td><td>${esc(x.entry_count??x.row_count??"—")}</td><td><button class="button secondary small" data-audit-archive="${esc(x.id)}">View</button></td></tr>`).join(""):'<tr><td colspan="4">No archives.</td></tr>'}</tbody></table></div></section>`;
       byId("content").querySelectorAll("[data-audit-archive]").forEach(b=>b.onclick=()=>openAuditArchive(b.dataset.auditArchive));
+      byId("auditResetActive")?.addEventListener("click",()=>openAuditReset("active"));
+      byId("auditResetArchives")?.addEventListener("click",()=>openAuditReset("archives"));
+      byId("auditResetAll")?.addEventListener("click",()=>openAuditReset("all"));
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
+
+  function openAuditReset(scope){
+    const config={
+      active:{
+        title:"Reset Recent Audit Events",
+        phrase:"RESET ACTIVE AUDIT",
+        description:"Permanently delete every record from the active Recent events section. Audit archives are left unchanged."
+      },
+      archives:{
+        title:"Delete All Audit Archives",
+        phrase:"DELETE ALL AUDIT ARCHIVES",
+        description:"Permanently delete every archived audit entry and archive batch. Recent events are left unchanged."
+      },
+      all:{
+        title:"Reset All Audit History",
+        phrase:"RESET ALL AUDIT HISTORY",
+        description:"Permanently delete both Recent events and every Audit archive. This cannot be undone."
+      }
+    }[scope];
+    if(!config)return;
+    openModal(config.title,"System Administrator only",`
+      <div class="license-banner restricted"><div><strong>Permanent deletion</strong><span>${esc(config.description)}</span></div></div>
+      <form id="auditResetForm" class="form-stack">
+        <label class="field"><span>Type <code>${esc(config.phrase)}</code> to confirm</span><input name="confirmation" autocomplete="off" required></label>
+        <label class="check-field"><input type="checkbox" name="acknowledge" required><span>I understand these Audit Trail records will be permanently deleted and cannot be restored from this workspace.</span></label>
+        <p id="auditResetMessage" class="form-message hidden"></p>
+      </form>`,
+      '<button class="button ghost" id="auditResetCancel" type="button">Cancel</button><button class="button danger" id="auditResetConfirm" type="button">Permanently delete</button>');
+    byId("auditResetCancel").onclick=closeModal;
+    byId("auditResetConfirm").onclick=async()=>{
+      const form=byId("auditResetForm"),typed=String(form.elements.confirmation.value||"").trim().toUpperCase(),button=byId("auditResetConfirm");
+      if(!form.reportValidity())return;
+      if(typed!==config.phrase){showMessage("auditResetMessage","Confirmation text does not match.");return;}
+      button.disabled=true;
+      try{
+        const result=await certified("reset_audit_log",{confirmation_text:config.phrase});
+        closeModal();
+        alert((result?.deleted_total??0)+" audit record(s) permanently deleted.");
+        await renderAudit();
+      }catch(error){showMessage("auditResetMessage",friendly(error));}
+      finally{button.disabled=false;}
+    };
+  }
+
   async function openAuditArchive(id){
     try{
       const data=await certified("list_audit_archive_entries_v1",{target_archive_id:id,page_number:1,page_size:100}),rows=Array.isArray(data?.rows)?data.rows:[];
-      openModal("Audit archive",id,`<div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Table</th><th>Record</th><th>Reason</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${formatDateTime(x.created_at)}</td><td>${esc(x.action||"")}</td><td>${esc(x.table_name||"")}</td><td>${esc(x.record_id||"")}</td><td>${esc(x.reason||"")}</td></tr>`).join(""):'<tr><td colspan="5">Archive is empty.</td></tr>'}</tbody></table></div>`,'<button id="auditArchiveClose" class="button primary" type="button">Close</button>');
+      openModal("Audit archive",id,`<div class="table-wrap audit-scroll"><table><thead><tr><th>Time</th><th>Action</th><th>Table</th><th>Record</th><th>Reason</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${formatDateTime(x.created_at)}</td><td>${esc(x.action||"")}</td><td>${esc(x.table_name||"")}</td><td>${esc(x.record_id||"")}</td><td>${esc(x.reason||"")}</td></tr>`).join(""):'<tr><td colspan="5">Archive is empty.</td></tr>'}</tbody></table></div>`,'<button id="auditArchiveClose" class="button primary" type="button">Close</button>');
       byId("auditArchiveClose").onclick=closeModal;
     }catch(error){alert(friendly(error));}
   }
