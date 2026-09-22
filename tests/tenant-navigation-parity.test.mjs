@@ -7,7 +7,7 @@ const read=p=>fs.readFileSync(p,"utf8");
 test("tenant shell follows reference role, permission and feature navigation contract",()=>{
   const app=read("frontend/app.js");
   assert.match(app,/const ROLE_NAV_IDS=Object\.freeze\(/);
-  assert.match(app,/system_admin:\["dashboard","operations","students","student_services","history","teachers","headteachers","staff","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","finance","users","notifications","compliance","audit","backup_restore","plan_upgrade","license_capacity","settings"\]/);
+  assert.match(app,/system_admin:\["dashboard","operations","students","student_services","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
   assert.match(app,/permissionEnabled\(code\)/);
   assert.match(app,/featureEnabled\(code\)/);
   assert.match(app,/item\.permission&&!permissionEnabled\(item\.permission\)/);
@@ -56,4 +56,12 @@ test("legacy blueprint modules receive unwrapped Worker RPC results",()=>{
   assert.match(routes,/manage_headteachers:Boolean\(rawPermissions\["admin\.tenant"\]\)/);
   assert.match(routes,/manage_users:Boolean\(rawPermissions\["admin\.users"\]\)/);
   assert.match(routes,/view_audit:Boolean\(rawPermissions\["admin\.tenant"\]\)/);
+});
+
+
+test("System Administrator sidebar excludes extension-only HR and Finance entries",()=>{
+  const hr=read("frontend/tenant-hr-staff-v1.js");
+  const finance=read("frontend/finance-core.js");
+  assert.match(hr,/if\(S\.role!=="principal"\)/);
+  assert.doesNotMatch(finance,/S\.role==="system_admin"&&hasFeature\("finance_fees"\)/);
 });
