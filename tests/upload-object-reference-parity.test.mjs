@@ -57,7 +57,7 @@ test("privileged administrators always require verified MFA for destructive oper
   assert.ok(auth.includes("privilegedRoleRequiresMfa"));
   assert.ok(auth.includes("if(!row.mfa_required)"));
   assert.ok(auth.includes("if(!privilegedRoleRequiresMfa(row.role))"));
-  assert.ok(auth.includes("Boolean(context.mfa_required)||privilegedRoleRequiresMfa(context.role)"));
+  assert.ok(auth.includes("privilegedRoleRequiresMfa(context.role)&&Number(session.assurance_level)<2"));
   assert.ok(routes.includes("destructiveMutation"));
   assert.ok(routes.includes("mutation_not_applied"));
 });
