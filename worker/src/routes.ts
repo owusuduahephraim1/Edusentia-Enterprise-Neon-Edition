@@ -451,15 +451,20 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({ok:true,objectKey:key});
   }
   if(method==="POST"&&p==="/api/files/upload-url"){
-    const b=await readJson<any>(request),kind=String(b.kind||"document").replace(/[^a-z0-9_-]/gi,"_").slice(0,40),name=String(b.filename||"file").replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120),type=String(b.contentType||"application/octet-stream");
+    const b=await readJson<any>(request),kind=String(b.kind||"document").replace(/[^a-z0-9_-]/gi,"_").slice(0,40),name=String(b.filename||"file").replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120),type=uploadContentType(String(b.filename||"file"),b.contentType);
     if(kind==="report-pdfs")return error("forbidden","Use the report PDF upload endpoint",403,requestId);
     const size=Number(b.size||0);if(size<=0||size>20*1024*1024)return error("invalid_file_size","File size must be between 1 byte and 20 MB",422,requestId);
     const allowed=["image/","application/pdf","text/csv","application/vnd.openxmlformats-officedocument"];
     if(!allowed.some(x=>type.startsWith(x)))return error("invalid_content_type","This file type is not allowed",422,requestId);
     const key=`tenants/${ctx.tenantId}/${kind}/${crypto.randomUUID()}-${name}`;
-    await tenantTx<any[]>(sql,ctx,txn=>[txn`insert into storage.object_metadata(tenant_id,object_key,original_name,content_type,size_bytes,created_by,status) values(${ctx.tenantId}::uuid,${key},${name},${type},${size},${ctx.userId}::uuid,'pending')`]);
+    try{
+      await tenantTx<any[]>(sql,ctx,txn=>[txn`insert into storage.object_metadata(tenant_id,object_key,original_name,content_type,size_bytes,created_by,status) values(${ctx.tenantId}::uuid,${key},${name},${type},${size},${ctx.userId}::uuid,'pending')`]);
+    }catch(cause){
+      console.error(JSON.stringify({level:"error",requestId,code:"upload_prepare_failed",message:String((cause as any)?.message||cause)}));
+      throw Object.assign(new Error("The upload could not be prepared. Please retry."),{code:"upload_prepare_failed",status:503});
+    }
     // R2 native binding does not expose public credentials. Upload is proxied by the Worker in the dedicated PUT route.
-    return json({objectKey:key,uploadUrl:`/api/files/upload?key=${encodeURIComponent(key)}`,method:"PUT",expiresInSeconds:900});
+    return json({objectKey:key,uploadUrl:`/api/files/upload?key=${encodeURIComponent(key)}`,method:"PUT",expiresInSeconds:900,contentType:type});
   }
   if(method==="PUT"&&p==="/api/files/upload"){
     const key=url.searchParams.get("key")||"";if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);
@@ -470,9 +475,21 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     if(receivedType!==expectedType)return error("invalid_content_type","Upload content type does not match authorization",415,requestId);
     const bytes=await request.arrayBuffer();
     if(bytes.byteLength!==expectedSize)return error("invalid_file_size","Upload size does not match authorization",413,requestId);
-    await env.OBJECTS.put(key,bytes,{httpMetadata:{contentType:expectedType}});
-    await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='active',stored_at=now() where id=${(meta[0] as any).id}::uuid`]);
-    return json({ok:true,objectKey:key,size:bytes.byteLength});
+    try{
+      await env.OBJECTS.put(key,bytes,{httpMetadata:{contentType:expectedType}});
+    }catch(cause){
+      await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='quarantined' where id=${(meta[0] as any).id}::uuid and status='pending'`]).catch(()=>{});
+      console.error(JSON.stringify({level:"error",requestId,code:"object_storage_write_failed",message:String((cause as any)?.message||cause)}));
+      throw Object.assign(new Error("Object storage is temporarily unavailable. Please retry the upload."),{code:"object_storage_write_failed",status:503});
+    }
+    try{
+      await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='active',stored_at=now() where id=${(meta[0] as any).id}::uuid`]);
+    }catch(cause){
+      await env.OBJECTS.delete(key).catch(()=>{});
+      console.error(JSON.stringify({level:"error",requestId,code:"upload_finalize_failed",message:String((cause as any)?.message||cause)}));
+      throw Object.assign(new Error("The upload could not be finalized. Please retry."),{code:"upload_finalize_failed",status:503});
+    }
+    return json({ok:true,objectKey:key,size:bytes.byteLength,contentType:expectedType});
   }
   if(method==="GET"&&p==="/api/files/download"){
     const key=url.searchParams.get("key")||"";
