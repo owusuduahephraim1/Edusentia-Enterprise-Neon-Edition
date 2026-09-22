@@ -734,6 +734,39 @@ td{font-size:13px}
 @media(max-width:760px){.package-logo-preview{align-items:flex-start}.package-logo-preview img{width:72px;height:72px}}
 
 
+/* v10.1 bounded vertical scrolling for all operational lists */
+.panel>.table-wrap,
+.modal-body .table-wrap,
+.bounded-scroll,
+.stack-list,
+.history-scroll,
+.audit-scroll{
+  max-height:clamp(300px,54vh,560px);
+  overflow-x:auto;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable both-edges;
+}
+.panel>.table-wrap thead th,
+.modal-body .table-wrap thead th,
+.bounded-scroll thead th,
+.audit-scroll thead th{
+  position:sticky;
+  top:0;
+  z-index:5;
+  background:#f4f7fb;
+  box-shadow:0 1px 0 var(--line);
+}
+.stack-list{overflow-x:hidden}
+@media(max-width:760px){
+  .panel>.table-wrap,
+  .modal-body .table-wrap,
+  .bounded-scroll,
+  .stack-list,
+  .history-scroll,
+  .audit-scroll{max-height:52vh}
+}
+
 /* v6.7.4 compact vertical scrolling for operational directories and report creation */
 #studentResults .table-wrap,
 #teacherResults .table-wrap,
