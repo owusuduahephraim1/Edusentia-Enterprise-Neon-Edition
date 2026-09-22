@@ -61,8 +61,9 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(logoParity,/create or replace function public\.set_school_logo_reference/);
   assert.match(logoParity,/school-branding/);
   assert.match(logoParity,/grant execute on function public\.set_school_logo_reference\(text\) to edusentia_worker_runtime/);
-  assert.match(logoParity,/existing_owner=current_user/);
-  assert.match(logoParity,/alter function public\.set_school_logo_reference\(text\) owner to edusentia_provisioner/);
+  assert.match(logoParity,/existing_owner<>current_user/);
+  assert.doesNotMatch(logoParity,/owner to edusentia_provisioner/);
+  assert.doesNotMatch(logoParity,/set role edusentia_provisioner/);
   assert.doesNotMatch(installer,/run_once "0049v_live_plan_feature_parity"/);
   assert.equal(installer.includes("\\nrun_once"),false,"installer must not contain a literal backslash-n escape between migration calls");
   assert.equal(template.includes("\\ntest"),false,"tenant template must not contain a literal backslash-n escape between validation checks");
