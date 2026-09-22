@@ -126,7 +126,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   const certifiedRpcMatch=p.match(/^\/api\/compat\/rpc\/([a-z0-9_]+)$/);
   if(method==="POST"&&certifiedRpcMatch){
     const operation=certifiedRpcMatch[1],destructiveMutation=/^(archive_|delete_|remove_)/.test(operation);
-    if(destructiveMutation&&ctx.role==="system_admin"&&ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required for remove and delete operations",403,requestId);
+    if(destructiveMutation&&["system_admin","admin"].includes(String(ctx.role))&&ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required for remove and delete operations",403,requestId);
     const body=await readJson<any>(request);
     const result=await invokeCertifiedRpc(sql,ctx,operation,body?.args??{});
     if(destructiveMutation&&result===false)return error("mutation_not_applied","The requested remove or delete operation did not complete",409,requestId);
