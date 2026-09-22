@@ -7,10 +7,19 @@ const read=(path)=>fs.readFileSync(new URL("../"+path,import.meta.url),"utf8");
 test("shared uploads use canonical tenant-scoped R2 storage",()=>{
   const api=read("frontend/api-client.js");
   const routes=read("worker/src/routes.ts");
+  const metadata=read("database/reference-compat/0051_r2_upload_metadata_api.sql");
   assert.ok(api.includes("function uploadContentType(file)"));
   assert.ok(routes.includes("tenants/${ctx.tenantId}/${kind}/"));
   assert.ok(routes.includes("object_storage_write_failed"));
   assert.ok(routes.includes("upload_finalize_failed"));
+  assert.ok(routes.includes("public.prepare_object_upload"));
+  assert.ok(routes.includes("public.get_object_upload_metadata"));
+  assert.ok(routes.includes("public.transition_object_upload"));
+  assert.ok(!routes.includes("insert into storage.object_metadata"));
+  assert.ok(!routes.includes("update storage.object_metadata set status='active'"));
+  assert.match(metadata,/security definer/i);
+  assert.match(metadata,/tenant_id=tid/);
+  assert.match(metadata,/grant execute on function public\.prepare_object_upload/);
 });
 
 test("upload-backed certified functions accept protected R2 scopes",()=>{
@@ -67,4 +76,16 @@ test("core archive UIs reject silent false mutation results",()=>{
     const source=read(path);
     assert.ok(source.includes("The remove operation did not complete."),path);
   }
+});
+
+
+test("official school logo save follows blueprint licence and R2 validation semantics",()=>{
+  const sql=read("database/reference-compat/0049w_school_identity_logo_parity.sql");
+  assert.match(sql,/if not public\.is_system_admin\(\) then/);
+  assert.match(sql,/perform public\.require_sensitive_access\(\)/);
+  assert.match(sql,/if not public\.license_write_allowed\(\) then/);
+  assert.match(sql,/storage\.object_metadata/);
+  assert.match(sql,/Official school logo saved for future school documents/);
+  assert.doesNotMatch(sql,/update app\.tenants/);
+  assert.doesNotMatch(sql,/from app\.tenant_licenses/);
 });
