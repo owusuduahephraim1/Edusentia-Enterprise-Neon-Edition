@@ -161,7 +161,7 @@
       if (!row) return;
       const reason = F()?.askReason
         ? await F().askReason("Archive Accounts Office Staff", "The directory record will be archived so historical financial audit records remain intact and recoverable.", "Archive")
-        : (window.prompt("Reason for deleting this Accounts Office Staff record:") || "");
+        : (await window.EdusentiaPrompt("Reason for deleting this Accounts Office Staff record:") || "");
       if (!reason) return;
       button.disabled = true;
       try {
