@@ -13,7 +13,8 @@ import { handleTenantAuthRecovery } from "./recovery-compat";
 import { backupDownloadGateway, handleBackupTransfer, handleScheduledBackupCompat } from "./backup-service";
 import { cancelRestore, executeRestore, handleRestoreTransfer, prepareRestore } from "./restore-service";
 
-// Authentication and authorization routes fail closed before tenant data access.\n// Protected uploads use tenant-scoped R2 keys and fail closed with actionable errors.
+// Authentication and authorization routes fail closed before tenant data access.
+// Protected uploads use tenant-scoped R2 keys and fail closed with actionable errors.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}
 function uploadContentType(filename:string,value:unknown){
@@ -124,9 +125,12 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
 
   const certifiedRpcMatch=p.match(/^\/api\/compat\/rpc\/([a-z0-9_]+)$/);
   if(method==="POST"&&certifiedRpcMatch){
+    const operation=certifiedRpcMatch[1],destructiveMutation=/^(archive_|delete_|remove_)/.test(operation);
+    if(destructiveMutation&&ctx.role==="system_admin"&&ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required for remove and delete operations",403,requestId);
     const body=await readJson<any>(request);
-    const result=await invokeCertifiedRpc(sql,ctx,certifiedRpcMatch[1],body?.args??{});
-    return json({ok:true,operation:certifiedRpcMatch[1],result});
+    const result=await invokeCertifiedRpc(sql,ctx,operation,body?.args??{});
+    if(destructiveMutation&&result===false)return error("mutation_not_applied","The requested remove or delete operation did not complete",409,requestId);
+    return json({ok:true,operation,result});
   }
 
   if(method==="POST"&&p==="/api/license/activate"){
@@ -232,7 +236,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       motto:clean(b.motto,240),address:clean(b.address,500),phone:clean(b.phone,80),email:clean(b.email,254),
       website:webAddress(b.website,500),head_name:clean(b.head_name,200),report_number_prefix:clean(b.report_number_prefix,30),
       user_email_domain:clean(b.user_email_domain,180),timezone:clean(b.timezone,80)||"Africa/Accra",
-      verification_base_url:clean(b.verification_base_url,500),primary_colour:clean(b.primary_colour,20),
+      verification_base_url:webAddress(b.verification_base_url,500),primary_colour:clean(b.primary_colour,20),
       accent_colour:clean(b.accent_colour,20),report_body_font:clean(b.report_body_font,80),
       report_body_font_size:Math.min(24,Math.max(8,Number(b.report_body_font_size||11)))
     };
