@@ -1,17 +1,9 @@
 (()=>{
   "use strict";
-  if(window.EDS_NEON_SUPABASE_COMPAT)return;
-  window.EDS_NEON_SUPABASE_COMPAT=true;
+  if(window.EDS_NEON_REFERENCE_COMPAT)return;
+  window.EDS_NEON_REFERENCE_COMPAT=true;
   const api=()=>window.EdusentiaApi;
   const listeners=new Set();
-  const schoolCode=()=>String(new URLSearchParams(location.search).get("school")||window.EdusentiaShell?.state?.session?.membership?.tenantCode||"NEON").trim().toUpperCase();
-  window.RCE_CONFIG=Object.assign({
-    masterEdition:false,
-    tenantCode:schoolCode()||"NEON",
-    supabaseUrl:"https://neon-worker.invalid",
-    supabaseAnonKey:"worker-cookie-session"
-  },window.RCE_CONFIG||{});
-  window.NIS_CONFIG=window.RCE_CONFIG;
 
   async function sessionValue(){
     const s=await api().session();
@@ -27,10 +19,10 @@
       access_token:"worker-cookie-session"
     };
   }
-  function err(error){return error instanceof Error?error:Object.assign(new Error(String(error||"Request failed")),{code:error?.code});}
+  function asError(error){return error instanceof Error?error:Object.assign(new Error(String(error||"Request failed")),{code:error?.code});}
   async function rpc(name,args={}){
     try{return {data:await api().certifiedRpc(name,args||{}),error:null};}
-    catch(error){return {data:null,error:err(error)};}
+    catch(error){return {data:null,error:asError(error)};}
   }
   async function invoke(name,{body={}}={}){
     try{
@@ -46,29 +38,22 @@
       }else if(name==="tenant-auth-recovery")data=await api().tenantAuthRecovery(action,body);
       else throw Object.assign(new Error("Unsupported compatibility function: "+name),{code:"compat_function_not_supported"});
       return {data,error:null};
-    }catch(error){return {data:null,error:err(error)};}
+    }catch(error){return {data:null,error:asError(error)};}
   }
   function channel(){
-    const c={
-      on(){return c;},
-      subscribe(){return c;},
-      unsubscribe(){return Promise.resolve("ok");}
-    };
+    const c={on(){return c;},subscribe(){return c;},unsubscribe(){return Promise.resolve("ok");}};
     return c;
   }
   const auth={
-    async getSession(){try{return {data:{session:await sessionValue()},error:null};}catch(error){return {data:{session:null},error:err(error)};}},
+    async getSession(){try{return {data:{session:await sessionValue()},error:null};}catch(error){return {data:{session:null},error:asError(error)};}},
     onAuthStateChange(callback){
       let active=true;listeners.add(callback);
       queueMicrotask(async()=>{if(!active)return;const session=await sessionValue().catch(()=>null);if(active)callback(session?"SIGNED_IN":"SIGNED_OUT",session);});
       return {data:{subscription:{unsubscribe(){active=false;listeners.delete(callback);}}}};
     }
   };
-  const client={
-    rpc,auth,functions:{invoke},channel,
-    removeChannel(){return Promise.resolve("ok");}
-  };
-  window.supabase={createClient(){return client;}};
+  const client={rpc,auth,functions:{invoke},channel,removeChannel(){return Promise.resolve("ok");}};
+  window.EdusentiaCompatClient=client;
   window.EDS_TENANT_AUTH_CLIENT=client;
   window.addEventListener("edusentia:session-refresh",async()=>{
     const session=await sessionValue().catch(()=>null);
