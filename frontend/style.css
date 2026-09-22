@@ -77,6 +77,7 @@ textarea{min-height:92px;resize:vertical}
 .nav-item:hover .nav-icon{background:rgba(255,255,255,.15);transform:scale(1.04)}
 .nav-item.active .nav-icon{background:var(--gold);color:#17335e;box-shadow:0 4px 10px rgba(0,0,0,.16)}
 .nav-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.nav-item.upgrade-required{align-items:flex-start}.nav-item.upgrade-required .nav-label{display:grid;gap:2px;white-space:normal}.nav-upgrade-badge{display:block;font-size:9px;line-height:1.1;font-weight:800;color:#f5d67a;text-transform:uppercase;letter-spacing:.02em}.nav-item.active .nav-upgrade-badge{color:#fff3bd}
 .nav-active-dot{width:7px;height:7px;border-radius:50%;background:transparent;box-shadow:none;flex:0 0 7px}
 .nav-item.active .nav-active-dot{background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.15)}
 .sidebar-foot{margin-top:auto;padding-top:14px;border-top:1px solid rgba(255,255,255,.13)}
