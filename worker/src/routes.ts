@@ -143,6 +143,64 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       where tl.tenant_id=${ctx.tenantId}::uuid limit 1`]);
     return json({license:rows[0]||null});
   }
+  if(method==="GET"&&p==="/api/admin/guardian-account-records"){
+    requireRole(ctx,["system_admin"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required to manage guardian accounts",403,requestId);
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
+      select
+        sg.id,
+        linked.auth_user_id,
+        linked.linked_account_count,
+        au.email portal_email,
+        sg.full_name,
+        sg.relationship,
+        sg.phone,
+        sg.email,
+        sg.address,
+        sg.is_primary,
+        coalesce(children.children,'[]'::jsonb) children
+      from public.student_guardians sg
+      left join lateral (
+        select min(gl.auth_user_id::text)::uuid auth_user_id,
+               count(distinct gl.auth_user_id)::integer linked_account_count
+        from public.guardian_links gl
+        where gl.guardian_id=sg.id and gl.auth_user_id is not null
+      ) linked on true
+      left join authn.users au on au.id=linked.auth_user_id
+      left join lateral (
+        select jsonb_agg(
+          jsonb_build_object(
+            'student_id',s.id,
+            'student_name',concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name),
+            'admission_no',s.admission_no,
+            'class_id',ce.class_id,
+            'class_name',ce.class_name
+          )
+          order by lower(concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name)),s.admission_no::text
+        ) children
+        from public.guardian_links gl2
+        join public.students s on s.id=gl2.student_id and s.deleted_at is null and s.status='active'
+        left join lateral (
+          select e.class_id,c.name::text class_name
+          from public.enrollments e
+          join public.classes c on c.id=e.class_id and c.deleted_at is null
+          join public.academic_years y on y.id=e.academic_year_id and y.deleted_at is null
+          where e.student_id=s.id and e.deleted_at is null
+          order by y.is_active desc,e.active desc,y.start_date desc,e.updated_at desc
+          limit 1
+        ) ce on true
+        where gl2.guardian_id=sg.id
+      ) children on true
+      where exists(
+        select 1
+        from public.guardian_links gl3
+        join public.students s3 on s3.id=gl3.student_id and s3.deleted_at is null and s3.status='active'
+        where gl3.guardian_id=sg.id
+      )
+      order by lower(sg.full_name),lower(coalesce(sg.phone,'')),sg.id
+    `]);
+    return json({rows});
+  }
   if(method==="POST"&&p==="/api/settings/school"){
     requireRole(ctx,["system_admin"]);
     if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required to change school settings",403,requestId);
