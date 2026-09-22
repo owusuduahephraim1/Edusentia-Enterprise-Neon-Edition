@@ -171,7 +171,25 @@ SQL
     exit 1
   fi
 
-  echo "Tenant $tenant_code operational surface verified: 258/258 executable."
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
+select
+  tenant_id,
+  registration_id,
+  'tenant_commercial_plan_parity_verified',
+  jsonb_build_object(
+    'database_name',:'database_name',
+    'migration','0049v_live_plan_feature_parity',
+    'feature_count',27,
+    'rpc_count',258,
+    'verified_at',now()
+  )
+from platform.tenant_control
+where tenant_code=:'tenant_code'
+  and database_name=:'database_name';
+SQL
+
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and 27-feature plan parity confirmed."
   upgraded=$((upgraded+1))
 done
 
