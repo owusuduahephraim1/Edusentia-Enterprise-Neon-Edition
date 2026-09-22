@@ -233,607 +233,607 @@ create table if not exists public.finance_teacher_loans (
 );
 
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="accounts_office_staff_pkey" and conrelid='public.accounts_office_staff'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='accounts_office_staff_pkey' and conrelid='public.accounts_office_staff'::regclass) then
     alter table public.accounts_office_staff add constraint accounts_office_staff_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="accounts_office_staff_profile_id_key" and conrelid='public.accounts_office_staff'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='accounts_office_staff_profile_id_key' and conrelid='public.accounts_office_staff'::regclass) then
     alter table public.accounts_office_staff add constraint accounts_office_staff_profile_id_key UNIQUE (profile_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="accounts_office_staff_staff_no_key" and conrelid='public.accounts_office_staff'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='accounts_office_staff_staff_no_key' and conrelid='public.accounts_office_staff'::regclass) then
     alter table public.accounts_office_staff add constraint accounts_office_staff_staff_no_key UNIQUE (staff_no);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="accounts_office_staff_finance_role_check" and conrelid='public.accounts_office_staff'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='accounts_office_staff_finance_role_check' and conrelid='public.accounts_office_staff'::regclass) then
     alter table public.accounts_office_staff add constraint accounts_office_staff_finance_role_check CHECK (finance_role = ANY (ARRAY['cashier'::text, 'accounts_officer'::text, 'accountant'::text, 'payroll_officer'::text, 'finance_manager'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="accounts_office_staff_finance_role_ck" and conrelid='public.accounts_office_staff'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='accounts_office_staff_finance_role_ck' and conrelid='public.accounts_office_staff'::regclass) then
     alter table public.accounts_office_staff add constraint accounts_office_staff_finance_role_ck CHECK (finance_role = ANY (ARRAY['cashier'::text, 'accounts_officer'::text, 'accountant'::text, 'payroll_officer'::text, 'finance_manager'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="accounts_office_staff_created_by_fkey" and conrelid='public.accounts_office_staff'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='accounts_office_staff_created_by_fkey' and conrelid='public.accounts_office_staff'::regclass) then
     alter table public.accounts_office_staff add constraint accounts_office_staff_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="accounts_office_staff_profile_id_fkey" and conrelid='public.accounts_office_staff'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='accounts_office_staff_profile_id_fkey' and conrelid='public.accounts_office_staff'::regclass) then
     alter table public.accounts_office_staff add constraint accounts_office_staff_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_pkey" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_pkey' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_student_id_term_id_key" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_student_id_term_id_key' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_student_id_term_id_key UNIQUE (student_id, term_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_term_fee_amount_check" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_term_fee_amount_check' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_term_fee_amount_check CHECK (term_fee_amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_academic_year_id_fkey" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_academic_year_id_fkey' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_academic_year_id_fkey FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_class_id_fkey" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_class_id_fkey' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_class_id_fkey FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_enrollment_id_fkey" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_enrollment_id_fkey' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_enrollment_id_fkey FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_schedule_id_fkey" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_schedule_id_fkey' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_schedule_id_fkey FOREIGN KEY (schedule_id) REFERENCES finance_fee_schedules(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_student_id_fkey" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_student_id_fkey' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_student_id_fkey FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_accounts_term_id_fkey" and conrelid='public.finance_fee_accounts'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_accounts_term_id_fkey' and conrelid='public.finance_fee_accounts'::regclass) then
     alter table public.finance_fee_accounts add constraint finance_fee_accounts_term_id_fkey FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_allocations_pkey" and conrelid='public.finance_fee_allocations'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_allocations_pkey' and conrelid='public.finance_fee_allocations'::regclass) then
     alter table public.finance_fee_allocations add constraint finance_fee_allocations_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_allocations_transaction_id_account_id_key" and conrelid='public.finance_fee_allocations'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_allocations_transaction_id_account_id_key' and conrelid='public.finance_fee_allocations'::regclass) then
     alter table public.finance_fee_allocations add constraint finance_fee_allocations_transaction_id_account_id_key UNIQUE (transaction_id, account_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_allocations_amount_check" and conrelid='public.finance_fee_allocations'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_allocations_amount_check' and conrelid='public.finance_fee_allocations'::regclass) then
     alter table public.finance_fee_allocations add constraint finance_fee_allocations_amount_check CHECK (amount > 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_allocations_account_id_fkey" and conrelid='public.finance_fee_allocations'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_allocations_account_id_fkey' and conrelid='public.finance_fee_allocations'::regclass) then
     alter table public.finance_fee_allocations add constraint finance_fee_allocations_account_id_fkey FOREIGN KEY (account_id) REFERENCES finance_fee_accounts(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_allocations_transaction_id_fkey" and conrelid='public.finance_fee_allocations'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_allocations_transaction_id_fkey' and conrelid='public.finance_fee_allocations'::regclass) then
     alter table public.finance_fee_allocations add constraint finance_fee_allocations_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES finance_fee_transactions(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_group_classes_pkey" and conrelid='public.finance_fee_group_classes'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_group_classes_pkey' and conrelid='public.finance_fee_group_classes'::regclass) then
     alter table public.finance_fee_group_classes add constraint finance_fee_group_classes_pkey PRIMARY KEY (fee_group_id, class_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_group_classes_class_unique" and conrelid='public.finance_fee_group_classes'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_group_classes_class_unique' and conrelid='public.finance_fee_group_classes'::regclass) then
     alter table public.finance_fee_group_classes add constraint finance_fee_group_classes_class_unique UNIQUE (class_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_group_classes_class_id_fkey" and conrelid='public.finance_fee_group_classes'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_group_classes_class_id_fkey' and conrelid='public.finance_fee_group_classes'::regclass) then
     alter table public.finance_fee_group_classes add constraint finance_fee_group_classes_class_id_fkey FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_group_classes_fee_group_id_fkey" and conrelid='public.finance_fee_group_classes'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_group_classes_fee_group_id_fkey' and conrelid='public.finance_fee_group_classes'::regclass) then
     alter table public.finance_fee_group_classes add constraint finance_fee_group_classes_fee_group_id_fkey FOREIGN KEY (fee_group_id) REFERENCES finance_fee_groups(id) ON DELETE CASCADE;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_groups_pkey" and conrelid='public.finance_fee_groups'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_groups_pkey' and conrelid='public.finance_fee_groups'::regclass) then
     alter table public.finance_fee_groups add constraint finance_fee_groups_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_groups_code_key" and conrelid='public.finance_fee_groups'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_groups_code_key' and conrelid='public.finance_fee_groups'::regclass) then
     alter table public.finance_fee_groups add constraint finance_fee_groups_code_key UNIQUE (code);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_groups_code_check" and conrelid='public.finance_fee_groups'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_groups_code_check' and conrelid='public.finance_fee_groups'::regclass) then
     alter table public.finance_fee_groups add constraint finance_fee_groups_code_check CHECK (code ~ '^[a-z0-9_]+$'::text);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_groups_created_by_fkey" and conrelid='public.finance_fee_groups'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_groups_created_by_fkey' and conrelid='public.finance_fee_groups'::regclass) then
     alter table public.finance_fee_groups add constraint finance_fee_groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_pkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_pkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_account_id_key" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_account_id_key' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_account_id_key UNIQUE (account_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_invoice_no_key" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_invoice_no_key' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_invoice_no_key UNIQUE (invoice_no);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_issued_amount_check" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_issued_amount_check' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_issued_amount_check CHECK (issued_amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_academic_year_id_fkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_academic_year_id_fkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_academic_year_id_fkey FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_account_id_fkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_account_id_fkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_account_id_fkey FOREIGN KEY (account_id) REFERENCES finance_fee_accounts(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_class_id_fkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_class_id_fkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_class_id_fkey FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_created_by_fkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_created_by_fkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_schedule_id_fkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_schedule_id_fkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_schedule_id_fkey FOREIGN KEY (schedule_id) REFERENCES finance_fee_schedules(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_student_id_fkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_student_id_fkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_student_id_fkey FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_invoices_term_id_fkey" and conrelid='public.finance_fee_invoices'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_invoices_term_id_fkey' and conrelid='public.finance_fee_invoices'::regclass) then
     alter table public.finance_fee_invoices add constraint finance_fee_invoices_term_id_fkey FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_pkey" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_pkey' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_academic_year_id_term_id_class_id_key" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_academic_year_id_term_id_class_id_key' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_academic_year_id_term_id_class_id_key UNIQUE (academic_year_id, term_id, class_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_amount_check" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_amount_check' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_amount_check CHECK (amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_academic_year_id_fkey" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_academic_year_id_fkey' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_academic_year_id_fkey FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_class_id_fkey" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_class_id_fkey' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_class_id_fkey FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_created_by_fkey" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_created_by_fkey' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_fee_group_id_fkey" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_fee_group_id_fkey' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_fee_group_id_fkey FOREIGN KEY (fee_group_id) REFERENCES finance_fee_groups(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_schedules_term_id_fkey" and conrelid='public.finance_fee_schedules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_schedules_term_id_fkey' and conrelid='public.finance_fee_schedules'::regclass) then
     alter table public.finance_fee_schedules add constraint finance_fee_schedules_term_id_fkey FOREIGN KEY (term_id) REFERENCES terms(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_pkey" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_pkey' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_receipt_no_key" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_receipt_no_key' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_receipt_no_key UNIQUE (receipt_no);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_check" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_check' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_check CHECK (debit_amount > 0::numeric AND credit_amount = 0::numeric OR credit_amount > 0::numeric AND debit_amount = 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_credit_amount_check" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_credit_amount_check' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_credit_amount_check CHECK (credit_amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_debit_amount_check" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_debit_amount_check' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_debit_amount_check CHECK (debit_amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_entry_type_check" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_entry_type_check' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_entry_type_check CHECK (entry_type = ANY (ARRAY['payment'::text, 'payment_reversal'::text, 'waiver'::text, 'discount'::text, 'refund'::text, 'adjustment_debit'::text, 'adjustment_credit'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_payment_method_check" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_payment_method_check' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_payment_method_check CHECK (payment_method IS NULL OR (payment_method = ANY (ARRAY['cash'::text, 'bank_transfer'::text, 'mobile_money'::text, 'cheque'::text, 'card'::text, 'other'::text])));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_receipt_semantics_ck" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_receipt_semantics_ck' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_receipt_semantics_ck CHECK (entry_type = 'payment'::text AND receipt_no IS NOT NULL OR entry_type <> 'payment'::text AND receipt_no IS NULL);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_reversal_semantics_ck" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_reversal_semantics_ck' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_reversal_semantics_ck CHECK (entry_type = 'payment_reversal'::text AND reversal_of_id IS NOT NULL OR entry_type <> 'payment_reversal'::text AND reversal_of_id IS NULL);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_created_by_fkey" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_created_by_fkey' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_reversal_of_id_fkey" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_reversal_of_id_fkey' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_reversal_of_id_fkey FOREIGN KEY (reversal_of_id) REFERENCES finance_fee_transactions(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_fee_transactions_student_id_fkey" and conrelid='public.finance_fee_transactions'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_fee_transactions_student_id_fkey' and conrelid='public.finance_fee_transactions'::regclass) then
     alter table public.finance_fee_transactions add constraint finance_fee_transactions_student_id_fkey FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_pkey" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_pkey' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_action_state_check" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_action_state_check' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_action_state_check CHECK (action_state = ANY (ARRAY['opened'::text, 'copied'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_channel_check" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_channel_check' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_channel_check CHECK (channel = ANY (ARRAY['sms'::text, 'whatsapp'::text, 'call'::text, 'copy'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_child_count_check" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_child_count_check' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_child_count_check CHECK (child_count >= 0);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_academic_year_id_fkey" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_academic_year_id_fkey' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_academic_year_id_fkey FOREIGN KEY (academic_year_id) REFERENCES academic_years(id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_class_id_fkey" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_class_id_fkey' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_class_id_fkey FOREIGN KEY (class_id) REFERENCES classes(id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_created_by_fkey" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_created_by_fkey' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_guardian_contact_events_term_id_fkey" and conrelid='public.finance_guardian_contact_events'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_guardian_contact_events_term_id_fkey' and conrelid='public.finance_guardian_contact_events'::regclass) then
     alter table public.finance_guardian_contact_events add constraint finance_guardian_contact_events_term_id_fkey FOREIGN KEY (term_id) REFERENCES terms(id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_item_lines_pkey" and conrelid='public.finance_payroll_item_lines'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_item_lines_pkey' and conrelid='public.finance_payroll_item_lines'::regclass) then
     alter table public.finance_payroll_item_lines add constraint finance_payroll_item_lines_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_item_lines_amount_check" and conrelid='public.finance_payroll_item_lines'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_item_lines_amount_check' and conrelid='public.finance_payroll_item_lines'::regclass) then
     alter table public.finance_payroll_item_lines add constraint finance_payroll_item_lines_amount_check CHECK (amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_item_lines_line_type_check" and conrelid='public.finance_payroll_item_lines'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_item_lines_line_type_check' and conrelid='public.finance_payroll_item_lines'::regclass) then
     alter table public.finance_payroll_item_lines add constraint finance_payroll_item_lines_line_type_check CHECK (line_type = ANY (ARRAY['allowance'::text, 'deduction'::text, 'ssnit'::text, 'tax'::text, 'loan'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_item_lines_created_by_fkey" and conrelid='public.finance_payroll_item_lines'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_item_lines_created_by_fkey' and conrelid='public.finance_payroll_item_lines'::regclass) then
     alter table public.finance_payroll_item_lines add constraint finance_payroll_item_lines_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_item_lines_loan_id_fkey" and conrelid='public.finance_payroll_item_lines'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_item_lines_loan_id_fkey' and conrelid='public.finance_payroll_item_lines'::regclass) then
     alter table public.finance_payroll_item_lines add constraint finance_payroll_item_lines_loan_id_fkey FOREIGN KEY (loan_id) REFERENCES finance_teacher_loans(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_item_lines_payroll_item_id_fkey" and conrelid='public.finance_payroll_item_lines'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_item_lines_payroll_item_id_fkey' and conrelid='public.finance_payroll_item_lines'::regclass) then
     alter table public.finance_payroll_item_lines add constraint finance_payroll_item_lines_payroll_item_id_fkey FOREIGN KEY (payroll_item_id) REFERENCES finance_payroll_items(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_pkey" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_pkey' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_run_id_teacher_id_key" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_run_id_teacher_id_key' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_run_id_teacher_id_key UNIQUE (run_id, teacher_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_allowances_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_allowances_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_allowances_check CHECK (allowances >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_basic_salary_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_basic_salary_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_basic_salary_check CHECK (basic_salary >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_gross_salary_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_gross_salary_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_gross_salary_check CHECK (gross_salary >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_loan_deductions_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_loan_deductions_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_loan_deductions_check CHECK (loan_deductions >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_net_salary_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_net_salary_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_net_salary_check CHECK (net_salary >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_other_deductions_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_other_deductions_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_other_deductions_check CHECK (other_deductions >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_payment_status_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_payment_status_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_payment_status_check CHECK (payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'reversed'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_ssnit_employee_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_ssnit_employee_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_ssnit_employee_check CHECK (ssnit_employee >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_tax_amount_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_tax_amount_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_tax_amount_check CHECK (tax_amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_total_deductions_check" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_total_deductions_check' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_total_deductions_check CHECK (total_deductions >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_payroll_profile_id_fkey" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_payroll_profile_id_fkey' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_payroll_profile_id_fkey FOREIGN KEY (payroll_profile_id) REFERENCES finance_payroll_profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_run_id_fkey" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_run_id_fkey' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_run_id_fkey FOREIGN KEY (run_id) REFERENCES finance_payroll_runs(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_items_teacher_id_fkey" and conrelid='public.finance_payroll_items'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_items_teacher_id_fkey' and conrelid='public.finance_payroll_items'::regclass) then
     alter table public.finance_payroll_items add constraint finance_payroll_items_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_profiles_pkey" and conrelid='public.finance_payroll_profiles'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_profiles_pkey' and conrelid='public.finance_payroll_profiles'::regclass) then
     alter table public.finance_payroll_profiles add constraint finance_payroll_profiles_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_profiles_payroll_number_key" and conrelid='public.finance_payroll_profiles'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_profiles_payroll_number_key' and conrelid='public.finance_payroll_profiles'::regclass) then
     alter table public.finance_payroll_profiles add constraint finance_payroll_profiles_payroll_number_key UNIQUE (payroll_number);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_profiles_teacher_id_key" and conrelid='public.finance_payroll_profiles'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_profiles_teacher_id_key' and conrelid='public.finance_payroll_profiles'::regclass) then
     alter table public.finance_payroll_profiles add constraint finance_payroll_profiles_teacher_id_key UNIQUE (teacher_id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_profiles_basic_salary_override_check" and conrelid='public.finance_payroll_profiles'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_profiles_basic_salary_override_check' and conrelid='public.finance_payroll_profiles'::regclass) then
     alter table public.finance_payroll_profiles add constraint finance_payroll_profiles_basic_salary_override_check CHECK (basic_salary_override IS NULL OR basic_salary_override >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_profiles_created_by_fkey" and conrelid='public.finance_payroll_profiles'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_profiles_created_by_fkey' and conrelid='public.finance_payroll_profiles'::regclass) then
     alter table public.finance_payroll_profiles add constraint finance_payroll_profiles_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_profiles_salary_grade_id_fkey" and conrelid='public.finance_payroll_profiles'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_profiles_salary_grade_id_fkey' and conrelid='public.finance_payroll_profiles'::regclass) then
     alter table public.finance_payroll_profiles add constraint finance_payroll_profiles_salary_grade_id_fkey FOREIGN KEY (salary_grade_id) REFERENCES finance_salary_grades(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_profiles_teacher_id_fkey" and conrelid='public.finance_payroll_profiles'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_profiles_teacher_id_fkey' and conrelid='public.finance_payroll_profiles'::regclass) then
     alter table public.finance_payroll_profiles add constraint finance_payroll_profiles_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_rules_pkey" and conrelid='public.finance_payroll_rules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_rules_pkey' and conrelid='public.finance_payroll_rules'::regclass) then
     alter table public.finance_payroll_rules add constraint finance_payroll_rules_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_rules_rule_code_effective_from_key" and conrelid='public.finance_payroll_rules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_rules_rule_code_effective_from_key' and conrelid='public.finance_payroll_rules'::regclass) then
     alter table public.finance_payroll_rules add constraint finance_payroll_rules_rule_code_effective_from_key UNIQUE (rule_code, effective_from);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_rules_check" and conrelid='public.finance_payroll_rules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_rules_check' and conrelid='public.finance_payroll_rules'::regclass) then
     alter table public.finance_payroll_rules add constraint finance_payroll_rules_check CHECK (effective_to IS NULL OR effective_to >= effective_from);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_rules_fixed_amount_check" and conrelid='public.finance_payroll_rules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_rules_fixed_amount_check' and conrelid='public.finance_payroll_rules'::regclass) then
     alter table public.finance_payroll_rules add constraint finance_payroll_rules_fixed_amount_check CHECK (fixed_amount IS NULL OR fixed_amount >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_rules_rate_check" and conrelid='public.finance_payroll_rules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_rules_rate_check' and conrelid='public.finance_payroll_rules'::regclass) then
     alter table public.finance_payroll_rules add constraint finance_payroll_rules_rate_check CHECK (rate IS NULL OR rate >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_rules_rule_type_check" and conrelid='public.finance_payroll_rules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_rules_rule_type_check' and conrelid='public.finance_payroll_rules'::regclass) then
     alter table public.finance_payroll_rules add constraint finance_payroll_rules_rule_type_check CHECK (rule_type = ANY (ARRAY['ssnit_employee'::text, 'ssnit_employer'::text, 'tax'::text, 'allowance'::text, 'deduction'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_rules_created_by_fkey" and conrelid='public.finance_payroll_rules'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_rules_created_by_fkey' and conrelid='public.finance_payroll_rules'::regclass) then
     alter table public.finance_payroll_rules add constraint finance_payroll_rules_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_runs_pkey" and conrelid='public.finance_payroll_runs'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_runs_pkey' and conrelid='public.finance_payroll_runs'::regclass) then
     alter table public.finance_payroll_runs add constraint finance_payroll_runs_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_runs_payroll_year_payroll_month_key" and conrelid='public.finance_payroll_runs'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_runs_payroll_year_payroll_month_key' and conrelid='public.finance_payroll_runs'::regclass) then
     alter table public.finance_payroll_runs add constraint finance_payroll_runs_payroll_year_payroll_month_key UNIQUE (payroll_year, payroll_month);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_runs_payroll_month_check" and conrelid='public.finance_payroll_runs'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_runs_payroll_month_check' and conrelid='public.finance_payroll_runs'::regclass) then
     alter table public.finance_payroll_runs add constraint finance_payroll_runs_payroll_month_check CHECK (payroll_month >= 1 AND payroll_month <= 12);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_runs_payroll_year_check" and conrelid='public.finance_payroll_runs'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_runs_payroll_year_check' and conrelid='public.finance_payroll_runs'::regclass) then
     alter table public.finance_payroll_runs add constraint finance_payroll_runs_payroll_year_check CHECK (payroll_year >= 2000 AND payroll_year <= 2200);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_runs_status_check" and conrelid='public.finance_payroll_runs'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_runs_status_check' and conrelid='public.finance_payroll_runs'::regclass) then
     alter table public.finance_payroll_runs add constraint finance_payroll_runs_status_check CHECK (status = ANY (ARRAY['draft'::text, 'calculated'::text, 'approved'::text, 'paid'::text, 'locked'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_runs_approved_by_fkey" and conrelid='public.finance_payroll_runs'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_runs_approved_by_fkey' and conrelid='public.finance_payroll_runs'::regclass) then
     alter table public.finance_payroll_runs add constraint finance_payroll_runs_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_payroll_runs_created_by_fkey" and conrelid='public.finance_payroll_runs'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_payroll_runs_created_by_fkey' and conrelid='public.finance_payroll_runs'::regclass) then
     alter table public.finance_payroll_runs add constraint finance_payroll_runs_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_salary_grades_pkey" and conrelid='public.finance_salary_grades'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_salary_grades_pkey' and conrelid='public.finance_salary_grades'::regclass) then
     alter table public.finance_salary_grades add constraint finance_salary_grades_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_salary_grades_code_key" and conrelid='public.finance_salary_grades'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_salary_grades_code_key' and conrelid='public.finance_salary_grades'::regclass) then
     alter table public.finance_salary_grades add constraint finance_salary_grades_code_key UNIQUE (code);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_salary_grades_basic_salary_check" and conrelid='public.finance_salary_grades'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_salary_grades_basic_salary_check' and conrelid='public.finance_salary_grades'::regclass) then
     alter table public.finance_salary_grades add constraint finance_salary_grades_basic_salary_check CHECK (basic_salary >= 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_salary_grades_created_by_fkey" and conrelid='public.finance_salary_grades'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_salary_grades_created_by_fkey' and conrelid='public.finance_salary_grades'::regclass) then
     alter table public.finance_salary_grades add constraint finance_salary_grades_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_teacher_loans_pkey" and conrelid='public.finance_teacher_loans'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_teacher_loans_pkey' and conrelid='public.finance_teacher_loans'::regclass) then
     alter table public.finance_teacher_loans add constraint finance_teacher_loans_pkey PRIMARY KEY (id);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_teacher_loans_reference_no_key" and conrelid='public.finance_teacher_loans'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_teacher_loans_reference_no_key' and conrelid='public.finance_teacher_loans'::regclass) then
     alter table public.finance_teacher_loans add constraint finance_teacher_loans_reference_no_key UNIQUE (reference_no);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_teacher_loans_monthly_deduction_check" and conrelid='public.finance_teacher_loans'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_teacher_loans_monthly_deduction_check' and conrelid='public.finance_teacher_loans'::regclass) then
     alter table public.finance_teacher_loans add constraint finance_teacher_loans_monthly_deduction_check CHECK (monthly_deduction > 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_teacher_loans_principal_amount_check" and conrelid='public.finance_teacher_loans'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_teacher_loans_principal_amount_check' and conrelid='public.finance_teacher_loans'::regclass) then
     alter table public.finance_teacher_loans add constraint finance_teacher_loans_principal_amount_check CHECK (principal_amount > 0::numeric);
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_teacher_loans_status_check" and conrelid='public.finance_teacher_loans'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_teacher_loans_status_check' and conrelid='public.finance_teacher_loans'::regclass) then
     alter table public.finance_teacher_loans add constraint finance_teacher_loans_status_check CHECK (status = ANY (ARRAY['active'::text, 'settled'::text, 'suspended'::text, 'cancelled'::text]));
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_teacher_loans_created_by_fkey" and conrelid='public.finance_teacher_loans'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_teacher_loans_created_by_fkey' and conrelid='public.finance_teacher_loans'::regclass) then
     alter table public.finance_teacher_loans add constraint finance_teacher_loans_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
   end if;
 end $ddl$;
 do $ddl$ begin
-  if not exists(select 1 from pg_constraint where conname="finance_teacher_loans_teacher_id_fkey" and conrelid='public.finance_teacher_loans'::regclass) then
+  if not exists(select 1 from pg_constraint where conname='finance_teacher_loans_teacher_id_fkey' and conrelid='public.finance_teacher_loans'::regclass) then
     alter table public.finance_teacher_loans add constraint finance_teacher_loans_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE RESTRICT;
   end if;
 end $ddl$;
