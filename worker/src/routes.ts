@@ -165,6 +165,15 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       txn`select coalesce(jsonb_object_agg(permission_code,true),'{}'::jsonb) permissions
         from app.role_permissions where role=${ctx.role}`
     ]);
+    const rawPermissions={...((permissionRows[0] as any)?.permissions||{})};
+    const permissions={
+      ...rawPermissions,
+      manage_academics:Boolean(rawPermissions["academics.write"]),
+      manage_teachers:Boolean(rawPermissions["staff.write"]),
+      manage_headteachers:Boolean(rawPermissions["admin.tenant"]),
+      manage_users:Boolean(rawPermissions["admin.users"]),
+      view_audit:Boolean(rawPermissions["admin.tenant"])
+    };
     const licenseRow=(licenseRows[0]||{}) as any;
     const now=Date.now(),expires=licenseRow.expires_at?Date.parse(String(licenseRow.expires_at)):NaN;
     const license={
@@ -176,7 +185,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     };
     return json({
       tenant:(tenant[0]||null),metrics:metrics[0]||{},
-      permissions:(permissionRows[0] as any)?.permissions||{},
+      permissions,
       license,
       capabilities:{role:ctx.role,assuranceLevel:ctx.assuranceLevel}
     });
