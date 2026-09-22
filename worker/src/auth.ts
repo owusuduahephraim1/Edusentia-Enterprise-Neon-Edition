@@ -154,10 +154,9 @@ export async function authenticate(request:Request,env:Env):Promise<SessionConte
        where t.id=${session.tenant_id}::uuid
        limit 1`
   ]);
-  const context=contextRows[0] as any,assuranceLevel=Number(session.assurance_level);
-  if(!context||context.status!=="active")return null;
-  const mfaRequired=Boolean(context.mfa_required)||privilegedRoleRequiresMfa(context.role);
-  if(mfaRequired&&assuranceLevel<2)return null;
+  const context=contextRows[0] as any;
+  if(!context||context.status!=="active"||(context.mfa_required&&Number(session.assurance_level)<2)||(privilegedRoleRequiresMfa(context.role)&&Number(session.assurance_level)<2))return null;
+  const assuranceLevel=Number(session.assurance_level);
   return {sessionId:session.session_id,userId:session.user_id,tenantId:session.tenant_id,tenantCode:context.tenant_code,tenantName:context.tenant_name,databaseName:String(route.database_name),role:context.role,assuranceLevel,email:session.email,displayName:session.display_name};
 }
 export async function logout(request:Request,env:Env){
