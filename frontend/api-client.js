@@ -23,12 +23,29 @@
   }
   const post=(path,body={})=>request(path,{method:"POST",body});
 
+  function uploadContentType(file){
+    const declared=String(file?.type||"").trim().toLowerCase();
+    if(declared&&declared!=="application/octet-stream")return declared;
+    const name=String(file?.name||"").toLowerCase();
+    if(name.endsWith(".png"))return "image/png";
+    if(/\.(jpe?g)$/i.test(name))return "image/jpeg";
+    if(name.endsWith(".webp"))return "image/webp";
+    if(name.endsWith(".gif"))return "image/gif";
+    if(name.endsWith(".pdf"))return "application/pdf";
+    if(name.endsWith(".csv"))return "text/csv";
+    if(name.endsWith(".docx"))return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if(name.endsWith(".xlsx"))return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    return declared||"application/octet-stream";
+  }
   async function uploadFile(file,kind="document"){
-    const prepared=await post("/api/files/upload-url",{filename:file.name,contentType:file.type||"application/octet-stream",size:file.size,kind});
-    const response=await fetch(`${apiBase}${prepared.uploadUrl}`,{method:prepared.method||"PUT",credentials:"include",headers:{"content-type":file.type||"application/octet-stream"},body:file});
+    const contentType=uploadContentType(file);
+    const prepared=await post("/api/files/upload-url",{filename:file.name,contentType,size:file.size,kind});
+    const relative=String(prepared.uploadUrl||"");
+    const uploadUrl=/^https?:\/\//i.test(relative)?relative:`${apiBase}${relative.startsWith("/")?"":"/"}${relative}`;
+    const response=await fetch(uploadUrl,{method:prepared.method||"PUT",credentials:"include",headers:{"content-type":contentType},body:file});
     const payload=await response.json().catch(()=>({}));
     if(!response.ok){const e=payload?.error||{};throw new ApiError(e.message||`Upload failed (${response.status})`,response.status,e.code||"upload_failed",e.details);}
-    return payload;
+    return {...payload,objectKey:payload.objectKey||prepared.objectKey};
   }
 
   async function uploadReportPdf(reportId,file){
