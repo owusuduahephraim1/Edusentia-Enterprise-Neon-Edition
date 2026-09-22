@@ -37,9 +37,9 @@
     if(name.endsWith(".xlsx"))return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     return declared||"application/octet-stream";
   }
-  async function uploadFile(file,kind="document"){
+  async function uploadFile(file,kind="document",options={}){
     const contentType=uploadContentType(file);
-    const prepared=await post("/api/files/upload-url",{filename:file.name,contentType,size:file.size,kind});
+    const prepared=await post("/api/files/upload-url",{filename:file.name,contentType,size:file.size,kind,subfolder:String(options?.subfolder||"")});
     const relative=String(prepared.uploadUrl||"");
     const uploadUrl=/^https?:\/\//i.test(relative)?relative:`${apiBase}${relative.startsWith("/")?"":"/"}${relative}`;
     const response=await fetch(uploadUrl,{method:prepared.method||"PUT",credentials:"include",headers:{"content-type":contentType},body:file});
