@@ -8,7 +8,7 @@
   const api = () => window.EdusentiaApi;
   const turnstileSiteKey = String(window.EDS_MASTER_CONFIG?.turnstileSiteKey || "").trim();
   const platformMode = new URLSearchParams(location.search).get("platform")==="1";
-  const state = {session:null, boot:null, view:"dashboard", loginSchool:null, authScope:platformMode?"platform":"tenant"};
+  const state = {session:null, boot:null, view:"dashboard", loginSchool:null, authScope:platformMode?"platform":"tenant", brandLogoUrl:""};
   let turnstileToken = "", turnstileWidgetId = null, mfaChallenge = "", pendingSession = null, pendingScope = state.authScope;
   let registrationToken = "", registrationWidgetId = null, recoveryTurnstileToken = "", recoveryWidgetId = null;
 
@@ -35,6 +35,24 @@
   });
   const LEGACY_LICENSE_FEATURE_FALLBACKS=Object.freeze({id_cards:"core_records",timetable:"core_records",school_prospectus:"core_records"});
   function role(){return String(state.session?.membership?.role || state.boot?.capabilities?.role || "").toLowerCase();}
+  function packageSchoolLogo(){return String(window.EDS_MASTER_CONFIG?.logoPath||"assets/school-logo.png");}
+  async function resolveTenantLogoSource(tenant=state.boot?.tenant||{}){
+    const stored=String(tenant?.settings?.logo_url||tenant?.logo_url||"").trim();
+    if(!stored||stored==="assets/school-logo.png")return packageSchoolLogo();
+    if(!stored.startsWith("tenants/"))return stored;
+    try{
+      const blob=await api().downloadFile(stored);
+      if(state.brandLogoUrl)URL.revokeObjectURL(state.brandLogoUrl);
+      state.brandLogoUrl=URL.createObjectURL(blob);
+      return state.brandLogoUrl;
+    }catch{return packageSchoolLogo();}
+  }
+  async function applyTenantBrandLogo(tenant=state.boot?.tenant||{}){
+    const source=await resolveTenantLogoSource(tenant),name=tenant?.name||"School";
+    const image=byId("brandLogo");if(image){image.src=source;image.alt=name+" official logo";}
+    document.querySelectorAll("[data-school-logo]").forEach(node=>{node.src=source;node.alt=name+" official logo";});
+    return source;
+  }
   async function certified(operation,args={}){const response=await api().certifiedRpc(operation,args);return response?.result??null;}
   function permissionEnabled(code){return Boolean(state.boot?.permissions?.[code]);}
   function featureEnabled(code){
@@ -198,6 +216,7 @@
     byId("userAvatar").textContent=String(userName).trim().charAt(0).toUpperCase()||"E";
     byId("brandName").textContent=tenantName;
     byId("brandLogo").alt=tenantName;
+    await applyTenantBrandLogo(state.boot.tenant||{});
     renderNav();
     show("appShell");
     setSync("online","Connected");
@@ -241,7 +260,7 @@
   window.EdusentiaShell=Object.freeze({
     registerView,navigate,api,certified,role,state,escapeHtml,status,formatDate,formatDateTime,formatAmount,
     loading,empty,pageError,fullName,friendly,byId,featureEnabled,permissionEnabled,orderedNavItems,
-    confirmAction,promptAction,notifyAction
+    confirmAction,promptAction,notifyAction,applyTenantBrandLogo,resolveTenantLogoSource,packageSchoolLogo
   });
 
   async function renderDashboard(){
