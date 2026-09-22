@@ -1,22 +1,17 @@
 (()=>{"use strict";
 if(window.EDS_STUDENT_SERVICES_V1)return;window.EDS_STUDENT_SERVICES_V1=true;
 const S={c:null,s:null,t:"overview",self:null},$=id=>document.getElementById(id),e=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),L=v=>String(v||"—").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()),DT=v=>v?new Date(v).toLocaleString("en-GH"):"—",D=v=>v?new Date(`${String(v).slice(0,10)}T00:00:00`).toLocaleDateString("en-GH"):"—",cap=k=>!!S.s?.capabilities?.[k],role=()=>S.s?.app_role||"",err=x=>String(x?.message||x||"Request failed").replaceAll("_"," ");
-let clientUrl="",clientKey="",authSubscription=null,bootVersion=0;
+let authSubscription=null,bootVersion=0;
 function clearAccess(){bootVersion++;S.s=null;S.self=null;$("studentServicesNav")?.remove()}
 function cli(){
-  const x=window.RCE_CONFIG||window.NIS_CONFIG||{};
-  if(!window.supabase?.createClient||!x.supabaseUrl||!x.supabaseAnonKey||x.masterEdition===true)return null;
-  if(S.c&&clientUrl===x.supabaseUrl&&clientKey===x.supabaseAnonKey)return S.c;
-  authSubscription?.unsubscribe();
-  S.c?.auth?.stopAutoRefresh?.();
-  clearAccess();
-  clientUrl=x.supabaseUrl;clientKey=x.supabaseAnonKey;
-  const c=window.supabase.createClient(clientUrl,clientKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+  if(S.c)return S.c;
+  const c=window.EdusentiaCompatClient||null;
+  if(!c)return null;
   S.c=c;
+  authSubscription?.unsubscribe?.();
   authSubscription=c.auth.onAuthStateChange((event,session)=>{
     if(S.c!==c)return;
     if(event==="SIGNED_OUT"){clearAccess();return}
-    // Supabase holds the auth lock during this callback. Defer all session/RPC work.
     if(session)setTimeout(boot,0);
   }).data.subscription;
   return c;
