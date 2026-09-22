@@ -30,6 +30,9 @@ BOOTSTRAP_DATABASE_URL="$PARITY_URL" bash scripts/update-parity-tenant-template.
 # Update the persistent non-primary reference tenant only.
 BOOTSTRAP_DATABASE_URL="$PARITY_URL" PARITY_REFERENCE_DATABASE="$REFERENCE_DB" bash scripts/update-parity-reference-tenant.sh
 
+# Apply the same idempotent operational layer used for production existing tenants.
+BOOTSTRAP_DATABASE_URL="$PARITY_URL" bash scripts/update-isolated-operational-tenants.sh
+
 REFERENCE_URL="$(PARITY_URL="$PARITY_URL" REFERENCE_DB="$REFERENCE_DB" node --input-type=module -e '
   const u=new URL(process.env.PARITY_URL);
   u.pathname="/"+process.env.REFERENCE_DB;
@@ -38,6 +41,8 @@ REFERENCE_URL="$(PARITY_URL="$PARITY_URL" REFERENCE_DB="$REFERENCE_DB" node --in
 echo "::add-mask::$REFERENCE_URL"
 
 test "$(psql "$REFERENCE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
+test "$(psql "$REFERENCE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%')")" = "22"
+test "$(psql "$REFERENCE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")" -ge 258
 test "$(psql "$PARITY_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|false"
 test "$(psql "$PARITY_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$REFERENCE_DB'")" = "edusentia_provisioner|true"
 
@@ -57,4 +62,4 @@ if(result.referenceRpcCount!==172 ||
 console.log("Persistent parity reference tenant verified: 172/172 certified browser RPCs executable.");
 NODE
 
-echo "Parity tenant template and persistent reference tenant promoted through certified compatibility 0048."
+echo "Parity tenant template and persistent reference tenant promoted through certified compatibility 0048 plus operational parity 0049."

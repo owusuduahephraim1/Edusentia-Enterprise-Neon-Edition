@@ -13,6 +13,7 @@ on:
       - "database/service-login-roles.sql"
       - "database/reference-compat/**"
       - "database/tenant-template/**"
+      - "scripts/update-isolated-operational-tenants.sh"
       - ".github/workflows/deploy-worker.yml"
   workflow_dispatch:
 
@@ -140,6 +141,10 @@ jobs:
           # Production deployment runs as edusentia_runtime and verifies those roles below
           # instead of replaying owner-only GRANT statements.
           BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" TENANT_TEMPLATE_DATABASE="edusentia_tenant_template" bash database/tenant-template/install.sh
+
+          # Existing isolated-ready schools must receive additive compatibility upgrades too.
+          # This is idempotent and fails closed unless every tenant reaches the full 258-operation surface.
+          BOOTSTRAP_DATABASE_URL="$ADMIN_DATABASE_URL" bash scripts/update-isolated-operational-tenants.sh
 
           # Wrapper roles are created or revalidated by the controlled production bootstrap.
           # Runtime has ADMIN only on these password-bearing wrappers, never on the fixed service roles.
