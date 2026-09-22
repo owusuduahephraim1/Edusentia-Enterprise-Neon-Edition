@@ -97,13 +97,23 @@ psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f database/reference-compat/0048
 TARGET_DATABASE_URL="$TEMPLATE_URL" bash database/reference-compat/install-operational-parity.sh
 psql "$TEMPLATE_URL" -v ON_ERROR_STOP=1 -f database/tenant-template/runtime-role.sql
 
-test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
-test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
-test "$(psql "$TEMPLATE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
-test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")" -ge 1
-test "$(psql "$TEMPLATE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")" -ge 258
-test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from platform.license_plans p where p.code in('starter','professional','enterprise') and (select count(*) from jsonb_object_keys(p.feature_flags))=27 and p.feature_flags->>'id_cards'='true' and p.feature_flags->>'staff_id_cards'='true' and p.feature_flags->>'timetable'='true' and p.feature_flags->>'school_prospectus'='true' and p.feature_flags->>'advanced_analytics'='false' and p.feature_flags->>'integrations'='false'")" = "3"
-test "$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")" = "t"
+tenant_runtime_schema="$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")"
+compat_schema="$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")"
+compat_version="$(psql "$TEMPLATE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")"
+bootstrap_count="$(psql "$TEMPLATE_URL" -Atc "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='get_bootstrap_data'")"
+worker_rpc_count="$(psql "$TEMPLATE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")"
+plan_parity_count="$(psql "$TEMPLATE_URL" -Atc "select count(*) from platform.license_plans p where p.code in('starter','professional','enterprise') and (select count(*) from jsonb_object_keys(p.feature_flags))=27 and p.feature_flags->>'id_cards'='true' and p.feature_flags->>'staff_id_cards'='true' and p.feature_flags->>'timetable'='true' and p.feature_flags->>'school_prospectus'='true' and p.feature_flags->>'advanced_analytics'='false' and p.feature_flags->>'integrations'='false'")"
+runtime_acl_ok="$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusentia_worker_runtime','app.students','select') and has_function_privilege('edusentia_worker_runtime','authn.lookup_login(text,text)','execute')")"
+
+echo "Tenant template validation: runtime_schema=$tenant_runtime_schema compat_schema=$compat_schema compat_version=$compat_version bootstrap_count=$bootstrap_count worker_rpc_count=$worker_rpc_count plan_parity_count=$plan_parity_count runtime_acl_ok=$runtime_acl_ok"
+
+test "$tenant_runtime_schema" = "0020"
+test "$compat_schema" = "0048"
+test "$compat_version" = "neon-v1.0.0-r42"
+test "$bootstrap_count" -ge 1
+test "$worker_rpc_count" -ge 258
+test "$plan_parity_count" = "3"
+test "$runtime_acl_ok" = "t"
 
 if [ "$(template_owner)" = "edusentia_runtime" ]; then
   psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "alter database \"$TEMPLATE_DB\" owner to edusentia_provisioner;"
