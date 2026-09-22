@@ -45,7 +45,7 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/count\(distinct p\.proname\)[\s\S]*258/);
   for(const migration of [
-    "0049a_operational_finance_reference.sql","hr_staff_management_v1.sql",
+    "0049a_operational_finance_reference.sql","0049v_live_plan_feature_parity.sql","hr_staff_management_v1.sql",
     "student_services_foundation_v1.sql","admissions_applicant_management_v1.sql",
     "discipline_welfare_management_v1.sql","health_clinic_management_v1.sql",
     "communications_messaging_centre_v1.sql","hostel_boarding_management_v1.sql",
