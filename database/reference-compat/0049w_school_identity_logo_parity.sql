@@ -33,11 +33,11 @@ security definer
 set search_path to 'public','app','storage','pg_catalog','extensions'
 as $function$
 declare
-  tenant_id uuid:=app.current_tenant_id();
+  v_tenant_id uuid:=app.current_tenant_id();
   school_id uuid;
   clean_logo text:=btrim(coalesce(target_logo_url,''));
 begin
-  if tenant_id is null or auth.uid() is null then
+  if v_tenant_id is null or auth.uid() is null then
     raise exception 'Authenticated tenant context is required' using errcode='42501';
   end if;
   if not public.is_system_admin() then
@@ -60,10 +60,11 @@ begin
 
   if clean_logo='assets/school-logo.png' then
     null;
-  elsif clean_logo like ('tenants/'||tenant_id::text||'/school-branding/%') and clean_logo not like '%..%' then
+  elsif clean_logo like ('tenants/'||v_tenant_id::text||'/school-branding/%') and clean_logo not like '%..%' then
     if not exists(
-      select 1 from storage.object_metadata m
-      where m.tenant_id=tenant_id
+      select 1
+      from storage.object_metadata m
+      where m.tenant_id=v_tenant_id
         and m.object_key=clean_logo
         and m.status='active'
         and lower(m.content_type)='image/png'
