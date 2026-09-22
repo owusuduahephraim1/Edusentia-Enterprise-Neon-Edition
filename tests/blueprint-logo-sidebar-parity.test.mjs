@@ -25,7 +25,7 @@ test("school logo authorization follows the blueprint active-profile role path",
   assert.match(sql,/if not public\.is_system_admin\(\) then/);
   assert.match(sql,/perform public\.require_sensitive_access\(\)/);
   assert.doesNotMatch(sql,/current_role\s+text:=app\.current_role\(\)/);
-  assert.match(sql,/clean_logo<>'assets\/school-logo\.png'/);
+  assert.match(sql,/clean_logo='assets\/school-logo\.png'/);
 });
 
 test("tenant sidebar keeps blueprint fixed shell with explicit two-axis navigation scrolling",()=>{

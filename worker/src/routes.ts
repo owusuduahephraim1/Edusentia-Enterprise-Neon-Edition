@@ -419,7 +419,13 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     if(type!=="application/pdf")return error("invalid_content_type","Official report files must be PDF",415,requestId);
     if(size<=0||size>20*1024*1024)return error("invalid_file_size","Report PDF size must be between 1 byte and 20 MB",422,requestId);
     const key=`tenants/${ctx.tenantId}/report-pdfs/${reportId}/${crypto.randomUUID()}-${name}`;
-    await tenantTx<any[]>(sql,ctx,txn=>[txn`insert into storage.object_metadata(tenant_id,object_key,original_name,content_type,size_bytes,created_by,status) values(${ctx.tenantId}::uuid,${key},${name},'application/pdf',${size},${ctx.userId}::uuid,'pending')`]);
+    try{
+      const [preparedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.prepare_object_upload(${key},${name},'application/pdf',${size}::bigint) metadata`]);
+      if(!(preparedRows[0] as any)?.metadata)throw new Error("Upload metadata was not created");
+    }catch(cause){
+      console.error(JSON.stringify({level:"error",requestId,code:"upload_prepare_failed",message:String((cause as any)?.message||cause)}));
+      throw Object.assign(new Error("The report PDF upload could not be prepared. Please retry."),{code:"upload_prepare_failed",status:503});
+    }
     return json({objectKey:key,uploadUrl:`/api/files/upload?key=${encodeURIComponent(key)}`,method:"PUT",expiresInSeconds:900});
   }
 
@@ -431,8 +437,8 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const key=String(descriptor.storage_path||"");
     if(!key)return error("not_found","Official report PDF is not registered",404,requestId);
     if(!key.startsWith(`tenants/${ctx.tenantId}/report-pdfs/${reportId}/`))return error("forbidden","Invalid report PDF scope",403,requestId);
-    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select content_type,original_name,status from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);
-    const meta=metaRows[0] as any;if(!meta)return error("not_found","Official report PDF object is not available",404,requestId);
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'active') metadata`]);
+    const meta=(metaRows[0] as any)?.metadata as any;if(!meta)return error("not_found","Official report PDF object is not available",404,requestId);
     const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","Official report PDF object is not available",404,requestId);
     const h=new Headers();obj.writeHttpMetadata(h);
     h.set("content-type","application/pdf");
@@ -448,10 +454,11 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     if(!key.startsWith(`tenants/${ctx.tenantId}/report-pdfs/${reportId}/`))return error("forbidden","Invalid report PDF scope",403,requestId);
     const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.can_delete_report_pdf_object(${reportId}::uuid,${key}) allowed`]);
     if(!(allowedRows[0] as any)?.allowed)return error("forbidden","This report PDF object cannot be deleted",403,requestId);
-    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select id,status from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);
-    const meta=metaRows[0] as any;if(!meta)return error("not_found","Report PDF object was not found",404,requestId);
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'active') metadata`]);
+    const meta=(metaRows[0] as any)?.metadata as any;if(!meta)return error("not_found","Report PDF object was not found",404,requestId);
     await env.OBJECTS.delete(key);
-    await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='deleted',deleted_at=now() where id=${meta.id}::uuid`]);
+    const [transitionRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.transition_object_upload(${meta.id}::uuid,'active','deleted') changed`]);
+    if(!(transitionRows[0] as any)?.changed)throw Object.assign(new Error("Report PDF metadata could not be retired"),{code:"upload_metadata_transition_failed",status:503});
     return json({ok:true,objectKey:key});
   }
   if(method==="POST"&&p==="/api/files/upload-url"){
@@ -462,7 +469,8 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     if(!allowed.some(x=>type.startsWith(x)))return error("invalid_content_type","This file type is not allowed",422,requestId);
     const key=`tenants/${ctx.tenantId}/${kind}/${crypto.randomUUID()}-${name}`;
     try{
-      await tenantTx<any[]>(sql,ctx,txn=>[txn`insert into storage.object_metadata(tenant_id,object_key,original_name,content_type,size_bytes,created_by,status) values(${ctx.tenantId}::uuid,${key},${name},${type},${size},${ctx.userId}::uuid,'pending')`]);
+      const [preparedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.prepare_object_upload(${key},${name},${type},${size}::bigint) metadata`]);
+      if(!(preparedRows[0] as any)?.metadata)throw new Error("Upload metadata was not created");
     }catch(cause){
       console.error(JSON.stringify({level:"error",requestId,code:"upload_prepare_failed",message:String((cause as any)?.message||cause)}));
       throw Object.assign(new Error("The upload could not be prepared. Please retry."),{code:"upload_prepare_failed",status:503});
@@ -472,9 +480,17 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   }
   if(method==="PUT"&&p==="/api/files/upload"){
     const key=url.searchParams.get("key")||"";if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);
-    const [meta]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select id,content_type,size_bytes,status from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='pending' limit 1`]);if(!meta[0])return error("not_found","Upload authorization was not found",404,requestId);
-    const expectedSize=Number((meta[0] as any).size_bytes);
-    const expectedType=String((meta[0] as any).content_type).toLowerCase();
+    let metadata:any;
+    try{
+      const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'pending') metadata`]);
+      metadata=(metaRows[0] as any)?.metadata||null;
+    }catch(cause){
+      console.error(JSON.stringify({level:"error",requestId,code:"upload_authorization_lookup_failed",message:String((cause as any)?.message||cause)}));
+      throw Object.assign(new Error("The upload authorization could not be verified. Please retry."),{code:"upload_authorization_lookup_failed",status:503});
+    }
+    if(!metadata)return error("not_found","Upload authorization was not found",404,requestId);
+    const expectedSize=Number(metadata.size_bytes);
+    const expectedType=String(metadata.content_type).toLowerCase();
     const receivedType=String(request.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
     if(receivedType!==expectedType)return error("invalid_content_type","Upload content type does not match authorization",415,requestId);
     const bytes=await request.arrayBuffer();
@@ -482,12 +498,13 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     try{
       await env.OBJECTS.put(key,bytes,{httpMetadata:{contentType:expectedType}});
     }catch(cause){
-      await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='quarantined' where id=${(meta[0] as any).id}::uuid and status='pending'`]).catch(()=>{});
+      await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.transition_object_upload(${metadata.id}::uuid,'pending','quarantined') changed`]).catch(()=>{});
       console.error(JSON.stringify({level:"error",requestId,code:"object_storage_write_failed",message:String((cause as any)?.message||cause)}));
       throw Object.assign(new Error("Object storage is temporarily unavailable. Please retry the upload."),{code:"object_storage_write_failed",status:503});
     }
     try{
-      await tenantTx<any[]>(sql,ctx,txn=>[txn`update storage.object_metadata set status='active',stored_at=now() where id=${(meta[0] as any).id}::uuid`]);
+      const [transitionRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.transition_object_upload(${metadata.id}::uuid,'pending','active') changed`]);
+      if(!(transitionRows[0] as any)?.changed)throw new Error("Upload metadata was not finalized");
     }catch(cause){
       await env.OBJECTS.delete(key).catch(()=>{});
       console.error(JSON.stringify({level:"error",requestId,code:"upload_finalize_failed",message:String((cause as any)?.message||cause)}));
@@ -499,10 +516,11 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const key=url.searchParams.get("key")||"";
     if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);
     if(key.startsWith(`tenants/${ctx.tenantId}/report-pdfs/`))return error("forbidden","Use the guarded report PDF download endpoint",403,requestId);
-    const [meta]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select content_type,original_name from storage.object_metadata where tenant_id=${ctx.tenantId}::uuid and object_key=${key} and status='active' limit 1`]);
-    if(!meta[0])return error("not_found","File not found",404,requestId);
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'active') metadata`]);
+    const metadata=(metaRows[0] as any)?.metadata as any;
+    if(!metadata)return error("not_found","File not found",404,requestId);
     const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","File not found",404,requestId);
-    const h=new Headers();obj.writeHttpMetadata(h);h.set("content-type",String((meta[0] as any).content_type));h.set("content-disposition",`attachment; filename*=UTF-8''${encodeURIComponent(String((meta[0] as any).original_name))}`);h.set("cache-control","private, no-store");return new Response(obj.body,{headers:h});
+    const h=new Headers();obj.writeHttpMetadata(h);h.set("content-type",String(metadata.content_type));h.set("content-disposition",`attachment; filename*=UTF-8''${encodeURIComponent(String(metadata.original_name))}`);h.set("cache-control","private, no-store");return new Response(obj.body,{headers:h});
   }
   return error("not_found","Endpoint not found",404,requestId);
 }
