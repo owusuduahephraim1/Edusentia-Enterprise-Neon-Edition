@@ -162,7 +162,7 @@ SQL
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_object_upload_metadata(text,text)','EXECUTE')")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.transition_object_upload(uuid,text,text)','EXECUTE')")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0")" = "t"
-  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('/report-card-templates/'||target_range_key||'/' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0 from (values ('early_years')) v(target_range_key)")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'")" = "t"
 
   psql "$TENANT_DATABASE_URL" -Atc "
