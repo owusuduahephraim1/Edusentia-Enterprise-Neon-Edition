@@ -93,12 +93,37 @@ apply_once "0048n_backup_maintenance_helpers" "database/reference-compat/0048n_b
 TARGET_DATABASE_URL="$TEMPLATE_URL" bash database/reference-compat/install-operational-parity.sh
 
 cleanup_schema_grant
-test "$(psql "$TEMPLATE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" = "f"
-test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
-test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version in('0048i_historical_provider_bridges','0048j_notification_worker_compat','0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "6"
-test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%'")" = "23"
-test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version='0049_operational_blueprint_parity'")" = "1"
-test "$(psql "$TEMPLATE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")" -ge 258
+
+assert_eq() {
+  local label="$1" actual="$2" expected="$3"
+  if [ "$actual" != "$expected" ]; then
+    echo "::error::$label mismatch: expected '$expected', got '$actual'" >&2
+    exit 1
+  fi
+}
+assert_ge() {
+  local label="$1" actual="$2" minimum="$3"
+  if [ "$actual" -lt "$minimum" ]; then
+    echo "::error::$label too small: expected >= $minimum, got $actual" >&2
+    exit 1
+  fi
+}
+
+runtime_public_create="$(psql "$TEMPLATE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")"
+release_schema_version="$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")"
+tail_0048_count="$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version in('0048i_historical_provider_bridges','0048j_notification_worker_compat','0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")"
+operational_0049_count="$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%'")"
+operational_marker_count="$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version='0049_operational_blueprint_parity'")"
+worker_exec_count="$(psql "$TEMPLATE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")"
+
+echo "Parity template postconditions: runtime_public_create=$runtime_public_create release_schema_version=$release_schema_version tail_0048_count=$tail_0048_count operational_0049_count=$operational_0049_count operational_marker_count=$operational_marker_count worker_exec_count=$worker_exec_count"
+
+assert_eq "runtime public CREATE privilege" "$runtime_public_create" "f"
+assert_eq "reference release schema version" "$release_schema_version" "0048"
+assert_eq "0048 tail migration count" "$tail_0048_count" "6"
+assert_eq "0049 migration count" "$operational_0049_count" "23"
+assert_eq "0049 operational marker count" "$operational_marker_count" "1"
+assert_ge "Worker executable public function count" "$worker_exec_count" "258"
 
 TARGET_DATABASE_URL="$TEMPLATE_URL" node scripts/reference-surface-inventory.mjs | tee /tmp/parity-template-surface.json
 node - <<'NODE'
