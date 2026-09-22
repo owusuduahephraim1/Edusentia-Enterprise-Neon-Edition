@@ -251,13 +251,14 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     ]);
     // Expose certified blueprint permission aliases while retaining Neon-native dotted permissions.
     const rawPermissions={...((permissionRows[0] as any)?.permissions||{})};
+    const isSystemAdmin=ctx.role==="system_admin";
     const permissions={
       ...rawPermissions,
-      manage_academics:Boolean(rawPermissions["academics.write"]),
-      manage_teachers:Boolean(rawPermissions["staff.write"]),
-      manage_headteachers:Boolean(rawPermissions["admin.tenant"]),
-      manage_users:Boolean(rawPermissions["admin.users"]),
-      view_audit:Boolean(rawPermissions["admin.tenant"])
+      manage_academics:isSystemAdmin||Boolean(rawPermissions["academics.write"]),
+      manage_teachers:isSystemAdmin||Boolean(rawPermissions["staff.write"]),
+      manage_headteachers:isSystemAdmin||Boolean(rawPermissions["admin.tenant"]),
+      manage_users:isSystemAdmin||Boolean(rawPermissions["admin.users"]),
+      view_audit:isSystemAdmin||Boolean(rawPermissions["admin.tenant"])
     };
     const licenseRow=(licenseRows[0]||{}) as any;
     const now=Date.now(),expires=licenseRow.expires_at?Date.parse(String(licenseRow.expires_at)):NaN;
