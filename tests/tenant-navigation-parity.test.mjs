@@ -10,8 +10,10 @@ test("tenant shell follows reference role, permission and feature navigation con
   assert.match(app,/system_admin:\["dashboard","operations","students","student_services","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
   assert.match(app,/permissionEnabled\(code\)/);
   assert.match(app,/featureEnabled\(code\)/);
-  assert.match(app,/item\.permission&&!permissionEnabled\(item\.permission\)/);
-  assert.match(app,/item\.feature&&!featureEnabled\(item\.feature\)/);
+  assert.match(app,/item\.permission&&!permissionEnabled\(item\.permission\)&&r!=="system_admin"/);
+  assert.match(app,/item\.feature&&!featureEnabled\(item\.feature\)&&r!=="system_admin"/);
+  assert.match(app,/Plan upgrade required/);
+  assert.match(app,/planUpgradeRequired/);
   assert.match(app,/LEGACY_LICENSE_FEATURE_FALLBACKS/);
   assert.match(app,/id_cards:"core_records"/);
   assert.match(app,/timetable:"core_records"/);
@@ -51,19 +53,22 @@ test("legacy blueprint modules receive unwrapped Worker RPC results",()=>{
   const compat=read("frontend/neon-supabase-compat.js");
   assert.match(compat,/response\?\.result\?\?response/);
   const routes=read("worker/src/routes.ts");
-  assert.match(routes,/manage_academics:Boolean\(rawPermissions\["academics\.write"\]\)/);
-  assert.match(routes,/manage_teachers:Boolean\(rawPermissions\["staff\.write"\]\)/);
-  assert.match(routes,/manage_headteachers:Boolean\(rawPermissions\["admin\.tenant"\]\)/);
-  assert.match(routes,/manage_users:Boolean\(rawPermissions\["admin\.users"\]\)/);
-  assert.match(routes,/view_audit:Boolean\(rawPermissions\["admin\.tenant"\]\)/);
+  assert.match(routes,/const isSystemAdmin=ctx\.role==="system_admin"/);
+  assert.match(routes,/manage_academics:isSystemAdmin\|\|Boolean\(rawPermissions\["academics\.write"\]\)/);
+  assert.match(routes,/manage_teachers:isSystemAdmin\|\|Boolean\(rawPermissions\["staff\.write"\]\)/);
+  assert.match(routes,/manage_headteachers:isSystemAdmin\|\|Boolean\(rawPermissions\["admin\.tenant"\]\)/);
+  assert.match(routes,/manage_users:isSystemAdmin\|\|Boolean\(rawPermissions\["admin\.users"\]\)/);
+  assert.match(routes,/view_audit:isSystemAdmin\|\|Boolean\(rawPermissions\["admin\.tenant"\]\)/);
 });
 
 
 test("System Administrator sidebar excludes extension-only HR and Finance entries",()=>{
   const hr=read("frontend/tenant-hr-staff-v1.js");
   const finance=read("frontend/finance-core.js");
+  const accountantRoles=read("frontend/tenant-accountant-student-roles-v2.js");
   assert.match(hr,/if\(S\.role!=="principal"\)/);
   assert.doesNotMatch(finance,/S\.role==="system_admin"&&hasFeature\("finance_fees"\)/);
+  assert.match(accountantRoles,/currentRole\(\) === "system_admin"[\s\S]*existing\?\.remove\(\)[\s\S]*setDirectoryActive\(false\)/);
 });
 
 
