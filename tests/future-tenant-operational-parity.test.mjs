@@ -74,7 +74,7 @@ test("reference module navigation remains feature and role scoped",()=>{
   assert.match(app,/permissionEnabled/);
   assert.match(finance,/hasFeature\("finance_fees"\)/);
   assert.match(finance,/hasFeature\("payroll"\)/);
-  assert.match(hr,/\["system_admin","principal"\]/);
+  assert.match(hr,/S\.role!==\"principal\"/);
   assert.match(services,/student_services_session/);
   assert.match(services,/cap\("admissions_read"\)/);
   assert.match(services,/cap\("health_summary"\)/);
