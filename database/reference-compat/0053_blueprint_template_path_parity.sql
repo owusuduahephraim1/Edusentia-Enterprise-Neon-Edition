@@ -8,8 +8,11 @@ alter table public.report_card_templates
 alter table public.report_card_templates
   add constraint report_card_templates_path_chk
   check (
-    storage_path like ('tenants/%/report-card-templates/'||range_key||'/%')
-    and storage_path not like '%..%'
+    storage_path not like '%..%'
+    and (
+      storage_path like (range_key||'/%')
+      or storage_path like ('tenants/%/report-card-templates/'||range_key||'/%')
+    )
   );
 
 create or replace function public.save_report_card_template(
