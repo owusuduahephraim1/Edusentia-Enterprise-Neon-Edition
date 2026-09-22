@@ -65,3 +65,25 @@ test("System Administrator sidebar excludes extension-only HR and Finance entrie
   assert.match(hr,/if\(S\.role!=="principal"\)/);
   assert.doesNotMatch(finance,/S\.role==="system_admin"&&hasFeature\("finance_fees"\)/);
 });
+
+
+test("System Administrator operational workspaces preserve blueprint UI actions",()=>{
+  const shell=read("frontend/app.js");
+  const operations=read("frontend/parity-operations.js");
+  const students=read("frontend/parity-students.js");
+  const academics=read("frontend/parity-academics.js");
+  const reports=read("frontend/parity-reports.js");
+  const enterprise=read("frontend/parity-enterprise-workspaces.js");
+  assert.match(shell,/System Administration Dashboard/);
+  assert.match(operations,/Production Operations/);
+  for(const label of ["Expected reports","Academic period control","System health","Class report progress"])assert.ok(operations.includes(label),label);
+  for(const label of ["Student Directory","Import CSV","Export CSV","Add student","data-student-view","data-student-edit","data-student-archive"])assert.ok(students.includes(label),label);
+  for(const label of ["Academic Configuration","Academic Periods","Classes and Subjects","Assessment Schemes","Grading Scales","Class Promotion"])assert.ok(academics.includes(label),label);
+  for(const label of ["Report Cards","Manage template","Export list","Bulk class PDFs","Publish class reports","New report"])assert.ok(reports.includes(label),label);
+  for(const label of ["School Prospectus","Download complete prospectus","Copy year","Emergency Academic Delegation","Certificates and Awards","Templates and settings","ID Card Management","Download printable A4","Users and Access","Licence and Capacity","System Settings","Report Card Templates by Class Range"])assert.ok(enterprise.includes(label),label);
+  assert.match(enterprise,/save_school_prospectus_section/);
+  assert.match(enterprise,/save_school_prospectus_item/);
+  assert.match(enterprise,/save_certificate_template/);
+  assert.match(enterprise,/replace_student_id_card/);
+  assert.match(enterprise,/updateSchoolSettings/);
+});
