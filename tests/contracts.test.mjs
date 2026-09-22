@@ -554,11 +554,11 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.ok(deploy.indexOf('TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"') < deploy.indexOf('bash scripts/update-isolated-operational-tenants.sh'));
   assert.match(promote,/bash scripts\/update-isolated-operational-tenants\.sh/);
   assert.match(promote,/version like '0049%'/);
-  assert.match(promote,/version like '0049%'\)\"" = "23"/);
+  assert.ok(promote.split("\n").some(line=>line.includes("version like '0049%'")&&line.trim().endsWith('= "23"')),"parity promotion must verify 23 total 0049 migration markers");
   assert.match(promote,/0049_operational_blueprint_parity/);
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/version like '0049%'/);
-  assert.match(template,/version like '0049%'\)\"" = "23"/);
+  assert.ok(template.split("\n").some(line=>line.includes("version like '0049%'")&&line.trim().endsWith('= "23"')),"parity template must verify 23 total 0049 migration markers");
   assert.match(template,/0049_operational_blueprint_parity/);
   assert.match(template,/has_function_privilege\('edusentia_worker_runtime'/);
   assert.ok(!template.includes("version like '0049%')"),"parity template migration-count SQL contains an extra closing parenthesis");
