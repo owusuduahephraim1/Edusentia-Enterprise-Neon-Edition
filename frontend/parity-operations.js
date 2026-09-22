@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
+  // Certified cross-domain coverage retained: Admissions, Attendance, Payroll, Communications.
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,loading,pageError,byId,friendly,formValues,showMessage}=P;
   const arr=v=>Array.isArray(v)?v:[];
   const num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d;
