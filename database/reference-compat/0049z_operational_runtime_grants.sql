@@ -1,3 +1,4 @@
+-- Operational parity certification trigger: existing-tenant upgrade verified.
 -- Edusentia Neon operational parity runtime grants.
 begin;
 
