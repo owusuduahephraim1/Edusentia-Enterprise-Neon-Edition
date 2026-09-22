@@ -2,7 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const sql=fs.readFileSync(new URL("../database/migrations/0025d_live_plan_feature_parity.sql",import.meta.url),"utf8");\nconst tenantSql=fs.readFileSync(new URL("../database/reference-compat/0049v_live_plan_feature_parity.sql",import.meta.url),"utf8");
+const sql=fs.readFileSync(
+  new URL("../database/migrations/0025d_live_plan_feature_parity.sql",import.meta.url),
+  "utf8"
+);
+const tenantSql=fs.readFileSync(
+  new URL("../database/reference-compat/0049v_live_plan_feature_parity.sql",import.meta.url),
+  "utf8"
+);
 
 const expectedCatalog=[
   "academic_history","advanced_analytics","analytics","assessment","attendance",
@@ -42,7 +49,9 @@ function quotedJsonAfterPlan(code,source=sql){
 }
 
 test("live Supabase feature catalogue is frozen at 27 entitlements",()=>{
-  const codes=[...sql.matchAll(/\('([a-z_]+)','[^']*','[^']*',(true|false),'[^']*',(true|false)\)/g)].map(m=>m[1]).sort();
+  const codes=[...sql.matchAll(/\('([a-z_]+)','[^']*','[^']*',(true|false),'[^']*',(true|false)\)/g)]
+    .map(m=>m[1])
+    .sort();
   assert.deepEqual(codes,expectedCatalog);
 });
 
@@ -50,8 +59,8 @@ test("Starter, Professional, and Enterprise reproduce live Supabase revision-6 e
   for(const [code,expected] of Object.entries(expectedPlans)){
     const actual=quotedJsonAfterPlan(code);
     assert.deepEqual(actual.limits,expected.limits);
-    for(const feature of expected.enabled) assert.equal(actual.flags[feature],true,code+" must enable "+feature);
-    for(const feature of expected.disabled) assert.equal(actual.flags[feature],false,code+" must disable "+feature);
+    for(const feature of expected.enabled)assert.equal(actual.flags[feature],true,code+" must enable "+feature);
+    for(const feature of expected.disabled)assert.equal(actual.flags[feature],false,code+" must disable "+feature);
     assert.deepEqual(Object.keys(actual.flags).sort(),expectedCatalog);
   }
 });
@@ -69,11 +78,16 @@ test("suffix migration preserves certified 0025 production preflight line",()=>{
   assert.match(sql,/set schema_version='0025'/);
 });
 
-
 test("isolated tenant plan data matches the master commercial-plan parity patch",()=>{
   for(const code of Object.keys(expectedPlans)){
-    assert.deepEqual(quotedJsonAfterPlan(code,tenantSql),quotedJsonAfterPlan(code,sql),code+" tenant plan must match master");
+    assert.deepEqual(
+      quotedJsonAfterPlan(code,tenantSql),
+      quotedJsonAfterPlan(code,sql),
+      code+" tenant plan must match master"
+    );
   }
-  const tenantCodes=[...tenantSql.matchAll(/\('([a-z_]+)','[^']*','[^']*',(true|false)\)/g)].map(m=>m[1]).sort();
+  const tenantCodes=[...tenantSql.matchAll(/\('([a-z_]+)','[^']*','[^']*',(true|false)\)/g)]
+    .map(m=>m[1])
+    .sort();
   assert.deepEqual(tenantCodes,expectedCatalog);
 });
