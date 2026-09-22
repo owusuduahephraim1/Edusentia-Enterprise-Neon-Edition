@@ -39,6 +39,13 @@ run_reference_once() {
   mark_migration "$key"
 }
 
+reconcile_once_recorded() {
+  local key="$1" file="$2"
+  echo "Reconciling operational reference data $key ..."
+  psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
+  mark_migration "$key"
+}
+
 run_once "0049a_operational_finance_reference" "$DIR/0049a_operational_finance_reference.sql"
 run_reference_once "0049b_hr_staff_management" "$BLUEPRINT/hr_staff_management_v1.sql"
 run_reference_once "0049c_hr_staff_hardening" "$BLUEPRINT/hr_staff_performance_and_sync_hardening_v1.sql"
@@ -65,7 +72,7 @@ run_reference_once "0049s_user_student_guardian_linkage" "$BLUEPRINT/user_access
 run_reference_once "0049t_student_portal" "$BLUEPRINT/student_portal_v1.sql"
 run_reference_once "0049u_student_portal_report_attendance_fix" "$BLUEPRINT/student_portal_v2_report_attendance_fix.sql"
 
-run_once "0049v_live_plan_feature_parity" "$DIR/0049v_live_plan_feature_parity.sql"
+reconcile_once_recorded "0049v_live_plan_feature_parity" "$DIR/0049v_live_plan_feature_parity.sql"
 run_once "0049z_operational_runtime_grants" "$DIR/0049z_operational_runtime_grants.sql"
 
 test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE') and (p.proname like 'finance_%' or p.proname like 'hr_%' or p.proname like 'student_services_%' or p.proname like 'admissions_%' or p.proname like 'discipline_%' or p.proname like 'welfare_%' or p.proname like 'health_%' or p.proname like 'communications_%' or p.proname like 'hostel_%' or p.proname like 'alumni_%' or p.proname in ('get_my_student_portal','get_my_student_portal_v2'))")" -ge 85
