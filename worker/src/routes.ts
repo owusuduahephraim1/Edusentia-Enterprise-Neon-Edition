@@ -247,12 +247,8 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({ok:true,tenant:updated[0]||null});
   }
   if(method==="GET"&&p==="/api/bootstrap"){
-    const [tenant,metrics,licenseRows,permissionRows]=await tenantTx<any[]>(sql,ctx,txn=>[
-      txn`select t.id,t.code,t.name,t.institution_type,
-        coalesce(t.settings,'{}'::jsonb) ||
-        jsonb_build_object(
-          'logo_url',coalesce((select s.logo_url from public.school_settings s order by s.created_at,s.id limit 1),'assets/school-logo.png')
-        ) settings
+    const [tenant,metrics,licenseRows,permissionRows,certifiedBootstrapRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+      txn`select t.id,t.code,t.name,t.institution_type,coalesce(t.settings,'{}'::jsonb) settings
         from app.tenants t
         where t.id=${ctx.tenantId}::uuid`,
       txn`select
@@ -272,7 +268,8 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
         where tl.tenant_id=${ctx.tenantId}::uuid
         order by tl.updated_at desc limit 1`,
       txn`select coalesce(jsonb_object_agg(permission_code,true),'{}'::jsonb) permissions
-        from app.role_permissions where role=${ctx.role}`
+        from app.role_permissions where role=${ctx.role}`,
+      txn`select public.get_bootstrap_data() result`
     ]);
     // Expose certified blueprint permission aliases while retaining Neon-native dotted permissions.\n    // Blueprint System Administrator permission inheritance is intentional and regression-tested.\n    // School-logo parity is reconciled during every isolated-tenant upgrade.\n    // Class-scoped student admission numbering is reconciled through 0049x.\n    // Permanent audit reset parity is reconciled through 0049y.
     const rawPermissions={...((permissionRows[0] as any)?.permissions||{})};
@@ -285,6 +282,10 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       manage_users:isSystemAdmin||Boolean(rawPermissions["admin.users"]),
       view_audit:isSystemAdmin||Boolean(rawPermissions["admin.tenant"])
     };
+    const tenantRow=(tenant[0]||null) as any;
+    const certifiedBootstrap=((certifiedBootstrapRows[0] as any)?.result||{}) as any;
+    const canonicalLogo=String(certifiedBootstrap?.school?.logo_url||tenantRow?.settings?.logo_url||"assets/school-logo.png").trim()||"assets/school-logo.png";
+    const tenantPayload=tenantRow?{...tenantRow,settings:{...(tenantRow.settings||{}),logo_url:canonicalLogo}}:null;
     const licenseRow=(licenseRows[0]||{}) as any;
     const now=Date.now(),expires=licenseRow.expires_at?Date.parse(String(licenseRow.expires_at)):NaN;
     const license={
@@ -295,7 +296,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       plan:{code:licenseRow.plan_code||"",name:licenseRow.plan_name||"",feature_flags:licenseRow.feature_flags||{},limits:licenseRow.limits||{}}
     };
     return json({
-      tenant:(tenant[0]||null),metrics:metrics[0]||{},
+      tenant:tenantPayload,metrics:metrics[0]||{},
       permissions,
       license,
       capabilities:{role:ctx.role,assuranceLevel:ctx.assuranceLevel}
