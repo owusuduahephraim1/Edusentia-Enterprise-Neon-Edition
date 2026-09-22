@@ -1,3 +1,4 @@
+-- Final operational parity revalidation: migration inventory and existing-tenant upgrader.
 -- Operational parity certification trigger: existing-tenant upgrade verified.
 -- Edusentia Neon operational parity runtime grants.
 begin;
