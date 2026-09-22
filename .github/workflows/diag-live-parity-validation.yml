@@ -1,0 +1,113 @@
+name: Validate Live Blueprint Parity
+
+on:
+  push:
+    branches:
+      - diag/live-parity-validation-20260922
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client >/dev/null
+
+      - name: Validate Nipe logo and report-template flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "$BOOTSTRAP_DATABASE_URL" ] || { echo "::error::Production database secret unavailable"; exit 1; }
+          TENANT_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.pathname="/edusentia_nis_000001";
+            console.log(u.toString());
+          ')"
+          echo "::add-mask::$TENANT_DATABASE_URL"
+
+          psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          begin;
+          do $diag$
+          declare
+            v_tenant_id uuid;
+            v_admin_id uuid;
+            v_logo text;
+            v_logo_status text;
+            v_bootstrap_logo text;
+            v_template_path text;
+            v_template_result jsonb;
+          begin
+            select id into v_tenant_id
+            from app.tenants
+            where code='NIS-000001'
+            limit 1;
+
+            select p.id into v_admin_id
+            from public.profiles p
+            where p.active
+              and public.current_app_role_for(p.role)='system_admin'
+            order by p.created_at
+            limit 1;
+
+            if v_tenant_id is null or v_admin_id is null then
+              raise exception 'DIAG required tenant/admin context missing';
+            end if;
+
+            perform app.set_request_context(v_tenant_id,v_admin_id,'system_admin',2::smallint);
+
+            select s.logo_url into v_logo
+            from public.school_settings s
+            order by s.created_at,s.id
+            limit 1;
+
+            select m.status into v_logo_status
+            from storage.object_metadata m
+            where m.tenant_id=v_tenant_id
+              and m.object_key=v_logo
+            limit 1;
+
+            v_bootstrap_logo:=public.get_bootstrap_data()->'school'->>'logo_url';
+
+            raise notice 'DIAG logo_reference=%',coalesce(v_logo,'');
+            raise notice 'DIAG logo_metadata_status=%',coalesce(v_logo_status,'package');
+            raise notice 'DIAG bootstrap_logo_matches=%',coalesce(v_bootstrap_logo,'')=coalesce(v_logo,'');
+
+            if v_logo is null or v_bootstrap_logo is distinct from v_logo then
+              raise exception 'DIAG canonical logo is not projected through bootstrap';
+            end if;
+
+            v_template_path:='tenants/'||v_tenant_id::text||'/report-card-templates/basic_1_6/diag-template.pdf';
+
+            insert into storage.object_metadata(
+              tenant_id,object_key,original_name,content_type,size_bytes,created_by,status,stored_at
+            ) values(
+              v_tenant_id,v_template_path,'diag-template.pdf','application/pdf',12345,v_admin_id,'active',now()
+            );
+
+            v_template_result:=public.save_report_card_template(
+              'basic_1_6',
+              v_template_path,
+              'diag-template.pdf',
+              'application/pdf',
+              12345,
+              repeat('a',64)
+            );
+
+            raise notice 'DIAG template_saved=%',coalesce(v_template_result->>'range_key','')='basic_1_6';
+            raise notice 'DIAG template_storage_path=%',coalesce(v_template_result->>'storage_path','');
+
+            if coalesce(v_template_result->>'range_key','')<>'basic_1_6'
+               or coalesce(v_template_result->>'storage_path','')<>v_template_path then
+              raise exception 'DIAG report-card template assignment did not preserve range-scoped R2 path';
+            end if;
+          end
+          $diag$;
+          rollback;
+          SQL
