@@ -122,25 +122,15 @@
   }
 
   function ensureAccountsDirectoryNav() {
-    if (currentRole() !== "system_admin") return;
     const nav = byId("mainNav");
     if (!nav) return;
-    let button = nav.querySelector(".accounts-directory-nav-item");
-    if (!button) {
-      button = document.createElement("button");
-      button.type = "button";
-      button.className = "nav-item accounts-directory-nav-item";
-      button.innerHTML = '<span class="nav-icon">₵</span><span class="nav-label">Accounts Office Staff</span><span class="nav-active-dot"></span>';
-      button.addEventListener("click", async () => {
-        setDirectoryActive(true);
-        if (F()?.S) F().S.active = false;
-        setExternalNavActive(button);
-        await renderAccountsDirectory();
-      });
-      const users = nav.querySelector('[data-view="users"]');
-      if (users) nav.insertBefore(button, users);
-      else nav.appendChild(button);
+    const existing = nav.querySelector(".accounts-directory-nav-item");
+    if (currentRole() === "system_admin") {
+      existing?.remove();
+      setDirectoryActive(false);
+      return;
     }
+    existing?.remove();
   }
 
   function directoryTable(rows) {
@@ -700,9 +690,7 @@
       }).observe(toastStack, { childList: true });
     }
 
-    if (directoryActive && currentRole() === "system_admin") {
-      setTimeout(() => void renderAccountsDirectory(), 0);
-    }
+    if (currentRole() === "system_admin") setDirectoryActive(false);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => void start(), { once: true });
