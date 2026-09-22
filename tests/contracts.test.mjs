@@ -554,8 +554,12 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.ok(deploy.indexOf('TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"') < deploy.indexOf('bash scripts/update-isolated-operational-tenants.sh'));
   assert.match(promote,/bash scripts\/update-isolated-operational-tenants\.sh/);
   assert.match(promote,/version like '0049%'/);
+  assert.match(promote,/version like '0049%'\)\"" = "23"/);
+  assert.match(promote,/0049_operational_blueprint_parity/);
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/version like '0049%'/);
+  assert.match(template,/version like '0049%'\)\"" = "23"/);
+  assert.match(template,/0049_operational_blueprint_parity/);
   assert.match(template,/has_function_privilege\('edusentia_worker_runtime'/);
   assert.ok(!template.includes("version like '0049%')"),"parity template migration-count SQL contains an extra closing parenthesis");
   assert.ok(!promote.includes("version like '0049%')"),"parity promotion migration-count SQL contains an extra closing parenthesis");
