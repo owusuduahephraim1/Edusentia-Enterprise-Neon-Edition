@@ -13,19 +13,61 @@
   let registrationToken = "", registrationWidgetId = null, recoveryTurnstileToken = "", recoveryWidgetId = null;
 
   const NAV = [
-    {id:"dashboard",label:"Dashboard",icon:"⌂",subtitle:"Academic performance overview",render:renderDashboard},
-    {id:"academics",label:"Academics",icon:"▦",subtitle:"Academic calendar, classes, subjects and readiness",roles:["system_admin"],render:renderAcademics},
-    {id:"students",label:"Students",icon:"◎",subtitle:"Student directory and admission records",render:renderStudents},
-    {id:"staff",label:"Staff",icon:"♙",subtitle:"Staff and teacher directory",render:renderStaff},
-    {id:"teachers",label:"Teachers",icon:"♜",subtitle:"Certified teacher records and account links",roles:["system_admin"],render:renderTeachers},
-    {id:"principal",label:"Principal",icon:"★",subtitle:"Certified Principal appointment record",roles:["system_admin"],render:renderPrincipal},
-    {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees and collections overview",roles:["system_admin","principal","accountant"],render:renderFinance},
-    {id:"notifications",label:"Notifications",icon:"◆",subtitle:"Account notifications and workflow updates",nav:false,render:renderNotifications}
+    {id:"dashboard",label:"Dashboard",icon:"▦",subtitle:"Academic performance overview",render:renderDashboard},
+    {id:"academics",label:"Academics",icon:"⌘",subtitle:"Academic structure and assessment",permission:"manage_academics",render:renderAcademics},
+    {id:"students",label:"Students",icon:"◉",subtitle:"Student records and enrolment",roles:["system_admin","class_teacher","subject_teacher"],render:renderStudents},
+    {id:"staff",label:"Staff & HR",icon:"♙",subtitle:"Staff directory, employment records and leave",roles:["system_admin","principal"],render:renderStaff},
+    {id:"teachers",label:"Teachers",icon:"♜",subtitle:"Teacher records and assignments",permission:"manage_teachers",render:renderTeachers},
+    {id:"headteachers",label:"Principals",icon:"★",subtitle:"Principal records and appointments",permission:"manage_headteachers",render:renderPrincipal},
+    {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees, statements and payroll operations",feature:"finance_fees",roles:["system_admin","accountant","accounts_office","parent_guardian","student","class_teacher","subject_teacher"],render:renderFinance},
+    {id:"notifications",label:"Notifications",icon:"◆",subtitle:"School and workflow alerts",feature:"notifications",render:renderNotifications}
   ];
 
+  const ROLE_NAV_IDS=Object.freeze({
+    system_admin:["dashboard","operations","students","student_services","history","teachers","headteachers","staff","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","finance","users","notifications","compliance","audit","backup_restore","plan_upgrade","license_capacity","settings"],
+    principal:["dashboard","operations","student_services","staff","history","timetable","delegations","reports","certificates","insights","notifications","compliance"],
+    class_teacher:["dashboard","teacher_profile","my_class","attendance","my_subjects","students","student_services","history","timetable","reports","insights","finance","notifications"],
+    subject_teacher:["dashboard","teacher_profile","my_subjects","students","student_services","history","timetable","reports","insights","finance","notifications"],
+    parent_guardian:["dashboard","children","student_services","finance","notifications"],
+    accountant:["finance","notifications"],
+    accounts_office:["finance","notifications"],
+    student:["student_services","finance","notifications"]
+  });
+  const LEGACY_LICENSE_FEATURE_FALLBACKS=Object.freeze({id_cards:"core_records",timetable:"core_records",school_prospectus:"core_records"});
   function role(){return String(state.session?.membership?.role || state.boot?.capabilities?.role || "").toLowerCase();}
   async function certified(operation,args={}){const response=await api().certifiedRpc(operation,args);return response?.result??null;}
-  function can(item){return !item.roles || item.roles.includes(role());}
+  function permissionEnabled(code){return Boolean(state.boot?.permissions?.[code]);}
+  function featureEnabled(code){
+    if(!code)return true;
+    const flags=state.boot?.license?.plan?.feature_flags||{};
+    if(Object.prototype.hasOwnProperty.call(flags,code))return flags[code]===true;
+    if(code==="staff_id_cards")return Object.prototype.hasOwnProperty.call(flags,"id_cards")?flags.id_cards===true:flags.core_records===true;
+    const parent=LEGACY_LICENSE_FEATURE_FALLBACKS[code];
+    return parent?flags[parent]===true:false;
+  }
+  function can(item){
+    const r=role();
+    if(item.permission&&!permissionEnabled(item.permission))return false;
+    if(item.roles&&!item.roles.includes(r))return false;
+    if(item.hideFor?.includes(r))return false;
+    if(item.feature&&!featureEnabled(item.feature))return false;
+    if(typeof item.when==="function"&&!item.when(state.boot,state.session))return false;
+    return true;
+  }
+  function orderedNavItems(){
+    const order=ROLE_NAV_IDS[role()]||["dashboard"];
+    const byIdMap=new Map(NAV.map(item=>[item.id,item]));
+    return order.map(id=>byIdMap.get(id)).filter(item=>item&&item.nav!==false&&can(item));
+  }
+  function navLabel(item){
+    if(item.id!=="finance")return item.label;
+    const r=role();
+    if(["accountant","accounts_office"].includes(r))return "Accounts Office";
+    if(r==="parent_guardian")return "Fees";
+    if(r==="student")return "My Academics & Fees";
+    if(["class_teacher","subject_teacher"].includes(r))return featureEnabled("payroll")?"My Salary":"Finance";
+    return featureEnabled("payroll")?"Finance & Payroll":"Finance";
+  }
   function canCreateStudent(){return ["system_admin","principal","academic_admin","records_officer"].includes(role());}
   function friendly(error){return error?.message || "The requested operation could not be completed.";}
   function show(view){for(const id of ["loader","authView","appShell","fatalView"])byId(id)?.classList.add("hidden");byId(view)?.classList.remove("hidden");}
@@ -117,13 +159,13 @@
 
   function renderNav(){
     const nav=byId("mainNav");
-    const items=NAV.filter(item=>can(item)&&item.nav!==false);
-    nav.innerHTML=items.map(item=>`<button class="nav-item" type="button" data-view="${item.id}"><span class="nav-icon" aria-hidden="true">${item.icon}</span><span class="nav-label">${escapeHtml(item.label)}</span><span class="nav-active-dot" aria-hidden="true"></span></button>`).join("");
+    const items=orderedNavItems();
+    nav.innerHTML=items.map(item=>`<button class="nav-item" type="button" data-view="${item.id}" title="${escapeHtml(item.subtitle||item.label)}"><span class="nav-icon" aria-hidden="true">${item.icon}</span><span class="nav-label">${escapeHtml(navLabel(item))}</span><span class="nav-active-dot" aria-hidden="true"></span></button>`).join("");
     nav.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>navigate(button.dataset.view)));
   }
 
   async function navigate(id){
-    const item=NAV.find(entry=>entry.id===id&&can(entry))||NAV[0];
+    const item=orderedNavItems().find(entry=>entry.id===id)||orderedNavItems()[0]||NAV.find(entry=>entry.id==="dashboard");
     state.view=item.id;
     byId("pageTitle").textContent=item.label;
     byId("pageSubtitle").textContent=item.subtitle;
@@ -150,7 +192,7 @@
 
   window.EdusentiaShell=Object.freeze({
     registerView,navigate,api,certified,role,state,escapeHtml,status,formatDate,formatDateTime,formatAmount,
-    loading,empty,pageError,fullName,friendly,byId
+    loading,empty,pageError,fullName,friendly,byId,featureEnabled,permissionEnabled,orderedNavItems
   });
 
   async function renderDashboard(){
