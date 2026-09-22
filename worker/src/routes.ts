@@ -143,6 +143,32 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       where tl.tenant_id=${ctx.tenantId}::uuid limit 1`]);
     return json({license:rows[0]||null});
   }
+  if(method==="POST"&&p==="/api/settings/school"){
+    requireRole(ctx,["system_admin"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required to change school settings",403,requestId);
+    const b=await readJson<any>(request);
+    const clean=(value:unknown,max=500)=>String(value??"").trim().slice(0,max);
+    const name=clean(b.name,200);
+    if(!name)return error("validation_error","School name is required",422,requestId);
+    const brandingRequested=["primary_colour","accent_colour","report_body_font","report_body_font_size"].some(key=>b[key]!==undefined);
+    if(brandingRequested){
+      const [featureRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.license_feature_enabled('custom_branding') enabled`]);
+      if((featureRows[0] as any)?.enabled!==true)return error("feature_not_available","Custom branding is not available on the current school plan",403,requestId);
+    }
+    const allowed={
+      motto:clean(b.motto,240),address:clean(b.address,500),phone:clean(b.phone,80),email:clean(b.email,254),
+      website:clean(b.website,500),head_name:clean(b.head_name,200),report_number_prefix:clean(b.report_number_prefix,30),
+      user_email_domain:clean(b.user_email_domain,180),timezone:clean(b.timezone,80)||"Africa/Accra",
+      verification_base_url:clean(b.verification_base_url,500),primary_colour:clean(b.primary_colour,20),
+      accent_colour:clean(b.accent_colour,20),report_body_font:clean(b.report_body_font,80),
+      report_body_font_size:Math.min(24,Math.max(8,Number(b.report_body_font_size||11)))
+    };
+    const [updated]=await tenantTx<any[]>(sql,ctx,txn=>[
+      txn`update app.tenants set name=${name},settings=coalesce(settings,'{}'::jsonb)||${JSON.stringify(allowed)}::jsonb,updated_at=now() where id=${ctx.tenantId}::uuid returning id,code,name,institution_type,settings,updated_at`,
+      txn`select audit.record_auth_event(${ctx.tenantId}::uuid,${ctx.userId}::uuid,'tenant.settings.updated',${JSON.stringify({scope:"school_identity"})}::jsonb)`
+    ]);
+    return json({ok:true,tenant:updated[0]||null});
+  }
   if(method==="GET"&&p==="/api/bootstrap"){
     const [tenant,metrics,licenseRows,permissionRows]=await tenantTx<any[]>(sql,ctx,txn=>[
       txn`select id,code,name,institution_type,settings from app.tenants where id=${ctx.tenantId}::uuid`,
