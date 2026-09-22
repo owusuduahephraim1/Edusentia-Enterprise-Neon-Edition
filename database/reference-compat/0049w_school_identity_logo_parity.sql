@@ -4,6 +4,7 @@
 begin;
 
 -- Reconciliation runs as edusentia_runtime, the existing certified function
+-- owner; this preserves the established isolated-tenant runtime ACL boundary.
 -- owner and the fixed tenant migration identity. Fail closed if an unexpected
 -- owner is ever encountered rather than broadening the function's authority.
 do $ownership$
