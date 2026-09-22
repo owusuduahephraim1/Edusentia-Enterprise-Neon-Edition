@@ -130,10 +130,10 @@ SQL
       '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
       '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
       '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
-      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049z_operational_runtime_grants'
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049z_operational_runtime_grants'
     )
   ")"
-  test "$migration_count" = "23"
+  test "$migration_count" = "24"
 
   plan_parity_count="$(psql "$TENANT_DATABASE_URL" -Atc "
     select count(*)
@@ -154,6 +154,7 @@ SQL
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')")" = "t"
 
   psql "$TENANT_DATABASE_URL" -Atc "
     select distinct p.proname
