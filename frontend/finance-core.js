@@ -38,8 +38,8 @@
   async function boot(){
     for(let i=0;i<240;i++){
       const c=cfg();
-      if(c.masterEdition===false&&c.tenantCode&&window.supabase?.createClient){
-        S.client=window.EDS_TENANT_AUTH_CLIENT||window.supabase.createClient(c.supabaseUrl,c.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true}});
+      if(c.masterEdition===false&&c.tenantCode&&window.EdusentiaCompatClient){
+        S.client=window.EDS_TENANT_AUTH_CLIENT||window.EdusentiaCompatClient;
         break;
       }
       await new Promise(r=>setTimeout(r,250));
