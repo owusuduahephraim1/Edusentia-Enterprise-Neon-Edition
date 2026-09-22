@@ -3,9 +3,9 @@
 -- record and the Neon tenant metadata in sync.
 begin;
 
--- The certified 0048 compatibility surface may already own this function as
--- edusentia_runtime. Transfer only that known legacy owner before reconciling
--- the security-definer implementation under the fixed provisioner role.
+-- Reconciliation runs as edusentia_runtime, the existing certified function
+-- owner and the fixed tenant migration identity. Fail closed if an unexpected
+-- owner is ever encountered rather than broadening the function's authority.
 do $ownership$
 declare
   existing_owner text;
@@ -19,17 +19,11 @@ begin
     and pg_get_function_identity_arguments(p.oid)='target_logo_url text'
   limit 1;
 
-  if existing_owner is null or existing_owner='edusentia_provisioner' then
-    null;
-  elsif existing_owner=current_user then
-    alter function public.set_school_logo_reference(text) owner to edusentia_provisioner;
-  else
+  if existing_owner is not null and existing_owner<>current_user then
     raise exception 'Unexpected owner % for public.set_school_logo_reference(text)',existing_owner;
   end if;
 end
 $ownership$;
-
-set role edusentia_provisioner;
 
 create or replace function public.set_school_logo_reference(target_logo_url text)
 returns jsonb
@@ -104,5 +98,4 @@ insert into app.schema_migrations(version)
 values ('0049w_school_identity_logo_parity')
 on conflict do nothing;
 
-reset role;
 commit;
