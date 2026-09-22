@@ -21,7 +21,7 @@ test("loaded tenant scripts do not depend on native confirm dialogs",()=>{
     .filter(src=>!/^https?:/i.test(src));
   for(const src of scripts){
     const source=read("frontend/"+src);
-    assert.doesNotMatch(source,/\b(?:window\.)?confirm\s*\(/,src+" must not rely on native confirm()");
+    assert.doesNotMatch(source,/\b(?:window\.)?confirm\s*\(/,src+" must not rely on native confirm()");\n    assert.doesNotMatch(source,/\b(?:window\.)?prompt\s*\(/,src+" must not rely on native prompt()");
   }
 });
 
