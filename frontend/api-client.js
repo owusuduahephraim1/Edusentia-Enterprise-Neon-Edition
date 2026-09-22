@@ -73,6 +73,7 @@
     logout:()=>post("/api/auth/logout"),
     bootstrap:()=>request("/api/bootstrap"),
     updateSchoolSettings:(payload)=>post("/api/settings/school",payload),
+    guardianAccountRecords:()=>request("/api/admin/guardian-account-records"),
     certifiedRpc:(operation,args={})=>post(`/api/compat/rpc/${encodeURIComponent(String(operation||""))}`,{args}),
     adminUserManagement:(action,payload={})=>post("/api/compat/functions/admin-user-management",{action,payload}),
     directoryUserManagement:(action,payload={})=>post("/api/compat/functions/directory-user-management",{action,payload}),
