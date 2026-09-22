@@ -90,10 +90,14 @@ apply_once "0048l_backup_worker_api" "database/reference-compat/0048l_backup_wor
 apply_once "0048m_restore_worker_helpers" "database/reference-compat/0048m_restore_worker_helpers.sql"
 apply_once "0048n_backup_maintenance_helpers" "database/reference-compat/0048n_backup_maintenance_helpers.sql"
 
+TARGET_DATABASE_URL="$TEMPLATE_URL" bash database/reference-compat/install-operational-parity.sh
+
 cleanup_schema_grant
 test "$(psql "$TEMPLATE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" = "f"
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version in('0048i_historical_provider_bridges','0048j_notification_worker_compat','0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "6"
+test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%')")" = "22"
+test "$(psql "$TEMPLATE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")" -ge 258
 
 TARGET_DATABASE_URL="$TEMPLATE_URL" node scripts/reference-surface-inventory.mjs | tee /tmp/parity-template-surface.json
 node - <<'NODE'
@@ -115,4 +119,4 @@ trap - EXIT
 test "$(psql "$MASTER_URL" -Atc "select pg_get_userbyid(datdba)||'|'||datallowconn from pg_database where datname='$TEMPLATE_DB'")" = "edusentia_provisioner|false"
 test "$(psql "$MASTER_URL" -Atc "select has_database_privilege('edusentia_runtime','$TEMPLATE_DB','connect')")" = "f"
 
-echo "Parity tenant template updated incrementally through certified compatibility 0048 and relocked."
+echo "Parity tenant template updated through certified compatibility 0048 plus operational parity 0049 and relocked."
