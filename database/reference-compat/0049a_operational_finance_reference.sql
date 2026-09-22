@@ -922,56 +922,54 @@ create or replace view public.finance_fee_account_balances as
   GROUP BY a.id, s.due_date, t.end_date;;
 
 alter table public.accounts_office_staff enable row level security;
-revoke all on table public.accounts_office_staff from public,anon,authenticated;
-grant all on table public.accounts_office_staff to service_role;
-alter table public.finance_fee_accounts enable row level security;
-revoke all on table public.finance_fee_accounts from public,anon,authenticated;
-grant all on table public.finance_fee_accounts to service_role;
-alter table public.finance_fee_allocations enable row level security;
-revoke all on table public.finance_fee_allocations from public,anon,authenticated;
-grant all on table public.finance_fee_allocations to service_role;
-alter table public.finance_fee_group_classes enable row level security;
-revoke all on table public.finance_fee_group_classes from public,anon,authenticated;
-grant all on table public.finance_fee_group_classes to service_role;
-alter table public.finance_fee_groups enable row level security;
-revoke all on table public.finance_fee_groups from public,anon,authenticated;
-grant all on table public.finance_fee_groups to service_role;
-alter table public.finance_fee_invoices enable row level security;
-revoke all on table public.finance_fee_invoices from public,anon,authenticated;
-grant all on table public.finance_fee_invoices to service_role;
-alter table public.finance_fee_schedules enable row level security;
-revoke all on table public.finance_fee_schedules from public,anon,authenticated;
-grant all on table public.finance_fee_schedules to service_role;
-alter table public.finance_fee_transactions enable row level security;
-revoke all on table public.finance_fee_transactions from public,anon,authenticated;
-grant all on table public.finance_fee_transactions to service_role;
-alter table public.finance_guardian_contact_events enable row level security;
-revoke all on table public.finance_guardian_contact_events from public,anon,authenticated;
-grant all on table public.finance_guardian_contact_events to service_role;
-alter table public.finance_payroll_item_lines enable row level security;
-revoke all on table public.finance_payroll_item_lines from public,anon,authenticated;
-grant all on table public.finance_payroll_item_lines to service_role;
-alter table public.finance_payroll_items enable row level security;
-revoke all on table public.finance_payroll_items from public,anon,authenticated;
-grant all on table public.finance_payroll_items to service_role;
-alter table public.finance_payroll_profiles enable row level security;
-revoke all on table public.finance_payroll_profiles from public,anon,authenticated;
-grant all on table public.finance_payroll_profiles to service_role;
-alter table public.finance_payroll_rules enable row level security;
-revoke all on table public.finance_payroll_rules from public,anon,authenticated;
-grant all on table public.finance_payroll_rules to service_role;
-alter table public.finance_payroll_runs enable row level security;
-revoke all on table public.finance_payroll_runs from public,anon,authenticated;
-grant all on table public.finance_payroll_runs to service_role;
-alter table public.finance_salary_grades enable row level security;
-revoke all on table public.finance_salary_grades from public,anon,authenticated;
-grant all on table public.finance_salary_grades to service_role;
-alter table public.finance_teacher_loans enable row level security;
-revoke all on table public.finance_teacher_loans from public,anon,authenticated;
-grant all on table public.finance_teacher_loans to service_role;
+revoke all on table public.accounts_office_staff from public;
 
-revoke all on sequence public.finance_invoice_seq,public.finance_payroll_no_seq,public.finance_receipt_seq,public.accounts_office_staff_no_seq from public,anon,authenticated;
-grant usage,select,update on sequence public.finance_invoice_seq,public.finance_payroll_no_seq,public.finance_receipt_seq,public.accounts_office_staff_no_seq to service_role;
+alter table public.finance_fee_accounts enable row level security;
+revoke all on table public.finance_fee_accounts from public;
+
+alter table public.finance_fee_allocations enable row level security;
+revoke all on table public.finance_fee_allocations from public;
+
+alter table public.finance_fee_group_classes enable row level security;
+revoke all on table public.finance_fee_group_classes from public;
+
+alter table public.finance_fee_groups enable row level security;
+revoke all on table public.finance_fee_groups from public;
+
+alter table public.finance_fee_invoices enable row level security;
+revoke all on table public.finance_fee_invoices from public;
+
+alter table public.finance_fee_schedules enable row level security;
+revoke all on table public.finance_fee_schedules from public;
+
+alter table public.finance_fee_transactions enable row level security;
+revoke all on table public.finance_fee_transactions from public;
+
+alter table public.finance_guardian_contact_events enable row level security;
+revoke all on table public.finance_guardian_contact_events from public;
+
+alter table public.finance_payroll_item_lines enable row level security;
+revoke all on table public.finance_payroll_item_lines from public;
+
+alter table public.finance_payroll_items enable row level security;
+revoke all on table public.finance_payroll_items from public;
+
+alter table public.finance_payroll_profiles enable row level security;
+revoke all on table public.finance_payroll_profiles from public;
+
+alter table public.finance_payroll_rules enable row level security;
+revoke all on table public.finance_payroll_rules from public;
+
+alter table public.finance_payroll_runs enable row level security;
+revoke all on table public.finance_payroll_runs from public;
+
+alter table public.finance_salary_grades enable row level security;
+revoke all on table public.finance_salary_grades from public;
+
+alter table public.finance_teacher_loans enable row level security;
+revoke all on table public.finance_teacher_loans from public;
+
+revoke all on sequence public.finance_invoice_seq,public.finance_payroll_no_seq,public.finance_receipt_seq,public.accounts_office_staff_no_seq from public;
 
 CREATE OR REPLACE FUNCTION public.admin_accounts_staff_directory(search_text text DEFAULT ''::text, include_inactive boolean DEFAULT true)
  RETURNS jsonb
@@ -2879,8 +2877,8 @@ begin
            or p.proname like 'admin_%accounts_staff%'
            or p.proname in ('get_my_student_portal','get_my_student_portal_v2'))
   loop
-    execute format('revoke all on function %s from public,anon,authenticated',r.signature);
-    execute format('grant execute on function %s to service_role',r.signature);
+    execute format('revoke all on function %s from public',r.signature);
+
     execute format('grant execute on function %s to edusentia_worker_runtime',r.signature);
   end loop;
 end
