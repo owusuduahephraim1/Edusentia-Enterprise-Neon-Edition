@@ -133,5 +133,5 @@
     };
   }
 
-  registerView({id:"students",label:"Students",icon:"◎",subtitle:"Certified student records, enrolment and imports",render:renderStudents});
+  registerView({id:"students",label:"Students",icon:"◉",subtitle:"Student records and enrolment",roles:["system_admin","class_teacher","subject_teacher"],render:renderStudents});
 })();
