@@ -130,10 +130,30 @@ SQL
       '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
       '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
       '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
-      '0049u_student_portal_report_attendance_fix','0049z_operational_runtime_grants'
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049z_operational_runtime_grants'
     )
   ")"
-  test "$migration_count" = "22"
+  test "$migration_count" = "23"
+
+  plan_parity_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.license_plans p
+    where p.code in('starter','professional','enterprise')
+      and (select count(*) from jsonb_object_keys(p.feature_flags))=27
+      and p.feature_flags->>'id_cards'='true'
+      and p.feature_flags->>'staff_id_cards'='true'
+      and p.feature_flags->>'timetable'='true'
+      and p.feature_flags->>'school_prospectus'='true'
+      and p.feature_flags->>'advanced_analytics'='false'
+      and p.feature_flags->>'integrations'='false'
+  ")"
+  test "$plan_parity_count" = "3"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'financial_holds' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
 
   psql "$TENANT_DATABASE_URL" -Atc "
     select distinct p.proname
