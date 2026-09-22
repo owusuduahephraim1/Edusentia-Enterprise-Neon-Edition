@@ -2,6 +2,33 @@
 -- Accepts only tenant-scoped R2 object keys and keeps both the compatibility school settings
 -- record and the Neon tenant metadata in sync.
 begin;
+
+-- The certified 0048 compatibility surface may already own this function as
+-- edusentia_runtime. Transfer only that known legacy owner before reconciling
+-- the security-definer implementation under the fixed provisioner role.
+do $ownership$
+declare
+  existing_owner text;
+begin
+  select pg_get_userbyid(p.proowner)
+  into existing_owner
+  from pg_proc p
+  join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public'
+    and p.proname='set_school_logo_reference'
+    and pg_get_function_identity_arguments(p.oid)='target_logo_url text'
+  limit 1;
+
+  if existing_owner is null or existing_owner='edusentia_provisioner' then
+    null;
+  elsif existing_owner=current_user then
+    alter function public.set_school_logo_reference(text) owner to edusentia_provisioner;
+  else
+    raise exception 'Unexpected owner % for public.set_school_logo_reference(text)',existing_owner;
+  end if;
+end
+$ownership$;
+
 set role edusentia_provisioner;
 
 create or replace function public.set_school_logo_reference(target_logo_url text)
