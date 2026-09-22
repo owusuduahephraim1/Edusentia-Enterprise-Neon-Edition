@@ -45,7 +45,7 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/count\(distinct p\.proname\)[\s\S]*258/);
   for(const migration of [
-    "0049a_operational_finance_reference.sql","0049v_live_plan_feature_parity.sql","hr_staff_management_v1.sql",
+    "0049a_operational_finance_reference.sql","0049v_live_plan_feature_parity.sql","0049w_school_identity_logo_parity.sql","hr_staff_management_v1.sql",
     "student_services_foundation_v1.sql","admissions_applicant_management_v1.sql",
     "discipline_welfare_management_v1.sql","health_clinic_management_v1.sql",
     "communications_messaging_centre_v1.sql","hostel_boarding_management_v1.sql",
@@ -55,6 +55,11 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(grants,/student_services_%/);
   assert.match(grants,/finance_%/);
   assert.match(installer,/reconcile_once_recorded "0049v_live_plan_feature_parity"/);
+  assert.match(installer,/run_once "0049w_school_identity_logo_parity"/);
+  const logoParity=read("database/reference-compat/0049w_school_identity_logo_parity.sql");
+  assert.match(logoParity,/create or replace function public\.set_school_logo_reference/);
+  assert.match(logoParity,/school-branding/);
+  assert.match(logoParity,/grant execute on function public\.set_school_logo_reference\(text\) to edusentia_worker_runtime/);
   assert.doesNotMatch(installer,/run_once "0049v_live_plan_feature_parity"/);
   assert.equal(installer.includes("\\nrun_once"),false,"installer must not contain a literal backslash-n escape between migration calls");
   assert.equal(template.includes("\\ntest"),false,"tenant template must not contain a literal backslash-n escape between validation checks");
