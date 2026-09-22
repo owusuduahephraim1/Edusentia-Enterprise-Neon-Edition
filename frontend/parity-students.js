@@ -83,16 +83,26 @@
       downloadBlob("student-directory.csv",new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"}));
     }catch(error){alert(friendly(error));}
   }
+  function admissionClassPrefix(name){
+    const value=String(name||"").trim().toUpperCase().replace(/\s+/g," ");
+    let match=value.match(/^BASIC\s*(\d+)([A-Z]?)$/);if(match)return "BS"+match[1]+(match[2]||"");
+    match=value.match(/^KINDERGARTEN\s*KG\s*(\d+)([A-Z]?)$/);if(match)return "KG"+match[1]+(match[2]||"");
+    match=value.match(/^KINDERGARTEN\s*(\d+)([A-Z]?)$/);if(match)return "KG"+match[1]+(match[2]||"");
+    match=value.match(/^KG\s*(\d+)([A-Z]?)$/);if(match)return "KG"+match[1]+(match[2]||"");
+    match=value.match(/^NURSERY\s*(\d+)([A-Z]?)$/);if(match)return "NS"+match[1]+(match[2]||"");
+    if(value==="CRECHE"||value==="CRÈCHE")return "CR";
+    return value.replace(/[^A-Z0-9]/g,"").slice(0,6)||"CLASS";
+  }
+
   async function openStudentEditor(ctx,id=""){
     let record={student:{status:"active",gender:"Male"},enrollments:[],guardians:[]};
     if(id)record=await certified("get_student_record_v5",{target_student_id:id});
     let guardians=[];try{guardians=await certified("list_guardian_portal_accounts",{search_text:""});}catch{}
     const student=record.student||{},latest=record.enrollments?.[0]||{},guardian=record.guardians?.find(g=>g.is_primary)||record.guardians?.[0]||{};
-    let admission=student.admission_no||"";
-    if(!id&&!admission){try{const generated=await certified("generate_school_identifier",{identifier_kind:"student"});admission=String(generated?.identifier||generated?.admission_no||generated||"");}catch{}}
-    openModal(id?"Edit Student":"Add Student",id?admission:"Create a certified student, guardian, and optional current enrolment.",`
+    const admission=student.admission_no||"";
+    openModal(id?"Edit Student":"Add Student",id?admission:"Create a certified student. The admission number is generated from the admission class when the record is saved.",`
       <form id="studentCertifiedForm" class="form-stack"><input type="hidden" name="id" value="${esc(student.id||"")}"><input type="hidden" name="updated_at" value="${esc(student.updated_at||"")}"><div class="form-grid three">
-        <label class="field"><span>Admission number</span><input name="admission_no" value="${esc(admission)}" ${id?"readonly":""} required></label>
+        <label class="field"><span>Admission number</span><input id="studentAdmissionDisplay" value="${esc(id?admission:"Generated automatically on save")}" readonly aria-readonly="true"><small id="studentAdmissionHint">${id?"Permanent student identifier. It does not change on promotion.":"Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001."}</small></label>
         <label class="field"><span>First name</span><input name="first_name" value="${esc(student.first_name||"")}" required></label>
         <label class="field"><span>Middle name</span><input name="middle_name" value="${esc(student.middle_name||"")}"></label>
         <label class="field"><span>Last name</span><input name="last_name" value="${esc(student.last_name||"")}" required></label>
@@ -113,12 +123,26 @@
         <label class="check-field"><input type="checkbox" name="guardian_notify" ${guardian.can_receive_notifications!==false?"checked":""}><span>Receive notifications</span></label>
       </div><p id="studentCertifiedMessage" class="form-message hidden" role="alert"></p></form>`,
       '<button id="studentCertifiedCancel" class="button ghost" type="button">Cancel</button><button id="studentCertifiedSave" class="button primary" type="submit" form="studentCertifiedForm">Save student</button>');
+    const studentForm=byId("studentCertifiedForm");
+    const refreshAdmissionHint=()=>{
+      if(id)return;
+      const classId=studentForm.elements.class_id.value;
+      const selected=(ctx.classes||[]).find(item=>String(item.id)===String(classId));
+      const prefix=selected?admissionClassPrefix(selected.name):"";
+      byId("studentAdmissionHint").textContent=selected
+        ? "This class uses "+prefix+". The final number is allocated atomically when the student is saved and remains permanent after promotion."
+        : "Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001.";
+    };
+    studentForm.elements.class_id.addEventListener("change",refreshAdmissionHint);
+    refreshAdmissionHint();
     byId("studentCertifiedCancel").onclick=closeModal;
-    byId("studentCertifiedForm").onsubmit=async e=>{
+    studentForm.onsubmit=async e=>{
       e.preventDefault();const button=byId("studentCertifiedSave");button.disabled=true;
       try{
-        const v=formValues(e.currentTarget);if(Boolean(v.academic_year_id)!==Boolean(v.class_id))throw new Error("Academic year and class must be selected together.");
-        const payload={student:{id:v.id||"",updated_at:v.updated_at||"",admission_no:String(v.admission_no||"").trim(),first_name:String(v.first_name||"").trim(),middle_name:String(v.middle_name||"").trim(),last_name:String(v.last_name||"").trim(),gender:v.gender,date_of_birth:v.date_of_birth||"",status:v.status||"active",photo_url:student.photo_url||""},enrollment:v.academic_year_id&&v.class_id?{academic_year_id:v.academic_year_id,class_id:v.class_id,roll_number:v.roll_number||"",active:true}:{},guardian:{id:v.guardian_id||"",full_name:String(v.guardian_name||"").trim(),relationship:String(v.relationship||"Guardian").trim(),phone:String(v.guardian_phone||"").trim(),email:String(v.guardian_email||"").trim(),address:String(v.guardian_address||"").trim(),auth_user_id:v.guardian_auth_user_id||"",is_primary:true,can_view_reports:true,can_receive_notifications:e.currentTarget.elements.guardian_notify.checked},reason:id?"Student record updated":"Student registered"};
+        const v=formValues(e.currentTarget);
+        if(Boolean(v.academic_year_id)!==Boolean(v.class_id))throw new Error("Academic year and class must be selected together.");
+        if(!id&&(!v.academic_year_id||!v.class_id))throw new Error("Academic year and class are required for a new student so the admission number can be generated.");
+        const payload={student:{id:v.id||"",updated_at:v.updated_at||"",admission_no:student.admission_no||"",first_name:String(v.first_name||"").trim(),middle_name:String(v.middle_name||"").trim(),last_name:String(v.last_name||"").trim(),gender:v.gender,date_of_birth:v.date_of_birth||"",status:v.status||"active",photo_url:student.photo_url||""},enrollment:v.academic_year_id&&v.class_id?{academic_year_id:v.academic_year_id,class_id:v.class_id,roll_number:v.roll_number||"",active:true}:{},guardian:{id:v.guardian_id||"",full_name:String(v.guardian_name||"").trim(),relationship:String(v.relationship||"Guardian").trim(),phone:String(v.guardian_phone||"").trim(),email:String(v.guardian_email||"").trim(),address:String(v.guardian_address||"").trim(),auth_user_id:v.guardian_auth_user_id||"",is_primary:true,can_view_reports:true,can_receive_notifications:e.currentTarget.elements.guardian_notify.checked},reason:id?"Student record updated":"Student registered"};
         let saved=await certified("save_student",{payload}),file=byId("studentPhotoFile")?.files?.[0];
         if(file){const uploaded=await api().uploadFile(file,"student-photos");saved=await certified("set_student_photo",{target_student_id:saved?.student?.id||student.id,target_photo_url:uploaded.objectKey,expected_updated_at:saved?.student?.updated_at||null});}
         closeModal();await loadCertifiedStudents();
@@ -128,7 +152,7 @@
   }
 
   function openStudentImport(ctx){
-    openModal("Import students","CSV headers should include admission_no, first_name, last_name and gender.",`
+    openModal("Import students","CSV headers should include first_name, last_name and gender. Admission numbers are generated automatically from the selected class; imported rows are numbered in alphabetical order.",`
       <form id="studentImportForm" class="form-stack"><div class="form-grid">
         <label class="field"><span>Academic year</span><select name="academic_year_id" required>${optionRows(ctx.years,"id","name")}</select></label>
         <label class="field"><span>Class</span><select name="class_id" required>${optionRows(ctx.classes,"id","name")}</select></label>
