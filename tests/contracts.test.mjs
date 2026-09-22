@@ -528,6 +528,35 @@ test("production deployment separates direct admin and pooled Worker routes with
 });
 
 
+test("existing isolated tenants are upgraded additively before production deployment",()=>{
+  const u=read("scripts/update-isolated-operational-tenants.sh");
+  const deploy=read(".github/workflows/deploy-worker.yml");
+  const promote=read("scripts/promote-parity-tenant-runtime.sh");
+  const template=read("scripts/update-parity-tenant-template.sh");
+
+  assert.match(u,/database_state='isolated_ready'/);
+  assert.match(u,/select current_user/);
+  assert.match(u,/EXPECTED_RUNTIME_USER/);
+  assert.match(u,/app\.tenants/);
+  assert.match(u,/Edusentia Enterprise Neon Tenant Runtime/);
+  assert.match(u,/Edusentia Enterprise Neon Edition/);
+  assert.match(u,/install-operational-parity\.sh/);
+  assert.match(u,/future-tenant-rpc-surface\.json/);
+  assert.match(u,/258\/258 executable/);
+  assert.match(u,/version like '0049%'/);
+  assert.match(u,/set role edusentia_provisioner;[\s\S]*grant usage,create on schema public to edusentia_runtime/i);
+  assert.match(u,/revoke create on schema public from edusentia_runtime/i);
+  assert.doesNotMatch(u,/drop database|create database|delete from platform\.tenant_control|update platform\.tenant_control/i);
+
+  assert.match(deploy,/scripts\/update-isolated-operational-tenants\.sh/);
+  assert.ok(deploy.indexOf('TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"') < deploy.indexOf('bash scripts/update-isolated-operational-tenants.sh'));
+  assert.match(promote,/bash scripts\/update-isolated-operational-tenants\.sh/);
+  assert.match(promote,/version like '0049%'/);
+  assert.match(template,/install-operational-parity\.sh/);
+  assert.match(template,/version like '0049%'/);
+  assert.match(template,/has_function_privilege\('edusentia_worker_runtime'/);
+});
+
 test("runtime-owned CI seed preserves migration and Worker grant ownership",()=>{
   const schema=read(".github/workflows/schema-smoke.yml");
   const compat=read(".github/workflows/reference-compat-smoke.yml");
