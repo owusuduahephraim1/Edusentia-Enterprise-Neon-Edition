@@ -16,6 +16,20 @@ import { cancelRestore, executeRestore, handleRestoreTransfer, prepareRestore } 
 // Authentication and authorization routes fail closed before tenant data access.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}
+function uploadContentType(filename:string,value:unknown){
+  const supplied=String(value||"").split(";")[0].trim().toLowerCase();
+  if(supplied&&supplied!=="application/octet-stream")return supplied;
+  const name=String(filename||"").toLowerCase();
+  if(name.endsWith(".png"))return "image/png";
+  if(/\.(jpe?g)$/i.test(name))return "image/jpeg";
+  if(name.endsWith(".webp"))return "image/webp";
+  if(name.endsWith(".gif"))return "image/gif";
+  if(name.endsWith(".pdf"))return "application/pdf";
+  if(name.endsWith(".csv"))return "text/csv";
+  if(name.endsWith(".docx"))return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if(name.endsWith(".xlsx"))return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  return supplied||"application/octet-stream";
+}
 
 export async function route(request:Request,env:Env,requestId:string):Promise<Response>{
   const url=new URL(request.url), p=url.pathname, method=request.method.toUpperCase();
@@ -206,6 +220,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required to change school settings",403,requestId);
     const b=await readJson<any>(request);
     const clean=(value:unknown,max=500)=>String(value??"").trim().slice(0,max);
+    const webAddress=(value:unknown,max=500)=>{const raw=clean(value,max);return raw&&!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)?`https://${raw}`:raw;};
     const name=clean(b.name,200);
     if(!name)return error("validation_error","School name is required",422,requestId);
     const brandingRequested=["primary_colour","accent_colour","report_body_font","report_body_font_size"].some(key=>b[key]!==undefined);
@@ -215,7 +230,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     }
     const allowed={
       motto:clean(b.motto,240),address:clean(b.address,500),phone:clean(b.phone,80),email:clean(b.email,254),
-      website:clean(b.website,500),head_name:clean(b.head_name,200),report_number_prefix:clean(b.report_number_prefix,30),
+      website:webAddress(b.website,500),head_name:clean(b.head_name,200),report_number_prefix:clean(b.report_number_prefix,30),
       user_email_domain:clean(b.user_email_domain,180),timezone:clean(b.timezone,80)||"Africa/Accra",
       verification_base_url:clean(b.verification_base_url,500),primary_colour:clean(b.primary_colour,20),
       accent_colour:clean(b.accent_colour,20),report_body_font:clean(b.report_body_font,80),
