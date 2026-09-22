@@ -54,7 +54,8 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(grants,/edusentia_worker_runtime/);
   assert.match(grants,/student_services_%/);
   assert.match(grants,/finance_%/);
-  assert.equal(installer.includes("\\\\nrun_once"),false,"installer must not contain a literal backslash-n escape between migration calls");
+  assert.equal(installer.includes("\\nrun_once"),false,"installer must not contain a literal backslash-n escape between migration calls");
+  assert.equal(template.includes("\\ntest"),false,"tenant template must not contain a literal backslash-n escape between validation checks");
 });
 
 test("reference module navigation remains feature and role scoped",()=>{
