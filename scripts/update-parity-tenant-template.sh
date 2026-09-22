@@ -96,7 +96,7 @@ cleanup_schema_grant
 test "$(psql "$TEMPLATE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" = "f"
 test "$(psql "$TEMPLATE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
 test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version in('0048i_historical_provider_bridges','0048j_notification_worker_compat','0048k_mfa_recovery_compat','0048l_backup_worker_api','0048m_restore_worker_helpers','0048n_backup_maintenance_helpers')")" = "6"
-test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%'")" = "24"
+test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version like '0049%'")" = "25"
 test "$(psql "$TEMPLATE_URL" -Atc "select count(*) from app.schema_migrations where version='0049_operational_blueprint_parity'")" = "1"
 test "$(psql "$TEMPLATE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')")" -ge 258
 
