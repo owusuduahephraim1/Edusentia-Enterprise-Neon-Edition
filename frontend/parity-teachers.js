@@ -26,10 +26,14 @@
   }
   async function openTeacherEditor(id=""){
     let row={};
-    if(id){const data=await certified("get_teacher_record",{target_teacher_id:id});row=data?.teacher||data||{};}
+    if(id){
+      const data=await certified("get_teacher_record",{target_teacher_id:id});row=data?.teacher||data||{};
+    }else{
+      try{row.staff_no=await certified("generate_school_identifier",{identifier_kind:"teacher"});}catch(_){row.staff_no="";}
+    }
     openModal(id?"Edit teacher":"Add teacher","Certified teacher record with optimistic-concurrency protection.",`
       <form id="teacherAdvancedForm" class="form-stack"><input type="hidden" name="id" value="${esc(row.id||"")}"><input type="hidden" name="updated_at" value="${esc(row.updated_at||"")}"><div class="form-grid">
-        <label class="field"><span>Staff number</span><input name="staff_no" value="${esc(row.staff_no||"")}"></label>
+        <label class="field"><span>Staff number</span><input name="staff_no" value="${esc(row.staff_no||"")}" required readonly aria-readonly="true"><small>Generated automatically from the school tenant identity.</small></label>
         <label class="field"><span>EMIS code</span><input name="emis_code" value="${esc(row.emis_code||"")}"></label>
         <label class="field"><span>First name</span><input name="first_name" value="${esc(row.first_name||"")}" required></label>
         <label class="field"><span>Middle name</span><input name="middle_name" value="${esc(row.middle_name||"")}"></label>
