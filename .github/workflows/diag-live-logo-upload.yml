@@ -36,7 +36,7 @@ jobs:
           begin;
           do $diag$
           declare
-            tenant_id uuid;
+            v_tenant_id uuid;
             admin_id uuid;
             admin_role text;
             logo_key text;
@@ -54,12 +54,12 @@ jobs:
             err_table text;
             err_column text;
           begin
-            select id into tenant_id
+            select id into v_tenant_id
             from app.tenants
             where code='NIS-000001'
             limit 1;
 
-            if tenant_id is null then
+            if v_tenant_id is null then
               raise notice 'DIAG tenant_found=false';
               return;
             end if;
@@ -78,8 +78,8 @@ jobs:
             select m.object_key,m.status,m.content_type,m.size_bytes,m.created_at
             into logo_key,logo_status,logo_type,logo_size,logo_created
             from storage.object_metadata m
-            where m.tenant_id=tenant_id
-              and m.object_key like ('tenants/'||tenant_id::text||'/school-branding/%')
+            where m.tenant_id=v_tenant_id
+              and m.object_key like ('tenants/'||v_tenant_id::text||'/school-branding/%')
             order by m.created_at desc
             limit 1;
 
@@ -94,7 +94,7 @@ jobs:
               return;
             end if;
 
-            perform app.set_request_context(tenant_id,admin_id,'system_admin',2::smallint);
+            perform app.set_request_context(v_tenant_id,admin_id,'system_admin',2::smallint);
 
             begin
               license_state:=public.license_snapshot_for_role('system_admin');
