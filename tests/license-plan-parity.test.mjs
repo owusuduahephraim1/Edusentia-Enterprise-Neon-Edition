@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const sql=fs.readFileSync(new URL("../database/migrations/0025d_live_plan_feature_parity.sql",import.meta.url),"utf8");
+const sql=fs.readFileSync(new URL("../database/migrations/0025d_live_plan_feature_parity.sql",import.meta.url),"utf8");\nconst tenantSql=fs.readFileSync(new URL("../database/reference-compat/0049v_live_plan_feature_parity.sql",import.meta.url),"utf8");
 
 const expectedCatalog=[
   "academic_history","advanced_analytics","analytics","assessment","attendance",
@@ -35,7 +35,7 @@ function quotedJsonAfterPlan(code){
   const marker="'"+code+"'";
   const start=sql.indexOf(marker);
   assert.notEqual(start,-1,"missing "+code+" plan");
-  const segment=sql.slice(start,start+3500);
+  const segment=source.slice(start,start+3500);
   const matches=[...segment.matchAll(/'(\{[^']*\})'::jsonb/g)].map(m=>JSON.parse(m[1]));
   assert.ok(matches.length>=2,"expected limits and feature_flags for "+code);
   return {limits:matches[0],flags:matches[1]};
@@ -67,4 +67,13 @@ test("inactive future features remain disabled in every commercial plan",()=>{
 test("suffix migration preserves certified 0025 production preflight line",()=>{
   assert.match(sql,/values \('0025d_live_plan_feature_parity'\)/);
   assert.match(sql,/set schema_version='0025'/);
+});
+
+
+test("isolated tenant plan data matches the master commercial-plan parity patch",()=>{
+  for(const code of Object.keys(expectedPlans)){
+    assert.deepEqual(quotedJsonAfterPlan(code,tenantSql),quotedJsonAfterPlan(code,sql),code+" tenant plan must match master");
+  }
+  const tenantCodes=[...tenantSql.matchAll(/\('([a-z_]+)','[^']*','[^']*',(true|false)\)/g)].map(m=>m[1]).sort();
+  assert.deepEqual(tenantCodes,expectedCatalog);
 });
