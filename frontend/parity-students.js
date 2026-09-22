@@ -70,7 +70,7 @@
   }
   async function archiveStudent(id){
     if(!confirm("Remove this student from the current directory? Historical records and reports remain preserved."))return;
-    try{await certified("archive_student",{target_student_id:id,reason_text:"Student removed from active records"});await loadCertifiedStudents();}catch(error){alert(friendly(error));}
+    try{const removed=await certified("archive_student",{target_student_id:id,reason_text:"Student removed from active records"});if(removed!==true)throw new Error("The remove operation did not complete.");await loadCertifiedStudents();}catch(error){alert(friendly(error));}
   }
   async function restoreStudent(id){
     if(!confirm("Restore this student to the current directory?"))return;
