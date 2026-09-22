@@ -2,7 +2,7 @@ begin;
 
 -- Synchronize isolated tenant plan entitlements with the live Supabase
 -- public.license_plans revision-6 reference while remaining Neon-native.
--- This file is additive and safe for existing tenant databases.
+-- This file is additive and safe for existing tenant databases.\n-- Production deployment verifies the 27-feature plan contract before completion.
 
 insert into platform.license_feature_catalog(code,name,description,default_enabled) values
 ('academic_history','Academic history','Lifecycle records, cumulative history, and transcript issuance.',true),
