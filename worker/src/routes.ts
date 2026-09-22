@@ -248,7 +248,13 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   }
   if(method==="GET"&&p==="/api/bootstrap"){
     const [tenant,metrics,licenseRows,permissionRows]=await tenantTx<any[]>(sql,ctx,txn=>[
-      txn`select id,code,name,institution_type,settings from app.tenants where id=${ctx.tenantId}::uuid`,
+      txn`select t.id,t.code,t.name,t.institution_type,
+        coalesce(t.settings,'{}'::jsonb) ||
+        jsonb_build_object(
+          'logo_url',coalesce((select s.logo_url from public.school_settings s order by s.created_at,s.id limit 1),'assets/school-logo.png')
+        ) settings
+        from app.tenants t
+        where t.id=${ctx.tenantId}::uuid`,
       txn`select
         (select count(*)::int from app.students where tenant_id=${ctx.tenantId}::uuid and archived_at is null) students,
         (select count(*)::int from app.staff where tenant_id=${ctx.tenantId}::uuid and archived_at is null) staff,
@@ -467,7 +473,13 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const size=Number(b.size||0);if(size<=0||size>20*1024*1024)return error("invalid_file_size","File size must be between 1 byte and 20 MB",422,requestId);
     const allowed=["image/","application/pdf","text/csv","application/vnd.openxmlformats-officedocument"];
     if(!allowed.some(x=>type.startsWith(x)))return error("invalid_content_type","This file type is not allowed",422,requestId);
-    const key=`tenants/${ctx.tenantId}/${kind}/${crypto.randomUUID()}-${name}`;
+    const rawSubfolder=String(b.subfolder||"").trim();
+    let subfolder="";
+    if(rawSubfolder){
+      if(kind!=="report-card-templates"||!["early_years","basic_1_6","basic_7_9"].includes(rawSubfolder))return error("invalid_upload_scope","Invalid report-card template class range",422,requestId);
+      subfolder=`/${rawSubfolder}`;
+    }
+    const key=`tenants/${ctx.tenantId}/${kind}${subfolder}/${crypto.randomUUID()}-${name}`;
     try{
       const [preparedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.prepare_object_upload(${key},${name},${type},${size}::bigint) metadata`]);
       if(!(preparedRows[0] as any)?.metadata)throw new Error("Upload metadata was not created");
