@@ -197,23 +197,30 @@
 
   async function renderDashboard(){
     state.boot=await api().bootstrap();
-    const data=state.boot, metrics=data.metrics||{};
-    const stats=[
-      ["Students",metrics.students??0,"◎","blue"],
-      ["Staff",metrics.staff??0,"♙","gold"],
-      ["Classes",metrics.classes??0,"▦","green"],
-      ["Subjects",metrics.subjects??0,"◇","purple"],
-      ["Attendance today",metrics.attendanceToday??0,"✓","green"],
-      ["Pending reports",metrics.pendingReports??0,"▤","gold"]
-    ];
-    const tenant=data.tenant||{};
+    const data=state.boot,tenant=data.tenant||{};
+    if(role()!=="system_admin"){
+      const metrics=data.metrics||{},stats=[
+        ["Students",metrics.students??0,"◎","blue"],["Staff",metrics.staff??0,"♙","gold"],["Classes",metrics.classes??0,"▦","green"],
+        ["Subjects",metrics.subjects??0,"◇","purple"],["Attendance today",metrics.attendanceToday??0,"✓","green"],["Pending reports",metrics.pendingReports??0,"▤","gold"]
+      ];
+      byId("content").innerHTML=`
+        <div class="page-head"><div><h3>Operational overview</h3><p>${escapeHtml(tenant.name||"School workspace")} • ${escapeHtml(String(tenant.code||"").toUpperCase())}</p></div></div>
+        <section class="stat-grid">${stats.map(([label,value,icon,tone])=>`<article class="stat-card"><span class="stat-icon ${tone}" aria-hidden="true">${icon}</span><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div></article>`).join("")}</section>
+        <section class="grid two"><article class="panel pad"><div class="panel-header"><div><h3>School workspace</h3><p>Current institution context</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Institution model</span><strong>${escapeHtml(String(tenant.institution_type||"Not set").replaceAll("_"," "))}</strong></div><div><span>Tenant code</span><strong>${escapeHtml(tenant.code||"—")}</strong></div></div></div></article><article class="panel pad"><div class="panel-header"><div><h3>Secure session</h3><p>Worker-resolved identity and authorization</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Role</span><strong>${escapeHtml(state.session?.membership?.roleLabel||state.session?.membership?.role||"Member")}</strong></div><div><span>Assurance level</span><strong>${escapeHtml(data.capabilities?.assuranceLevel||"AAL1")}</strong></div></div></div></article></section>`;
+      return;
+    }
+    const academic=await certified("get_academic_configuration").catch(()=>({})),terms=Array.isArray(academic?.terms)?academic.terms:[],term=terms.find(item=>item.is_active)||terms[0]||null;
+    const metrics=await certified("get_role_dashboard",{target_term_id:term?.id||null}).catch(()=>data.metrics||{}),statuses=metrics?.by_status||{},reports=Number(metrics?.reports||0),published=Number(metrics?.published||0),completion=reports?Math.round(published/reports*100):0;
+    const cards=[["Active Users",metrics?.active_users??0,"♟","blue"],["Active Teachers",metrics?.active_teachers??0,"♜","gold"],["Active Students",metrics?.active_students??0,"◉","green"],["Report Cards",reports,"▤","purple"]];
     byId("content").innerHTML=`
-      <div class="page-head"><div><h3>Operational overview</h3><p>${escapeHtml(tenant.name||"School workspace")} • ${escapeHtml(String(tenant.code||"").toUpperCase())}</p></div></div>
-      <section class="stat-grid">${stats.map(([label,value,icon,tone])=>`<article class="stat-card"><span class="stat-icon ${tone}" aria-hidden="true">${icon}</span><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div></article>`).join("")}</section>
+      <div class="page-head"><div><h3>System Administration Dashboard</h3><p>Users, records, security, and report operations</p></div><div class="page-actions"><button class="button secondary small" data-dashboard-view="students">Students</button><button class="button secondary small" data-dashboard-view="teachers">Teachers</button><button class="button secondary small" data-dashboard-view="headteachers">Principals</button><button class="button secondary small" data-dashboard-view="delegations">Emergency Delegation</button></div></div>
+      <section class="stat-grid">${cards.map(([label,value,icon,tone])=>`<article class="stat-card"><span class="stat-icon ${tone}" aria-hidden="true">${icon}</span><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div></article>`).join("")}</section>
       <section class="grid two">
-        <article class="panel pad"><div class="panel-header"><div><h3>School workspace</h3><p>Current institution context</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Institution model</span><strong>${escapeHtml(String(tenant.institution_type||"Not set").replaceAll("_"," "))}</strong></div><div><span>Tenant code</span><strong>${escapeHtml(tenant.code||"—")}</strong></div></div></div></article>
-        <article class="panel pad"><div class="panel-header"><div><h3>Secure session</h3><p>Worker-resolved identity and authorization</p></div></div><div class="panel-body"><div class="detail-grid"><div><span>Role</span><strong>${escapeHtml(state.session?.membership?.roleLabel||state.session?.membership?.role||"Member")}</strong></div><div><span>Assurance level</span><strong>${escapeHtml(data.capabilities?.assuranceLevel||"AAL1")}</strong></div></div></div></article>
-      </section>`;
+        <article class="panel"><div class="panel-header"><div><h3>Current Academic Period</h3><p>${escapeHtml(term?.name||"No active term")}</p></div></div><div class="panel-body"><div class="metric-row"><div class="metric"><span>Draft</span><strong>${Number(statuses.draft||0)}</strong></div><div class="metric"><span>Submitted</span><strong>${Number(statuses.submitted||0)}</strong></div><div class="metric"><span>Approved</span><strong>${Number(statuses.approved||0)}</strong></div><div class="metric"><span>Completion</span><strong>${completion}%</strong></div></div><div class="progress"><span style="width:${completion}%"></span></div></div></article>
+        <article class="panel"><div class="panel-header"><div><h3>Class Performance</h3><p>Published report averages</p></div></div><div class="panel-body"><div class="bar-list">${Array.isArray(metrics?.class_performance)&&metrics.class_performance.length?metrics.class_performance.map(row=>`<div class="bar-item"><label>${escapeHtml(row.class_name||"Class")}</label><div class="bar-track"><span style="width:${Math.min(100,Number(row.average||0))}%"></span></div><b>${Number(row.average||0).toFixed(1)}</b></div>`).join(""):`<div class="empty"><strong>No published results</strong></div>`}</div></div></article>
+      </section>
+      <section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Recent Report Cards</h3><p>Latest authorised activity</p></div><button class="button secondary small" data-dashboard-view="reports">View reports</button></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>Class</th><th>Term</th><th>Status</th><th>Average</th><th>Updated</th></tr></thead><tbody>${Array.isArray(metrics?.recent)&&metrics.recent.length?metrics.recent.map(row=>`<tr><td>${escapeHtml(row.student_name||row.full_name||"—")}</td><td>${escapeHtml(row.class_name||"—")}</td><td>${escapeHtml(row.term_name||"—")}</td><td>${status(row.status||"draft")}</td><td>${row.average==null?"—":escapeHtml(Number(row.average||0).toFixed(1)+"%")}</td><td>${formatDateTime(row.updated_at||row.published_at)}</td></tr>`).join(""):`<tr><td colspan="6"><div class="empty"><strong>No report cards</strong><span>Records will appear here when available.</span></div></td></tr>`}</tbody></table></div></section>`;
+    byId("content").querySelectorAll("[data-dashboard-view]").forEach(button=>button.onclick=()=>navigate(button.dataset.dashboardView));
   }
 
   async function renderAcademics(){
