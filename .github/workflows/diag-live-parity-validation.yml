@@ -83,29 +83,58 @@ jobs:
               raise exception 'DIAG canonical logo is not projected through bootstrap';
             end if;
 
-            v_template_path:='tenants/'||v_tenant_id::text||'/report-card-templates/basic_1_6/diag-template.pdf';
+            for v_template_path in
+              select 'tenants/'||v_tenant_id::text||'/report-card-templates/'||range_key||'/diag-template.pdf'
+              from (values ('early_years'),('basic_1_6'),('basic_7_9')) ranges(range_key)
+            loop
+              insert into storage.object_metadata(
+                tenant_id,object_key,original_name,content_type,size_bytes,created_by,status,stored_at
+              ) values(
+                v_tenant_id,v_template_path,'diag-template.pdf','application/pdf',12345,v_admin_id,'active',now()
+              );
 
+              v_template_result:=public.save_report_card_template(
+                split_part(v_template_path,'/',4),
+                v_template_path,
+                'diag-template.pdf',
+                'application/pdf',
+                12345,
+                repeat('a',64)
+              );
+
+              raise notice 'DIAG template_range=% saved=% path=%',
+                split_part(v_template_path,'/',4),
+                coalesce(v_template_result->>'range_key','')=split_part(v_template_path,'/',4),
+                coalesce(v_template_result->>'storage_path','');
+
+              if coalesce(v_template_result->>'range_key','')<>split_part(v_template_path,'/',4)
+                 or coalesce(v_template_result->>'storage_path','')<>v_template_path then
+                raise exception 'DIAG report-card template assignment did not preserve range-scoped R2 path';
+              end if;
+            end loop;
+
+            v_template_path:='tenants/'||v_tenant_id::text||'/report-card-templates/basic_1_6/diag-template-replacement.pdf';
             insert into storage.object_metadata(
               tenant_id,object_key,original_name,content_type,size_bytes,created_by,status,stored_at
             ) values(
-              v_tenant_id,v_template_path,'diag-template.pdf','application/pdf',12345,v_admin_id,'active',now()
+              v_tenant_id,v_template_path,'diag-template-replacement.pdf','application/pdf',23456,v_admin_id,'active',now()
             );
 
             v_template_result:=public.save_report_card_template(
               'basic_1_6',
               v_template_path,
-              'diag-template.pdf',
+              'diag-template-replacement.pdf',
               'application/pdf',
-              12345,
-              repeat('a',64)
+              23456,
+              repeat('b',64)
             );
+            raise notice 'DIAG template_replace_version=% path_matches=%',
+              coalesce((v_template_result->>'version')::int,0),
+              coalesce(v_template_result->>'storage_path','')=v_template_path;
 
-            raise notice 'DIAG template_saved=%',coalesce(v_template_result->>'range_key','')='basic_1_6';
-            raise notice 'DIAG template_storage_path=%',coalesce(v_template_result->>'storage_path','');
-
-            if coalesce(v_template_result->>'range_key','')<>'basic_1_6'
+            if coalesce((v_template_result->>'version')::int,0)<2
                or coalesce(v_template_result->>'storage_path','')<>v_template_path then
-              raise exception 'DIAG report-card template assignment did not preserve range-scoped R2 path';
+              raise exception 'DIAG report-card template replace/version flow failed';
             end if;
           end
           $diag$;
