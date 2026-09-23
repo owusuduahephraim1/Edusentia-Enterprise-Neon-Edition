@@ -2,7 +2,7 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
-  // ---------- Principal: certified record hydration + protected photograph parity ----------
+  // ---------- Principal: certified record hydration + protected photograph parity, production release ----------
   const principalPhotoUrls=new Map();
   function principalInitials(row={}){
     const name=String(row.full_name||[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ")||"Principal").trim();
