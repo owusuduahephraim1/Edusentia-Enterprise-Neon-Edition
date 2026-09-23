@@ -24,7 +24,7 @@ test("Principal photo upload and protected download are owner scoped",()=>{
   const api=read("frontend/api-client.js");
   assert.match(routes,/kind==="principal-photos"/);
   assert.match(routes,/neon_authorize_headteacher_photo_upload/);
-  assert.match(routes,/storageKind="staff-photos"/);
+  assert.match(routes,/kind==="principal-photos"[\s\S]*staff-photos/);
   assert.match(routes,/p==="\/api\/files\/principal-photo"/);
   assert.match(routes,/neon_headteacher_photo_descriptor/);
   assert.match(api,/downloadPrincipalPhoto/);
