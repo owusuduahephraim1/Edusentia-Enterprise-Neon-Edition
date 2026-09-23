@@ -177,6 +177,21 @@
     document.title=tenantMode?String(tenant.school_name||tenant.short_name||tenant.tenant_code)+" · Edusentia":"Edusentia Enterprise";
   }
 
+  function tenantLoginUrl(session=state.session){
+    const code=String(
+      session?.membership?.tenantCode||
+      state.boot?.tenant?.code||
+      state.loginSchool?.tenant_code||
+      byId("tenantCode")?.value||
+      ""
+    ).trim().toUpperCase();
+    const target=new URL(location.href);
+    target.search="";
+    target.hash="";
+    if(code)target.searchParams.set("school",code);
+    return target.toString();
+  }
+
   async function prepareLoginContext(){
     const params=new URLSearchParams(location.search),email=String(params.get("email")||"").trim();
     if(email&&byId("email"))byId("email").value=email;
@@ -253,10 +268,11 @@
     bindVisibility("toggleRequiredPasswordConfirm","requiredPasswordConfirm","confirmed password");
 
     byId("requiredPasswordSignOut").onclick=async()=>{
+      const target=tenantLoginUrl();
       try{await api().logout();}catch{}
       state.session=null;state.boot=null;
       try{if(dialog?.open)dialog.close();}catch{}
-      location.reload();
+      location.replace(target);
     };
     byId("requiredPasswordSave").onclick=async()=>{
       const form=byId("requiredPasswordForm"),button=byId("requiredPasswordSave"),msg=byId("requiredPasswordMessage");
@@ -277,10 +293,11 @@
         const result=await api().adminUserManagement("complete_own_required_password_change",{password});
         if(result?.ok!==true||result?.password_changed!==true)throw new Error(result?.message||result?.error||"Password update failed");
         notifyAction("Password changed","Your private password is active. Sign in again with the new password.","success");
+        const target=tenantLoginUrl();
         try{await api().logout();}catch{}
         state.session=null;state.boot=null;
         try{if(dialog?.open)dialog.close();}catch{}
-        setTimeout(()=>location.reload(),250);
+        setTimeout(()=>location.replace(target),250);
       }catch(error){
         if(msg){msg.textContent=friendly(error);msg.classList.remove("hidden");}
         notifyAction("Password not changed",friendly(error),"error");
@@ -618,7 +635,11 @@
   const closeRecovery=()=>{const dialog=byId("accessRecoveryDialog");if(dialog?.open)dialog.close();};
   byId("accessRecoveryClose")?.addEventListener("click",closeRecovery);byId("accessRecoveryCancel")?.addEventListener("click",closeRecovery);byId("accessRecoveryDialog")?.addEventListener("click",event=>{if(event.target===event.currentTarget)closeRecovery();});
   byId("accessRecoveryForm")?.addEventListener("submit",async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),msg=byId("accessRecoveryMessage");msg.textContent="";msg.dataset.kind="";if(turnstileSiteKey&&!recoveryTurnstileToken){msg.textContent="Complete the human verification before submitting the recovery request.";msg.dataset.kind="error";renderRecoveryTurnstile();return;}button.disabled=true;try{const fd=new FormData(form),result=await api().requestAccessRecovery({identifier:fd.get("identifier"),contactEmail:fd.get("contactEmail"),recoveryType:fd.get("recoveryType"),turnstileToken:recoveryTurnstileToken});msg.textContent=result?.message||"Recovery request submitted for protected review.";msg.dataset.kind="success";recoveryTurnstileToken="";if(window.turnstile&&recoveryWidgetId!=null){try{window.turnstile.reset(recoveryWidgetId);}catch{}}}catch(error){msg.textContent=friendly(error);msg.dataset.kind="error";recoveryTurnstileToken="";if(window.turnstile&&recoveryWidgetId!=null){try{window.turnstile.reset(recoveryWidgetId);}catch{}}}finally{button.disabled=false;}});
-  byId("logoutButton")?.addEventListener("click",async()=>{try{await api().logout();}finally{location.reload();}});
+  byId("logoutButton")?.addEventListener("click",async()=>{
+    const target=tenantLoginUrl();
+    try{await api().logout();}
+    finally{location.replace(target);}
+  });
   byId("menuButton")?.addEventListener("click",()=>byId("sidebar")?.classList.toggle("open"));
   byId("refreshButton")?.addEventListener("click",()=>navigate(state.view));
   byId("notificationButton")?.addEventListener("click",()=>navigate("notifications"));
