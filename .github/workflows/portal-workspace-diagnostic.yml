@@ -74,6 +74,11 @@ jobs:
           from pg_proc p join pg_namespace n on n.oid=p.pronamespace
           where n.nspname='public' and p.proname='list_profiles_with_access' and p.pronargs=0;
 
+          select 'APPLY_BUNDLE_DEF '||replace(replace(pg_get_functiondef('public.admin_apply_user_bundle(uuid,jsonb)'::regprocedure),E'\n',' '),E'\r',' ');
+          select 'STUDENT_COLUMNS '||jsonb_agg(column_name order by ordinal_position)::text
+          from information_schema.columns
+          where table_schema='public' and table_name='students';
+
           select 'TABLE_META '||jsonb_agg(jsonb_build_object(
             'table',c.relname,
             'owner',pg_get_userbyid(c.relowner),
