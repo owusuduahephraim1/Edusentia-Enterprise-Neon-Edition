@@ -36,7 +36,11 @@
 
   function toast(title,detail="",kind="info"){
     const stack=$("toastStack");
-    if(!stack){alert(`${title}${detail?`: ${detail}`:""}`);return}
+    if(!stack){
+      if(typeof window.EdusentiaNotify==="function")window.EdusentiaNotify(title,detail,kind);
+      else console[kind==="error"?"error":"log"](title,detail);
+      return;
+    }
     const node=document.createElement("div");
     node.className=`toast ${kind}`;
     node.innerHTML=`<strong>${esc(title)}</strong>${detail?`<span>${esc(detail)}</span>`:""}`;
