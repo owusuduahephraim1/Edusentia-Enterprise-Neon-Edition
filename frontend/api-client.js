@@ -95,6 +95,7 @@
     shsAcademicInsert:async(entity,payload={})=>((await post("/api/academics/shs/insert",{entity,payload}))?.result||null),
     shsAcademicRemove:async(entity,id)=>((await post("/api/academics/shs/remove",{entity,id}))?.result===true),
     certifiedRpc:(operation,args={})=>post(`/api/compat/rpc/${encodeURIComponent(String(operation||""))}`,{args}),
+    financeGuardianRpc:(operation,args={})=>post(`/api/compat/finance-guardian-rpc/${encodeURIComponent(String(operation||""))}`,{args}),
     adminUserManagement:(action,payload={})=>post("/api/compat/functions/admin-user-management",{action,payload}),
     directoryUserManagement:(action,payload={})=>post("/api/compat/functions/directory-user-management",{action,payload}),
     tenantAuthRecovery:(action,payload={})=>post("/api/compat/functions/tenant-auth-recovery",{action,...payload}),
