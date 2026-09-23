@@ -130,10 +130,10 @@ SQL
       '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
       '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
       '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
-      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity'
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity'
     )
   ")"
-  test "$migration_count" = "29"
+  test "$migration_count" = "30"
 
   plan_parity_count="$(psql "$TENANT_DATABASE_URL" -Atc "
     select count(*)
@@ -164,6 +164,9 @@ SQL
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_console()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_insert(text,jsonb)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_remove(text,uuid)','EXECUTE')")" = "t"
 
   psql "$TENANT_DATABASE_URL" -Atc "
     select distinct p.proname
