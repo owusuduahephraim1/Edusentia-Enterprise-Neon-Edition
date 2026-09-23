@@ -1,5 +1,5 @@
 -- Neon teacher-photograph request-context repair.
--- The certified Supabase implementation authorizes with auth.uid(). In Neon,
+-- The certified Supabase implementation authorizes with its authenticated identity helper. In Neon,
 -- tenantTx sets the equivalent identity in app request context, so these
 -- SECURITY DEFINER bridges use app.current_user_id() and never require the
 -- live Worker or the bridge owner to access the compatibility auth schema.
