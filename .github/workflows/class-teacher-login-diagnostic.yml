@@ -97,6 +97,32 @@ jobs:
             limit 1
           ),'NO_ROW');
 
+          select 'RECENT_AUTH_EVENTS '||coalesce(jsonb_agg(jsonb_build_object(
+            'action',e.action,
+            'actor_id',e.actor_id,
+            'metadata',e.metadata,
+            'occurred_at',e.occurred_at
+          ) order by e.occurred_at desc),'[]'::jsonb)::text
+          from (
+            select *
+            from audit.events
+            where action like 'auth.login.%'
+               or action='auth.login.failed'
+            order by occurred_at desc
+            limit 20
+          ) e;
+
+          select 'CLASS_TEACHER_SESSIONS '||coalesce(jsonb_agg(jsonb_build_object(
+            'id',s.id,
+            'role',s.role,
+            'aal',s.assurance_level,
+            'created_at',s.created_at,
+            'expires_at',s.expires_at,
+            'revoked_at',s.revoked_at
+          ) order by s.created_at desc),'[]'::jsonb)::text
+          from authn.sessions s
+          where s.user_id=nullif(current_setting('diag.teacher_user_id'),'')::uuid;
+
           set local role edusentia_worker_runtime;
           select app.set_request_context(
             current_setting('diag.tenant_id')::uuid,
