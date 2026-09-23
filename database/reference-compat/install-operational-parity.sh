@@ -84,6 +84,7 @@ run_once "0054_shs_operational_parity" "$DIR/0054_shs_operational_parity.sql"
 run_once "0055_teacher_photo_r2_authorization" "$DIR/0055_teacher_photo_r2_authorization.sql"
 run_once "0056_teacher_photo_neon_context_fix" "$DIR/0056_teacher_photo_neon_context_fix.sql"
 run_once "0057_teacher_photo_reference_contract" "$DIR/0057_teacher_photo_reference_contract.sql"
+run_once "0058_reusable_student_admission_numbers" "$DIR/0058_reusable_student_admission_numbers.sql"
 
 test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE') and (p.proname like 'finance_%' or p.proname like 'hr_%' or p.proname like 'student_services_%' or p.proname like 'admissions_%' or p.proname like 'discipline_%' or p.proname like 'welfare_%' or p.proname like 'health_%' or p.proname like 'communications_%' or p.proname like 'hostel_%' or p.proname like 'alumni_%' or p.proname in ('get_my_student_portal','get_my_student_portal_v2'))")" -ge 85
 

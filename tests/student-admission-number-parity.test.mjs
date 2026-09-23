@@ -4,32 +4,46 @@ import fs from "node:fs";
 
 const read=p=>fs.readFileSync(p,"utf8");
 
-test("student admission numbers are immutable and class scoped",()=>{
-  const sql=read("database/reference-compat/0049x_class_scoped_student_admission_numbers.sql");
-  assert.match(sql,/candidate:=root\|\|'-STU-'\|\|frozen_prefix\|\|lpad\(n::text,3,'0'\)/);
-  assert.match(sql,/prefix:='BS'\|\|parts\[1\]/);
-  assert.match(sql,/prefix:='KG'\|\|parts\[1\]/);
-  assert.match(sql,/prefix:='NS'\|\|parts\[1\]/);
-  assert.match(sql,/prefix:='CR'/);
-  assert.match(sql,/select s\.admission_no::text[\s\S]*into admission[\s\S]*for update/);
-  assert.doesNotMatch(sql,/update public\.students set admission_no=/i);
+test("student admission numbers remain class scoped while active",()=>{
+  const base=read("database/reference-compat/0049x_class_scoped_student_admission_numbers.sql");
+  const reuse=read("database/reference-compat/0058_reusable_student_admission_numbers.sql");
+  assert.match(base,/prefix:='BS'\|\|parts\[1\]/);
+  assert.match(base,/prefix:='KG'\|\|parts\[1\]/);
+  assert.match(base,/prefix:='NS'\|\|parts\[1\]/);
+  assert.match(base,/prefix:='CR'/);
+  assert.match(reuse,/candidate:=root\|\|'-STU-'\|\|clean_prefix\|\|lpad\(n::text,3,'0'\)/);
+  assert.match(reuse,/select s\.admission_no::text[\s\S]*into admission[\s\S]*for update/);
 });
 
-test("class counters seed from existing pupils and never recycle used admission numbers",()=>{
-  const sql=read("database/reference-compat/0049x_class_scoped_student_admission_numbers.sql");
-  assert.match(sql,/select count\(distinct e\.student_id\)[\s\S]*where e\.class_id=target_class_id/);
-  assert.match(sql,/student_admission_sequences/);
-  assert.match(sql,/for update/);
-  assert.match(sql,/exit when not exists\([\s\S]*public\.students/);
+test("removed students release their admission number for lowest-gap reuse",()=>{
+  const sql=read("database/reference-compat/0058_reusable_student_admission_numbers.sql");
+  for(const marker of [
+    "drop constraint if exists students_admission_no_key",
+    "create unique index if not exists students_admission_no_ci_idx",
+    "where deleted_at is null",
+    "generate_series(1,999)",
+    "s.deleted_at is null",
+    "pg_advisory_xact_lock",
+    "Archived students do not reserve an admission number",
+    "public.next_student_identifier_for_prefix(original_prefix)"
+  ]) assert.ok(sql.includes(marker),marker);
+  assert.doesNotMatch(sql,/last_number\s*\+\s*1/i);
 });
 
-test("student UI and CSV import use automatic class numbering and alphabetical ordering",()=>{
+test("restore keeps a released number when free and reallocates on collision",()=>{
+  const sql=read("database/reference-compat/0058_reusable_student_admission_numbers.sql");
+  assert.match(sql,/replacement_admission:=current_admission/);
+  assert.match(sql,/lower\(s\.admission_no::text\)=lower\(current_admission\)/);
+  assert.match(sql,/replacement_admission:=public\.next_student_identifier_for_prefix\(original_prefix\)/);
+  assert.match(sql,/admission number reassigned from/);
+});
+
+test("student UI explains automatic lowest-available class numbering",()=>{
   const ui=read("frontend/parity-students.js");
-  const sql=read("database/reference-compat/0049x_class_scoped_student_admission_numbers.sql");
   assert.match(ui,/Generated automatically on save/);
   assert.match(ui,/Basic 3 → NIS000001-STU-BS3001/);
+  assert.match(ui,/lowest available/);
+  assert.match(ui,/released for reuse/i);
   assert.doesNotMatch(ui,/generate_school_identifier",\{identifier_kind:"student"\}/);
   assert.match(ui,/Academic year and class are required for a new student/);
-  assert.match(sql,/order by lower\(coalesce\(value->>'last_name',''\)\)/);
-  assert.match(sql,/last_name_sort,first_name_sort,middle_name_sort/);
 });

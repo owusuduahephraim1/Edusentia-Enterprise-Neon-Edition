@@ -103,7 +103,7 @@
     const admission=student.admission_no||"";
     openModal(id?"Edit Student":"Add Student",id?admission:"Create a certified student. The admission number is generated from the admission class when the record is saved.",`
       <form id="studentCertifiedForm" class="form-stack"><input type="hidden" name="id" value="${esc(student.id||"")}"><input type="hidden" name="updated_at" value="${esc(student.updated_at||"")}"><div class="form-grid three">
-        <label class="field"><span>Admission number</span><input id="studentAdmissionDisplay" value="${esc(id?admission:"Generated automatically on save")}" readonly aria-readonly="true"><small id="studentAdmissionHint">${id?"Permanent student identifier. It does not change on promotion.":"Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001."}</small></label>
+        <label class="field"><span>Admission number</span><input id="studentAdmissionDisplay" value="${esc(id?admission:"Generated automatically on save")}" readonly aria-readonly="true"><small id="studentAdmissionHint">${id?"Admission identifier. It remains unchanged while the student is active and on promotion.":"Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001."}</small></label>
         <label class="field"><span>First name</span><input name="first_name" value="${esc(student.first_name||"")}" required></label>
         <label class="field"><span>Middle name</span><input name="middle_name" value="${esc(student.middle_name||"")}"></label>
         <label class="field"><span>Last name</span><input name="last_name" value="${esc(student.last_name||"")}" required></label>
@@ -131,7 +131,7 @@
       const selected=(ctx.classes||[]).find(item=>String(item.id)===String(classId));
       const prefix=selected?admissionClassPrefix(selected.name):"";
       byId("studentAdmissionHint").textContent=selected
-        ? "This class uses "+prefix+". The final number is allocated atomically when the student is saved and remains permanent after promotion."
+        ? "This class uses "+prefix+". The lowest available number is allocated atomically when the student is saved. Numbers released by removed students are reused; an active student's number remains unchanged on promotion."
         : "Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001.";
     };
     studentForm.elements.class_id.addEventListener("change",refreshAdmissionHint);

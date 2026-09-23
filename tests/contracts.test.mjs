@@ -556,7 +556,8 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.match(u,/0055_teacher_photo_r2_authorization/);
   assert.match(u,/0056_teacher_photo_neon_context_fix/);
   assert.match(u,/0057_teacher_photo_reference_contract/);
-  assert.match(u,/test "\$migration_count" = "33"/);
+  assert.match(u,/0058_reusable_student_admission_numbers/);
+  assert.match(u,/test "\$migration_count" = "34"/);
   assert.match(u,/plan_parity_count/);
   assert.match(u,/set role edusentia_provisioner;[\s\S]*grant usage,create on schema public to edusentia_runtime/i);
   assert.match(u,/revoke create on schema public from edusentia_runtime/i);
