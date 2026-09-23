@@ -536,7 +536,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const allowed=["image/","application/pdf","text/csv","application/vnd.openxmlformats-officedocument"];
     if(!allowed.some(x=>type.startsWith(x)))return error("invalid_content_type","This file type is not allowed",422,requestId);
     const rawSubfolder=String(b.subfolder||"").trim();
-    let subfolder="",referencePath="",storageKind=kind;
+    let subfolder="",referencePath="";
     if(rawSubfolder){
       if(kind==="report-card-templates"){
         if(!["early_years","basic_1_6","basic_7_9"].includes(rawSubfolder))return error("invalid_upload_scope","Invalid report-card template class range",422,requestId);
@@ -559,7 +559,6 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
         ]);
         if((allowedRows[0] as any)?.allowed!==true)return error("forbidden","You are not authorized to upload this Principal photograph",403,requestId);
         subfolder=`/${rawSubfolder}`;
-        storageKind="staff-photos";
       }else if(kind==="student-photos"){
         if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSubfolder))return error("invalid_upload_scope","Invalid student photograph scope",422,requestId);
         if(!/^image\/(jpeg|png|webp)$/i.test(type))return error("invalid_content_type","Student photographs must be JPEG, PNG, or WebP images",415,requestId);
@@ -578,8 +577,11 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       return error("invalid_upload_scope","A Principal identifier is required for Principal photographs",422,requestId);
     }
     const objectName=`${crypto.randomUUID()}-${name}`;
-    const key=`tenants/${ctx.tenantId}/${storageKind}${subfolder}/${objectName}`;
-    if(kind==="staff-photos"||kind==="principal-photos"||kind==="student-photos")referencePath=`${rawSubfolder}/${objectName}`;
+    const key=kind==="principal-photos"
+      ?`tenants/${ctx.tenantId}/staff-photos${subfolder}/${objectName}`
+      :`tenants/${ctx.tenantId}/${kind}${subfolder}/${objectName}`;
+    if(kind==="staff-photos"||kind==="student-photos")referencePath=`${rawSubfolder}/${objectName}`;
+    if(kind==="principal-photos")referencePath=`${rawSubfolder}/${objectName}`;
     try{
       const [preparedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.prepare_object_upload(${key},${name},${type},${size}::bigint) metadata`]);
       if(!(preparedRows[0] as any)?.metadata)throw new Error("Upload metadata was not created");
