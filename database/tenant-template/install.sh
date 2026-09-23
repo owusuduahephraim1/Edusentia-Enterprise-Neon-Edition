@@ -107,7 +107,9 @@ runtime_acl_ok="$(psql "$TEMPLATE_URL" -Atc "select has_table_privilege('edusent
 
 admission_reuse_ok="$(psql "$TEMPLATE_URL" -Atc "select not exists(select 1 from pg_constraint where conrelid='public.students'::regclass and conname='students_admission_no_key') and to_regclass('public.students_admission_no_ci_idx') is not null and position('s.deleted_at is null' in pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure))>0")"
 
-echo "Tenant template validation: runtime_schema=$tenant_runtime_schema compat_schema=$compat_schema compat_version=$compat_version bootstrap_count=$bootstrap_count worker_rpc_count=$worker_rpc_count plan_parity_count=$plan_parity_count runtime_acl_ok=$runtime_acl_ok admission_reuse_ok=$admission_reuse_ok"
+student_photo_contract_ok="$(psql "$TEMPLATE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_student_photo_upload(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.neon_student_photo_descriptor(uuid)','execute') and position('student-photos/' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0 and position('storage.object_metadata' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")"
+
+echo "Tenant template validation: runtime_schema=$tenant_runtime_schema compat_schema=$compat_schema compat_version=$compat_version bootstrap_count=$bootstrap_count worker_rpc_count=$worker_rpc_count plan_parity_count=$plan_parity_count runtime_acl_ok=$runtime_acl_ok admission_reuse_ok=$admission_reuse_ok student_photo_contract_ok=$student_photo_contract_ok"
 
 test "$tenant_runtime_schema" = "0020"
 test "$compat_schema" = "0048"
@@ -117,6 +119,7 @@ test "$worker_rpc_count" -ge 258
 test "$plan_parity_count" = "3"
 test "$runtime_acl_ok" = "t"
 test "$admission_reuse_ok" = "t"
+test "$student_photo_contract_ok" = "t"
 
 if [ "$(template_owner)" = "edusentia_runtime" ]; then
   psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "alter database \"$TEMPLATE_DB\" owner to edusentia_provisioner;"
