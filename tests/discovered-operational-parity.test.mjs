@@ -62,6 +62,7 @@ test("Users and Access exposes the certified linked-record directories on Neon",
   assert.match(sql,/create or replace function public\.list_profiles_with_access\(\)/i);
   assert.match(sql,/alter table public\.students[\s\S]*add column if not exists profile_id uuid/i);
   assert.match(sql,/students_profile_id_uidx/);
+  assert.match(sql,/alter table public\.profiles[\s\S]*add column if not exists must_change_password boolean/i);
   assert.match(sql,/'teacher_records'/);
   assert.match(sql,/'headteacher_records'/);
   assert.match(sql,/'accountant_records'/);
