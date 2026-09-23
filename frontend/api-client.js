@@ -81,6 +81,12 @@
     return response.blob();
   }
 
+  async function downloadStudentPhoto(studentId,photoPath){
+    const response=await fetch(`${apiBase}/api/files/student-photo?id=${encodeURIComponent(String(studentId||""))}&path=${encodeURIComponent(String(photoPath||""))}`,{credentials:"include",headers:{accept:"image/avif,image/webp,image/png,image/jpeg,image/*"}});
+    if(!response.ok){const payload=await response.json().catch(()=>({}));const e=payload?.error||{};throw new ApiError(e.message||`Photograph download failed (${response.status})`,response.status,e.code||"photo_download_failed",e.details);}
+    return response.blob();
+  }
+
   window.EdusentiaApi=Object.freeze({
     request,health:()=>request("/api/health"),
 
@@ -124,6 +130,7 @@
     uploadFile,
     downloadFile,
     downloadStaffPhoto,
+    downloadStudentPhoto,
     uploadReportPdf,
     downloadReportPdf,
     deleteReportPdfObject,
