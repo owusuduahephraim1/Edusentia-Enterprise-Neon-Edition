@@ -55,6 +55,10 @@ jobs:
           select set_config('diag.student_id',coalesce((select id::text from public.profiles where public.current_app_role_for(role)::text='student' and active order by created_at limit 1),''),true);
           select set_config('diag.accountant_id',coalesce((select id::text from public.profiles where public.current_app_role_for(role)::text in ('accountant','accounts_office') and active order by created_at limit 1),''),true);
           select set_config('diag.accountant_role',coalesce((select public.current_app_role_for(role)::text from public.profiles where public.current_app_role_for(role)::text in ('accountant','accounts_office') and active order by created_at limit 1),'accountant'),true);
+          select set_config('diag.teacher_count',(select count(*)::text from public.teachers where deleted_at is null and active),true);
+          select set_config('diag.principal_count',(select count(*)::text from public.headteachers where deleted_at is null and active),true);
+          select set_config('diag.accountant_count',(select count(*)::text from public.accounts_office_staff where deleted_at is null and active),true);
+          select set_config('diag.student_count',(select count(*)::text from public.students where deleted_at is null and status='active'),true);
 
           set local role edusentia_worker_runtime;
           select app.set_request_context(
@@ -75,10 +79,10 @@ jobs:
           begin
             payload:=public.list_profiles_with_access();
             raise notice 'LINKAGE_COUNTS underlying teachers=% principals=% accountants=% students=% payload_profiles=% payload_teachers=% payload_principals=% payload_accountants=% payload_students=% classes=% subjects=%',
-              (select count(*) from public.teachers where deleted_at is null and active),
-              (select count(*) from public.headteachers where deleted_at is null and active),
-              (select count(*) from public.accounts_office_staff where deleted_at is null and active),
-              (select count(*) from public.students where deleted_at is null and status='active'),
+              current_setting('diag.teacher_count')::integer,
+              current_setting('diag.principal_count')::integer,
+              current_setting('diag.accountant_count')::integer,
+              current_setting('diag.student_count')::integer,
               jsonb_array_length(coalesce(payload->'profiles','[]'::jsonb)),
               jsonb_array_length(coalesce(payload->'teacher_records','[]'::jsonb)),
               jsonb_array_length(coalesce(payload->'headteacher_records','[]'::jsonb)),
