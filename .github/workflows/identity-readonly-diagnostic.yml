@@ -1,0 +1,88 @@
+name: Identity Readonly Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/identity-readonly-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      RAW_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Inspect identity schema and privileges
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN_DATABASE_URL="$(RAW_DATABASE_URL="$RAW_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.RAW_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia_nis_000001";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$ADMIN_DATABASE_URL"
+          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -At <<'SQL'
+          select 'CURRENT '||current_user||' '||current_database();
+
+          select 'RUNTIME_PRIV '||jsonb_build_object(
+            'validate',has_function_privilege('edusentia_worker_runtime','public.admin_validate_user_bundle(uuid,jsonb,boolean)','execute'),
+            'apply',has_function_privilege('edusentia_worker_runtime','public.admin_apply_user_bundle(uuid,jsonb)','execute'),
+            'create_bridge',has_function_privilege('edusentia_worker_runtime','public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)','execute'),
+            'update_bridge',has_function_privilege('edusentia_worker_runtime','public.neon_identity_update_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean)','execute'),
+            'reset_bridge',has_function_privilege('edusentia_worker_runtime','public.neon_identity_reset_password(uuid,uuid,uuid,text,text,text,boolean)','execute'),
+            'delete_bridge',has_function_privilege('edusentia_worker_runtime','public.neon_identity_delete_auth_user(uuid,uuid,uuid,text)','execute')
+          );
+
+          select 'PROFILE_COLUMNS '||jsonb_agg(jsonb_build_object('name',column_name,'type',data_type,'udt',udt_name,'nullable',is_nullable) order by ordinal_position)
+          from information_schema.columns where table_schema='public' and table_name='profiles';
+
+          select 'TEACHER_COLUMNS '||jsonb_agg(jsonb_build_object('name',column_name,'type',data_type,'nullable',is_nullable) order by ordinal_position)
+          from information_schema.columns where table_schema='public' and table_name='teachers';
+
+          select 'AUTH_USERS_COLUMNS '||jsonb_agg(jsonb_build_object('name',column_name,'type',data_type,'nullable',is_nullable) order by ordinal_position)
+          from information_schema.columns where table_schema='authn' and table_name='users';
+
+          select 'MEMBERSHIP_COLUMNS '||jsonb_agg(jsonb_build_object('name',column_name,'type',data_type,'nullable',is_nullable) order by ordinal_position)
+          from information_schema.columns where table_schema='app' and table_name='tenant_memberships';
+
+          select 'APP_ROLE_VALUES '||jsonb_agg(enumlabel order by enumsortorder)
+          from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace
+          where n.nspname='public' and t.typname='app_role';
+
+          select 'PROFILE_CONSTRAINTS '||coalesce(jsonb_agg(jsonb_build_object('name',conname,'def',pg_get_constraintdef(oid)) order by conname),'[]'::jsonb)
+          from pg_constraint where conrelid='public.profiles'::regclass;
+
+          select 'IDENTITY_FUNCTION_OWNERS '||jsonb_agg(jsonb_build_object('name',p.proname,'owner',pg_get_userbyid(p.proowner),'security_definer',p.prosecdef,'config',p.proconfig) order by p.proname)
+          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname in(
+            'admin_validate_user_bundle','admin_apply_user_bundle',
+            'neon_identity_create_auth_user','neon_identity_update_auth_user',
+            'neon_identity_reset_password','neon_identity_delete_auth_user'
+          );
+
+          select 'TEACHER_SAMPLE '||coalesce(jsonb_agg(jsonb_build_object(
+            'id',id,'profile_id',profile_id,'staff_no',staff_no,'active',active,'deleted',deleted_at is not null
+          ) order by created_at),'[]'::jsonb)
+          from public.teachers;
+
+          select 'ADMIN_SAMPLE '||coalesce(jsonb_agg(jsonb_build_object(
+            'id',id,'role',role,'active',active,'mfa_required',mfa_required,'must_change_password',must_change_password
+          ) order by created_at),'[]'::jsonb)
+          from public.profiles
+          where public.current_app_role_for(role)::text='system_admin';
+          SQL
