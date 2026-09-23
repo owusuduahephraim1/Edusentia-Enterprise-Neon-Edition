@@ -1,6 +1,6 @@
-import type { SessionContext } from "./types";
+import type { Env, SessionContext } from "./types";
 import type { TenantSql } from "./tenant-db";
-import { tenantTx } from "./db";
+import { db, tenantTx } from "./db";
 import { passwordHash } from "./crypto";
 
 type Body={action?:unknown;payload?:Record<string,unknown>};
@@ -60,7 +60,42 @@ function bundleFrom(payload:Record<string,unknown>,email:string,userId:string|nu
   };
 }
 
-async function createIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<string,unknown>,overrides:Partial<Record<string,unknown>>={},guardianId:string|null=null){
+async function syncLoginRoute(env:Env,ctx:SessionContext,email:string,roleName:string,active:boolean){
+  const master=db(env),normalized=clean(email,320).toLowerCase();
+  if(!normalized)fail("User login route email is required","login_route_invalid",500);
+  const rows=await master`select tenant_code,database_name
+    from platform.tenant_control
+    where tenant_id=${ctx.tenantId}::uuid
+      and status='active'
+      and database_state='isolated_ready'
+      and database_name is not null
+      and database_name<>''
+    limit 1`;
+  const route=rows[0] as any;
+  if(!route)fail("School login routing is unavailable","login_route_unavailable",503);
+  await master`insert into platform.login_directory(email_normalized,tenant_id,tenant_code,database_name,role_hint,active)
+    values(${normalized},${ctx.tenantId}::uuid,${String(route.tenant_code)},${String(route.database_name)},${clean(roleName,64)},${active})
+    on conflict(email_normalized,tenant_id) do update set
+      tenant_code=excluded.tenant_code,
+      database_name=excluded.database_name,
+      role_hint=excluded.role_hint,
+      active=excluded.active,
+      updated_at=now()`;
+}
+async function removeLoginRoute(env:Env,ctx:SessionContext,email:string){
+  const normalized=clean(email,320).toLowerCase();
+  if(!normalized)return;
+  await db(env)`delete from platform.login_directory where email_normalized=${normalized} and tenant_id=${ctx.tenantId}::uuid`;
+}
+async function identityEmail(sql:TenantSql,ctx:SessionContext,userId:string){
+  const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select email from authn.users where id=${userId}::uuid limit 1`
+  ]);
+  const row=(rows[0] as any)?.[0]??(rows[0] as any);
+  return clean(row?.email,320).toLowerCase();
+}
+
+async function createIdentity(env:Env,sql:TenantSql,ctx:SessionContext,payload:Record<string,unknown>,overrides:Partial<Record<string,unknown>>={},guardianId:string|null=null){
   const password=String(payload.password??"");
   if(password.length<8||password.length>128)fail("Use a password between 8 and 128 characters.","invalid_password",422);
   const fullName=clean(overrides.full_name??payload.full_name,200);
@@ -73,6 +108,7 @@ async function createIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<st
     const bundle=bundleFrom(payload,email,userId,overrides);
     await validateBundle(sql,ctx,{...bundle,user_id:null},false);
     try{
+      await syncLoginRoute(env,ctx,email,String(bundle.role),bundle.active!==false);
       const results=await tenantTx<any[]>(sql,ctx,txn=>[
         txn`select public.neon_identity_create_auth_user(
           ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${email},
@@ -85,6 +121,7 @@ async function createIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<st
       ]);
       return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[1] as any)?.[0]?.result??(results[1] as any)?.result};
     }catch(e:any){
+      await removeLoginRoute(env,ctx,email).catch(()=>{});
       if(String(e?.code||"")==="23505"&&/email|users_email_lower_uidx|already exists/i.test(String(e?.message||"")))continue;
       throw e;
     }
@@ -92,10 +129,11 @@ async function createIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<st
   fail("A unique school user account email could not be created","email_generation_failed",409);
 }
 
-async function updateIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<string,unknown>,overrides:Partial<Record<string,unknown>>={},guardianId:string|null=null){
+async function updateIdentity(env:Env,sql:TenantSql,ctx:SessionContext,payload:Record<string,unknown>,overrides:Partial<Record<string,unknown>>={},guardianId:string|null=null){
   const userId=uuid(payload.user_id);if(!userId)fail("User account is required","validation_error",422);
   if(String(payload.password??""))fail("Use the protected Reset password action for password changes.","use_reset_password_action",400);
   const fullName=clean(overrides.full_name??payload.full_name,200);if(!fullName)fail("Full name is required","validation_error",422);
+  const oldEmail=await identityEmail(sql,ctx,userId);
   const email=await generateEmail(sql,ctx,fullName,userId);
   const bundle=bundleFrom(payload,email,userId,overrides);
   await validateBundle(sql,ctx,bundle,true);
@@ -108,6 +146,8 @@ async function updateIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<st
     txn`select public.admin_apply_user_bundle(${ctx.userId}::uuid,${JSON.stringify(bundle)}::jsonb) result`,
     ...(guardianId?[txn`select public.neon_identity_link_guardian(${ctx.userId}::uuid,${guardianId}::uuid,${userId}::uuid) result`]:[])
   ]);
+  await syncLoginRoute(env,ctx,email,String(bundle.role),bundle.active!==false);
+  if(oldEmail&&oldEmail!==email)await removeLoginRoute(env,ctx,oldEmail);
   return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[1] as any)?.[0]?.result??(results[1] as any)?.result};
 }
 
@@ -135,7 +175,7 @@ async function resetPassword(sql:TenantSql,ctx:SessionContext,userId:string,pass
   return {ok:true,id:userId,password_reset:true,must_change_password:mustChange};
 }
 
-async function genericAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
+async function genericAdmin(env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
   const action=clean(body.action,80),payload=(body.payload&&typeof body.payload==="object"?body.payload:{}) as Record<string,unknown>;
   if(action==="complete_own_required_password_change"){
     const password=String(payload.password??"");
@@ -148,8 +188,8 @@ async function genericAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
   }
 
   requireAdmin(ctx);await ensureWritable(sql,ctx);
-  if(action==="create")return createIdentity(sql,ctx,payload);
-  if(action==="update")return updateIdentity(sql,ctx,payload);
+  if(action==="create")return createIdentity(env,sql,ctx,payload);
+  if(action==="update")return updateIdentity(env,sql,ctx,payload);
   if(action==="reset_password"){
     const userId=uuid(payload.user_id),password=String(payload.password??"");
     return resetPassword(sql,ctx,userId,password,payload.must_change_password!==false);
@@ -157,11 +197,13 @@ async function genericAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
   if(action==="delete"){
     const userId=uuid(payload.user_id);if(!userId)fail("User account is required","validation_error",422);
     await ensureDeletable(sql,ctx,userId);
+    const email=await identityEmail(sql,ctx,userId);
     await tenantTx<any[]>(sql,ctx,txn=>[
       txn`select public.neon_identity_delete_auth_user(
         ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${clean(payload.reason,500)}
       ) result`
     ]);
+    await removeLoginRoute(env,ctx,email);
     return {ok:true,id:userId,deleted:true};
   }
   fail("Unsupported user-management action","unsupported_action",400);
@@ -185,7 +227,7 @@ async function directoryRecord(sql:TenantSql,ctx:SessionContext,role:string,reco
   return {profileId:guardian.auth_user_id||null,fullName:String(guardian.full_name||""),phone:String(guardian.phone||"")};
 }
 
-async function directoryAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
+async function directoryAdmin(env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
   requireAdmin(ctx);await ensureWritable(sql,ctx);
   const action=clean(body.action,40),payload=(body.payload&&typeof body.payload==="object"?body.payload:{}) as Record<string,unknown>;
   const role=clean(payload.role,64);
@@ -199,17 +241,17 @@ async function directoryAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
   if(role!=="parent_guardian")overrides.staff_record_id=recordId;else overrides.staff_record_id=null;
   if(action==="create"){
     if(record.profileId)fail("This directory record already has an account","directory_already_linked",409);
-    return createIdentity(sql,ctx,payload,overrides,role==="parent_guardian"?recordId:null);
+    return createIdentity(env,sql,ctx,payload,overrides,role==="parent_guardian"?recordId:null);
   }
   if(action==="update"){
     if(!targetId||record.profileId!==targetId)fail("The selected account is not linked to this directory record","directory_link_mismatch",409);
-    return updateIdentity(sql,ctx,payload,overrides,role==="parent_guardian"?recordId:null);
+    return updateIdentity(env,sql,ctx,payload,overrides,role==="parent_guardian"?recordId:null);
   }
   fail("Unsupported directory user action","unsupported_action",400);
 }
 
-export async function handleLegacyIdentityFunction(name:string,sql:TenantSql,ctx:SessionContext,body:Body){
-  if(name==="admin-user-management")return genericAdmin(sql,ctx,body);
-  if(name==="directory-user-management")return directoryAdmin(sql,ctx,body);
+export async function handleLegacyIdentityFunction(name:string,env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
+  if(name==="admin-user-management")return genericAdmin(env,sql,ctx,body);
+  if(name==="directory-user-management")return directoryAdmin(env,sql,ctx,body);
   fail("Unsupported identity function","not_found",404);
 }
