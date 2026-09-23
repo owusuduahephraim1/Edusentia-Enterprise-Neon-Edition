@@ -1,0 +1,37 @@
+name: Student Admission Upgrade Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/student-admission-upgrade-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      RAW_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Trace existing tenant upgrade validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          BOOTSTRAP_DATABASE_URL="$(RAW_DATABASE_URL="$RAW_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.RAW_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$BOOTSTRAP_DATABASE_URL"
+          export BOOTSTRAP_DATABASE_URL
+          EXPECTED_RUNTIME_USER=edusentia_runtime bash -x scripts/update-isolated-operational-tenants.sh
