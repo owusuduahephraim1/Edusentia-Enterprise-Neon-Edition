@@ -1,0 +1,92 @@
+name: Student Admission Reuse Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/student-admission-reuse-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Inspect production admission reuse contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          TENANT_DATABASE_URL="$(ADMIN_DATABASE_URL="$ADMIN_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.ADMIN_DATABASE_URL);
+            u.pathname="/edusentia_nis_000001";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$ADMIN_DATABASE_URL"
+          echo "::add-mask::$TENANT_DATABASE_URL"
+          echo "migration=$(psql "$TENANT_DATABASE_URL" -Atc "select count(*) from app.schema_migrations where version='0058_reusable_student_admission_numbers'")"
+          echo "global_constraint_absent=$(psql "$TENANT_DATABASE_URL" -Atc "select not exists(select 1 from pg_constraint where conrelid='public.students'::regclass and conname='students_admission_no_key')")"
+          echo "active_index=$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.students_admission_no_ci_idx')")"
+          echo "gap_marker=$(psql "$TENANT_DATABASE_URL" -Atc "select position('generate_series(1,999)' in replace(pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure),' ',''))>0")"
+          echo "active_only_marker=$(psql "$TENANT_DATABASE_URL" -Atc "select position('s.deleted_at is null' in pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure))>0")"
+          echo "restore_marker=$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.next_student_identifier_for_prefix' in pg_get_functiondef('public.restore_student(uuid,text)'::regprocedure))>0")"
+          TENANT_ID="$(psql "$TENANT_DATABASE_URL" -Atc "select id from app.tenants order by created_at limit 1")"
+          ADMIN_ID="$(psql "$TENANT_DATABASE_URL" -Atc "select id from public.profiles where public.current_app_role_for(role)='system_admin' and active order by created_at limit 1")"
+          YEAR_ID="$(psql "$TENANT_DATABASE_URL" -Atc "select id from public.academic_years where deleted_at is null order by is_active desc,start_date desc nulls last limit 1")"
+          CLASS_ID="$(psql "$TENANT_DATABASE_URL" -Atc "select id from public.classes where deleted_at is null and active order by level_order,name limit 1")"
+          test -n "$TENANT_ID"
+          test -n "$ADMIN_ID"
+          test -n "$YEAR_ID"
+          test -n "$CLASS_ID"
+          psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_id="$TENANT_ID" -v admin_id="$ADMIN_ID" -v year_id="$YEAR_ID" -v class_id="$CLASS_ID" <<'SQL'
+          begin;
+          set local role edusentia_worker_runtime;
+          select app.set_request_context(:'tenant_id'::uuid,:'admin_id'::uuid,'system_admin',2::smallint);
+          do $reuse$
+          declare
+            first_result jsonb;
+            second_result jsonb;
+            first_id uuid;
+            first_no text;
+            second_no text;
+          begin
+            first_result:=public.save_student(jsonb_build_object(
+              'student',jsonb_build_object('first_name','AdmissionReuse','last_name','First','gender','Other','status','active'),
+              'enrollment',jsonb_build_object('academic_year_id',:'year_id','class_id',:'class_id','active',true),
+              'guardian','{}'::jsonb,
+              'reason','Admission reuse diagnostic first'
+            ));
+            first_id:=nullif(first_result#>>'{student,id}','')::uuid;
+            first_no:=first_result#>>'{student,admission_no}';
+            if first_id is null or coalesce(first_no,'')='' then raise exception 'first_student_creation_failed'; end if;
+            if not public.archive_student(first_id,'Admission reuse diagnostic archive') then raise exception 'archive_failed'; end if;
+            second_result:=public.save_student(jsonb_build_object(
+              'student',jsonb_build_object('first_name','AdmissionReuse','last_name','Second','gender','Other','status','active'),
+              'enrollment',jsonb_build_object('academic_year_id',:'year_id','class_id',:'class_id','active',true),
+              'guardian','{}'::jsonb,
+              'reason','Admission reuse diagnostic second'
+            ));
+            second_no:=second_result#>>'{student,admission_no}';
+            raise notice 'first_admission=% second_admission=%',first_no,second_no;
+            if second_no is distinct from first_no then
+              raise exception 'released_admission_number_was_not_reused: % vs %',first_no,second_no;
+            end if;
+          end
+          $reuse$;
+          rollback;
+          SQL
