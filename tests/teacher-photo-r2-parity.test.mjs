@@ -19,28 +19,42 @@ test("teacher photo UI parity", () => {
   assert.doesNotThrow(() => new Function(teachers));
 });
 
-test("teacher photo storage contract", () => {
+test("teacher photo Worker uses only the narrow authorization bridge", () => {
+  const routes = read("worker/src/routes.ts");
+  const start = routes.indexOf('kind==="staff-photos"');
+  const end = routes.indexOf('if(method==="GET"&&p==="/api/files/download")');
+  const photoSection = routes.slice(start, end);
+  assert.ok(photoSection.includes("public.neon_authorize_teacher_photo_upload"));
+  assert.ok(photoSection.includes("public.neon_teacher_photo_descriptor"));
+  assert.equal(photoSection.includes("auth.uid()"), false);
+  assert.equal(photoSection.includes("public.can_manage_teachers()"), false);
+  assert.equal(photoSection.includes("from public.teachers"), false);
+});
+
+test("teacher photo bridge preserves certified Supabase authorization semantics", () => {
+  const sql = read("database/reference-compat/0055_teacher_photo_r2_authorization.sql");
+  for (const marker of [
+    "public.is_system_admin() or t.profile_id=auth.uid()",
+    "perform public.require_sensitive_access()",
+    "public.license_write_allowed()",
+    "public.can_manage_teachers()",
+    "t.profile_id is distinct from auth.uid()",
+    "grant execute on function public.neon_authorize_teacher_photo_upload(uuid) to edusentia_worker_runtime",
+    "grant execute on function public.neon_teacher_photo_descriptor(uuid) to edusentia_worker_runtime"
+  ]) assert.ok(sql.includes(marker), marker);
+});
+
+test("teacher photo storage contract stays teacher-relative and private", () => {
   const routes = read("worker/src/routes.ts");
   const certified = read("database/reference-compat/0038_certified_teacher_principal_crud.sql");
   for (const marker of [
     'kind==="staff-photos"',
     "referencePath=",
-    "public.can_manage_teachers() or t.profile_id=${ctx.userId}::uuid",
     'p==="/api/files/staff-photo"',
     'h.set("content-disposition","inline")',
-    'h.set("cache-control","private, no-store")',
-    "public.license_write_allowed()"
+    'h.set("cache-control","private, no-store")'
   ]) assert.ok(routes.includes(marker), marker);
   assert.ok(certified.includes("split_part(clean_path,'/',1)<>target_teacher_id::text"));
-});
-
-test("teacher photo Worker authorization never requires direct auth schema access", () => {
-  const routes = read("worker/src/routes.ts");
-  const start = routes.indexOf('kind==="staff-photos"');
-  const end = routes.indexOf('if(method==="GET"&&p==="/api/files/download")');
-  const photoSection = routes.slice(start, end);
-  assert.ok(photoSection.includes("t.profile_id=${ctx.userId}::uuid"));
-  assert.equal(photoSection.includes("auth.uid()"), false);
 });
 
 test("teacher photo API client parity", () => {
