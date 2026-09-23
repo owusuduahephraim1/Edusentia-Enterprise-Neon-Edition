@@ -77,7 +77,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   const legacyIdentity=p.match(/^\/api\/compat\/functions\/(admin-user-management|directory-user-management)$/);
   if(method==="POST"&&legacyIdentity){
     const body=await readJson<any>(request);
-    return json(await handleLegacyIdentityFunction(legacyIdentity[1],sql,ctx,body));
+    return json(await handleLegacyIdentityFunction(legacyIdentity[1],env,sql,ctx,body));
   }
   if(method==="POST"&&p==="/api/compat/functions/tenant-auth-recovery"){
     const body=await readJson<Record<string,unknown>>(request);
