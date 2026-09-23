@@ -14,7 +14,8 @@
 
   function notify(title, message = "", kind = "info") {
     if (F()?.notify) F().notify(title, message, kind);
-    else if (kind === "error") window.alert(`${title}${message ? `\n\n${message}` : ""}`);
+    else if (typeof window.EdusentiaNotify === "function") window.EdusentiaNotify(title, message, kind);
+    else console[kind === "error" ? "error" : "log"](title, message);
   }
 
   function friendly(error) {
