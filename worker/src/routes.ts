@@ -123,6 +123,32 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json(result);
   }
 
+  if(method==="GET"&&p==="/api/academics/shs"){
+    requireRole(ctx,["system_admin","principal"]);
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.neon_shs_academic_console() result`]);
+    return json({ok:true,result:(rows[0] as any)?.result||{}});
+  }
+  if(method==="POST"&&p==="/api/academics/shs/insert"){
+    requireRole(ctx,["system_admin","principal"]);
+    const b=await readJson<any>(request);
+    const entity=String(b.entity||"").trim().toLowerCase();
+    const payload=b.payload&&typeof b.payload==="object"&&!Array.isArray(b.payload)?b.payload:{};
+    if(!["programme","level","mapping","enrollment"].includes(entity))return error("validation_error","Unsupported Senior High academic entity",422,requestId);
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.neon_shs_academic_insert(${entity},${JSON.stringify(payload)}::jsonb) result`]);
+    return json({ok:true,result:(rows[0] as any)?.result||null},201);
+  }
+  if(method==="POST"&&p==="/api/academics/shs/remove"){
+    requireRole(ctx,["system_admin","principal"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required to remove Senior High academic records",403,requestId);
+    const b=await readJson<any>(request);
+    const entity=String(b.entity||"").trim().toLowerCase(),id=String(b.id||"").trim();
+    if(!["programme","level","mapping","enrollment"].includes(entity))return error("validation_error","Unsupported Senior High academic entity",422,requestId);
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return error("validation_error","A valid record ID is required",422,requestId);
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.neon_shs_academic_remove(${entity},${id}::uuid) result`]);
+    if((rows[0] as any)?.result!==true)return error("mutation_not_applied","The requested Senior High academic record was not removed",409,requestId);
+    return json({ok:true,result:true});
+  }
+
   const certifiedRpcMatch=p.match(/^\/api\/compat\/rpc\/([a-z0-9_]+)$/);
   if(method==="POST"&&certifiedRpcMatch){
     const operation=certifiedRpcMatch[1],destructiveMutation=/^(archive_|delete_|remove_)/.test(operation);
