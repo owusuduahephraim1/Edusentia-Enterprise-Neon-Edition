@@ -217,11 +217,79 @@
     byId("brandName").textContent=tenantName;
     byId("brandLogo").alt=tenantName;
     await applyTenantBrandLogo(state.boot.tenant||{});
-    renderNav();
     show("appShell");
     setSync("online","Connected");
+    if(state.boot?.profile?.must_change_password===true){
+      openRequiredPasswordChange();
+      return;
+    }
+    renderNav();
     await loadNotificationCount();
     await navigate("dashboard");
+  }
+
+  function openRequiredPasswordChange(){
+    const dialog=byId("modal");
+    byId("mainNav").innerHTML="";
+    byId("pageTitle").textContent="Password Change Required";
+    byId("pageSubtitle").textContent="Set a private password before continuing";
+    byId("content").innerHTML='<section class="panel pad"><div class="verify-state warning"><strong>Your account is secured. Complete the required password change to continue.</strong></div><p class="muted">The temporary password created by the School System Administrator cannot be used as your permanent password.</p></section>';
+    byId("modalTitle").textContent="Change Password Required";
+    byId("modalSubtitle").textContent="Replace the temporary password before entering your workspace.";
+    byId("modalBody").innerHTML=`<form id="requiredPasswordForm" class="form-stack">
+      <label class="field"><span>New password</span><span class="password-wrap"><input id="requiredPassword" name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><button id="toggleRequiredPassword" class="icon-button password-toggle" type="button" aria-label="Show new password">◉</button></span></label>
+      <label class="field"><span>Confirm new password</span><span class="password-wrap"><input id="requiredPasswordConfirm" name="confirm_password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><button id="toggleRequiredPasswordConfirm" class="icon-button password-toggle" type="button" aria-label="Show confirmed password">◉</button></span></label>
+      <p class="muted">Use at least eight characters and do not reuse the temporary password.</p>
+      <p id="requiredPasswordMessage" class="form-message hidden" role="alert"></p>
+    </form>`;
+    byId("modalFooter").innerHTML='<button class="button ghost" id="requiredPasswordSignOut" type="button">Sign out</button><button class="button primary" id="requiredPasswordSave" type="button">Change password</button>';
+    byId("modalClose").classList.add("hidden");
+
+    const bindVisibility=(buttonId,inputId,label)=>{
+      const button=byId(buttonId),input=byId(inputId);if(!button||!input)return;
+      button.onclick=()=>{const showing=input.type==="text";input.type=showing?"password":"text";button.setAttribute("aria-label",`${showing?"Show":"Hide"} ${label}`);};
+    };
+    bindVisibility("toggleRequiredPassword","requiredPassword","new password");
+    bindVisibility("toggleRequiredPasswordConfirm","requiredPasswordConfirm","confirmed password");
+
+    byId("requiredPasswordSignOut").onclick=async()=>{
+      try{await api().logout();}catch{}
+      state.session=null;state.boot=null;
+      try{if(dialog?.open)dialog.close();}catch{}
+      location.reload();
+    };
+    byId("requiredPasswordSave").onclick=async()=>{
+      const form=byId("requiredPasswordForm"),button=byId("requiredPasswordSave"),msg=byId("requiredPasswordMessage");
+      if(msg){msg.textContent="";msg.classList.add("hidden");}
+      if(!form?.reportValidity())return;
+      const password=String(form.elements.password.value||""),confirmPassword=String(form.elements.confirm_password.value||"");
+      if(password!==confirmPassword){
+        if(msg){msg.textContent="The two passwords do not match.";msg.classList.remove("hidden");}
+        return;
+      }
+      if(password.length<8){
+        if(msg){msg.textContent="Use at least eight characters.";msg.classList.remove("hidden");}
+        return;
+      }
+      button.disabled=true;button.textContent="Changing";
+      try{
+        if(msg){msg.textContent="Verifying account security and updating password…";msg.classList.remove("hidden");}
+        const result=await api().adminUserManagement("complete_own_required_password_change",{password});
+        if(result?.ok!==true||result?.password_changed!==true)throw new Error(result?.message||result?.error||"Password update failed");
+        notifyAction("Password changed","Your private password is active. Sign in again with the new password.","success");
+        try{await api().logout();}catch{}
+        state.session=null;state.boot=null;
+        try{if(dialog?.open)dialog.close();}catch{}
+        setTimeout(()=>location.reload(),250);
+      }catch(error){
+        if(msg){msg.textContent=friendly(error);msg.classList.remove("hidden");}
+        notifyAction("Password not changed",friendly(error),"error");
+      }finally{
+        button.disabled=false;button.textContent="Change password";
+      }
+    };
+    if(typeof dialog?.showModal==="function")dialog.showModal();else dialog?.setAttribute("open","");
+    setTimeout(()=>byId("requiredPassword")?.focus(),0);
   }
 
   function renderNav(){
