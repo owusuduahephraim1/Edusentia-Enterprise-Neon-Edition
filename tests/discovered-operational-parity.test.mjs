@@ -51,10 +51,12 @@ test("0061 is installed and verified for future and existing tenants",()=>{
   assert.match(install,/reconcile_once_recorded "0061_discovered_operational_parity_repairs"/);
   assert.match(install,/reconcile_once_recorded "0062_user_directory_role_workspace_parity"/);
   assert.match(install,/reconcile_once_recorded "0063_identity_user_bundle_runtime_grants"/);
+  assert.match(install,/reconcile_once_recorded "0064_neon_identity_admin_bridges"/);
+  assert.match(upgrade,/0064_neon_identity_admin_bridges/);
   assert.match(upgrade,/0063_identity_user_bundle_runtime_grants/);
   assert.match(upgrade,/0062_user_directory_role_workspace_parity/);
   assert.match(upgrade,/0061_discovered_operational_parity_repairs/);
-  assert.match(upgrade,/migration_count" = "39/);
+  assert.match(upgrade,/migration_count" = "40/);
   assert.match(template,/operational_repairs_ok/);
 });
 
@@ -113,4 +115,25 @@ test("Neon Worker can execute the protected user-bundle helpers used by account 
   assert.match(worker,/admin_apply_user_bundle/);
   assert.match(sql,/grant execute on function public\.admin_validate_user_bundle\(uuid,jsonb,boolean\)\s+to edusentia_worker_runtime/i);
   assert.match(sql,/grant execute on function public\.admin_apply_user_bundle\(uuid,jsonb\)\s+to edusentia_worker_runtime/i);
+});
+
+
+test("user account lifecycle uses protected Neon identity bridges instead of direct auth-table writes",()=>{
+  const sql=read("database/reference-compat/0064_neon_identity_admin_bridges.sql");
+  const worker=read("worker/src/identity-admin.ts");
+  assert.match(sql,/create or replace function public\.neon_identity_create_auth_user/i);
+  assert.match(sql,/create or replace function public\.neon_identity_update_auth_user/i);
+  assert.match(sql,/create or replace function public\.neon_identity_reset_password/i);
+  assert.match(sql,/create or replace function public\.neon_identity_delete_auth_user/i);
+  assert.match(sql,/create or replace function public\.neon_identity_link_guardian/i);
+  assert.match(worker,/neon_identity_create_auth_user/);
+  assert.match(worker,/neon_identity_update_auth_user/);
+  assert.match(worker,/neon_identity_reset_password/);
+  assert.match(worker,/neon_identity_delete_auth_user/);
+  assert.match(worker,/neon_identity_link_guardian/);
+  assert.doesNotMatch(worker,/insert into authn\.users/i);
+  assert.doesNotMatch(worker,/insert into authn\.password_credentials/i);
+  assert.doesNotMatch(worker,/delete from authn\.users/i);
+  assert.match(worker,/list_profiles_with_access\(\)/);
+  assert.match(worker,/neon_guardian_account_records\(\)/);
 });
