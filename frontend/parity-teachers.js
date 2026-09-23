@@ -3,6 +3,33 @@
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   // ---------- Teachers ----------
+  const teacherPhotoUrls=new Map();
+  function teacherInitials(row={}){
+    const parts=[row.first_name,row.middle_name,row.last_name].filter(Boolean);
+    const name=parts.join(" ")||String(row.full_name||"Teacher");
+    const words=name.trim().split(/\s+/).filter(Boolean);
+    return esc(((words[0]?.[0]||"T")+(words.length>1?(words.at(-1)?.[0]||""):"")).toUpperCase());
+  }
+  function staffAvatarHtml(row={}){
+    const initials=teacherInitials(row);
+    return row.photo_url
+      ?`<span class="staff-avatar-photo"><img data-teacher-photo="${esc(row.photo_url)}" alt="Teacher photograph"><span>${initials}</span></span>`
+      :`<span class="avatar small-avatar">${initials}</span>`;
+  }
+  async function teacherPhotoUrl(photoPath){
+    const path=String(photoPath||"").trim();if(!path)return "";
+    if(teacherPhotoUrls.has(path))return teacherPhotoUrls.get(path);
+    const blob=await api().downloadStaffPhoto(path);
+    const url=URL.createObjectURL(blob);teacherPhotoUrls.set(path,url);return url;
+  }
+  async function hydrateTeacherPhotos(root=document){
+    const images=[...root.querySelectorAll("[data-teacher-photo]")];
+    await Promise.all(images.map(async img=>{
+      const path=img.dataset.teacherPhoto;if(!path)return;
+      try{img.src=await teacherPhotoUrl(path);img.onload=()=>img.parentElement?.classList.add("loaded");}
+      catch(error){console.warn("teacher_photo_display_failed",error);}
+    }));
+  }
   async function renderTeachers(){
     byId("content").innerHTML=`
       <div class="page-head"><div><h3>Teachers</h3><p>Certified teacher lifecycle, account links and photographs.</p></div><div class="page-actions"><button id="teacherAddAdvanced" class="button primary" type="button">Add teacher</button></div></div>
@@ -18,7 +45,8 @@
       const data=await certified("list_teachers",{search_text:byId("teacherAdvancedSearch")?.value?.trim()||"",status_filter:byId("teacherAdvancedStatus")?.value||"",archive_filter:byId("teacherAdvancedArchive")?.value||"active",page_number:1,page_size:100});
       const rows=Array.isArray(data?.rows)?data.rows:[];
       if(!rows.length){box.innerHTML=empty("No teacher records match the selected filters.");return;}
-      box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Staff no.</th><th>Qualification</th><th>Specialization</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${esc(String(row.first_name||row.full_name||"T").charAt(0))}</span><span class="cell-copy"><strong>${esc(row.full_name||[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.email||row.profile_email||"No email")}</small></span></div></td><td>${esc(row.staff_no||"—")}</td><td>${esc(row.qualification||"—")}</td><td>${esc(row.specialization||"—")}</td><td>${status(row.deleted_at?"archived":row.employment_status||"active")}</td><td><div class="table-actions">${row.deleted_at?`<button class="button success small" data-teacher-restore="${esc(row.id)}">Restore</button>`:`<button class="button secondary small" data-teacher-edit="${esc(row.id)}">Edit</button><button class="button danger small" data-teacher-archive="${esc(row.id)}">Remove</button>`}</div></td></tr>`).join("")}</tbody></table></div>`;
+      box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Staff no.</th><th>Qualification</th><th>Specialization</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main">${staffAvatarHtml(row)}<span class="cell-copy"><strong>${esc(row.full_name||[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.email||row.profile_email||"No email")}</small></span></div></td><td>${esc(row.staff_no||"—")}</td><td>${esc(row.qualification||"—")}</td><td>${esc(row.specialization||"—")}</td><td>${status(row.deleted_at?"archived":row.employment_status||"active")}</td><td><div class="table-actions">${row.deleted_at?`<button class="button success small" data-teacher-restore="${esc(row.id)}">Restore</button>`:`<button class="button secondary small" data-teacher-edit="${esc(row.id)}">Edit</button><button class="button danger small" data-teacher-archive="${esc(row.id)}">Remove</button>`}</div></td></tr>`).join("")}</tbody></table></div>`;
+      await hydrateTeacherPhotos(box);
       box.querySelectorAll("[data-teacher-edit]").forEach(b=>b.onclick=()=>openTeacherEditor(b.dataset.teacherEdit));
       box.querySelectorAll("[data-teacher-archive]").forEach(b=>b.onclick=()=>archiveTeacher(b.dataset.teacherArchive));
       box.querySelectorAll("[data-teacher-restore]").forEach(b=>b.onclick=()=>restoreTeacher(b.dataset.teacherRestore));
@@ -31,8 +59,12 @@
     }else{
       try{row.staff_no=await certified("generate_school_identifier",{identifier_kind:"teacher"});}catch(_){row.staff_no="";}
     }
+    let photoUrl="";if(row.photo_url){try{photoUrl=await teacherPhotoUrl(row.photo_url);}catch(_){}}
+    const initials=teacherInitials(row);
     openModal(id?"Edit teacher":"Add teacher","Certified teacher record with optimistic-concurrency protection.",`
-      <form id="teacherAdvancedForm" class="form-stack"><input type="hidden" name="id" value="${esc(row.id||"")}"><input type="hidden" name="updated_at" value="${esc(row.updated_at||"")}"><div class="form-grid">
+      <form id="teacherAdvancedForm" class="form-stack"><input type="hidden" name="id" value="${esc(row.id||"")}"><input type="hidden" name="updated_at" value="${esc(row.updated_at||"")}">
+      <div class="staff-photo-editor">${photoUrl?`<img id="teacherPhotoPreview" src="${esc(photoUrl)}" alt="Teacher photograph">`:`<span id="teacherPhotoPreview">${initials}</span>`}<label class="field"><span>Teacher photograph</span><input id="teacherPhotoAdvanced" type="file" accept="image/jpeg,image/png,image/webp"><small>Optional. The teacher can also upload or replace this from My Profile.</small></label></div>
+      <div class="form-grid">
         <label class="field"><span>Staff number</span><input name="staff_no" value="${esc(row.staff_no||"")}" required readonly aria-readonly="true"><small>Generated automatically from the school tenant identity.</small></label>
         <label class="field"><span>EMIS code</span><input name="emis_code" value="${esc(row.emis_code||"")}"></label>
         <label class="field"><span>First name</span><input name="first_name" value="${esc(row.first_name||"")}" required></label>
@@ -48,17 +80,30 @@
         <label class="field"><span>Employment status</span><select name="employment_status">${["active","leave","suspended","resigned","retired"].map(v=>`<option value="${v}" ${String(row.employment_status||"active")===v?"selected":""}>${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></label>
         <label class="field"><span>Address</span><input name="address" value="${esc(row.address||"")}"></label>
         <label class="field full"><span>Notes</span><textarea name="notes">${esc(row.notes||"")}</textarea></label>
-        <label class="field full"><span>Photograph</span><input id="teacherPhotoAdvanced" type="file" accept="image/jpeg,image/png,image/webp"></label>
       </div><p id="teacherAdvancedMessage" class="form-message hidden" role="alert"></p></form>`,
       '<button id="teacherAdvancedCancel" class="button ghost" type="button">Cancel</button><button id="teacherAdvancedSave" class="button primary" type="submit" form="teacherAdvancedForm">Save teacher</button>');
     byId("teacherAdvancedCancel").onclick=closeModal;
+    let localPhotoPreview="";
+    byId("teacherPhotoAdvanced").onchange=event=>{
+      const file=event.currentTarget.files?.[0];if(!file)return;
+      if(!/^image\/(jpeg|png|webp)$/i.test(file.type)){showMessage("teacherAdvancedMessage","Teacher photographs must be JPEG, PNG, or WebP images.");event.currentTarget.value="";return;}
+      if(file.size>8*1024*1024){showMessage("teacherAdvancedMessage","The selected photograph is too large. Choose an image below 8 MB.");event.currentTarget.value="";return;}
+      if(localPhotoPreview)URL.revokeObjectURL(localPhotoPreview);localPhotoPreview=URL.createObjectURL(file);
+      const current=byId("teacherPhotoPreview"),next=document.createElement("img");next.id="teacherPhotoPreview";next.alt="Teacher photograph";next.src=localPhotoPreview;current?.replaceWith(next);
+    };
     byId("teacherAdvancedForm").onsubmit=async e=>{
       e.preventDefault();const button=byId("teacherAdvancedSave");button.disabled=true;
       try{
         const payload=formValues(e.currentTarget);payload.active=true;payload.reason=id?"Teacher record updated from Neon testing workspace":"Teacher record created from Neon testing workspace";
         let saved=await certified("save_teacher",{payload}),teacher=saved?.teacher||saved;
         const file=byId("teacherPhotoAdvanced")?.files?.[0];
-        if(file){const uploaded=await api().uploadFile(file,"staff-photos");saved=await certified("set_teacher_photo",{target_teacher_id:teacher.id,target_photo_url:uploaded.objectKey,expected_updated_at:teacher.updated_at||null});}
+        if(file){
+          const uploaded=await api().uploadFile(file,"staff-photos",{subfolder:teacher.id});
+          const photoPath=String(uploaded.referencePath||String(uploaded.objectKey||"").split("/staff-photos/")[1]||"").trim();
+          if(!photoPath||!photoPath.startsWith(teacher.id+"/"))throw new Error("The teacher photograph path could not be verified.");
+          saved=await certified("set_teacher_photo",{target_teacher_id:teacher.id,target_photo_url:photoPath,expected_updated_at:teacher.updated_at||null});
+        }
+        if(localPhotoPreview){URL.revokeObjectURL(localPhotoPreview);localPhotoPreview="";}
         closeModal();await loadAdvancedTeachers();
       }catch(error){showMessage("teacherAdvancedMessage",friendly(error));}
       finally{button.disabled=false;}
