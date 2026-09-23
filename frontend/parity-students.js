@@ -2,7 +2,7 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
-  // ---------- Students: reusable admission numbering ----------
+  // ---------- Students: reusable admission numbering + protected photo parity ----------
   const studentPhotoUrls=new Map();
   function studentInitials(row={}){
     const parts=[row.first_name,row.middle_name,row.last_name].filter(Boolean);

@@ -1,4 +1,5 @@
 -- Neon/R2 student photograph authorization, canonical reference, and protected read contract.
+-- Permanent parity guard for upload, persistence, protected retrieval, and legacy full-key reads.
 -- Certified Supabase stores new student photo references as <student_uuid>/<object_name>.
 -- R2 stores the physical object under tenants/<tenant_uuid>/student-photos/<student_uuid>/<object_name>.
 -- Older Neon full-key references remain readable until the photograph is replaced.
