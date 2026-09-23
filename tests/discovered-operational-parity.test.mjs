@@ -60,6 +60,8 @@ test("0061 is installed and verified for future and existing tenants",()=>{
 test("Users and Access exposes the certified linked-record directories on Neon",()=>{
   const sql=read("database/reference-compat/0062_user_directory_role_workspace_parity.sql");
   assert.match(sql,/create or replace function public\.list_profiles_with_access\(\)/i);
+  assert.match(sql,/alter table public\.students[\s\S]*add column if not exists profile_id uuid/i);
+  assert.match(sql,/students_profile_id_uidx/);
   assert.match(sql,/'teacher_records'/);
   assert.match(sql,/'headteacher_records'/);
   assert.match(sql,/'accountant_records'/);
