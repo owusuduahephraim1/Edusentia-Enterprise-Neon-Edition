@@ -3,6 +3,32 @@
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   // ---------- Students: reusable admission numbering ----------
+  const studentPhotoUrls=new Map();
+  function studentInitials(row={}){
+    const parts=[row.first_name,row.middle_name,row.last_name].filter(Boolean);
+    const words=(parts.join(" ")||"Student").trim().split(/\s+/).filter(Boolean);
+    return esc(((words[0]?.[0]||"S")+(words.length>1?(words.at(-1)?.[0]||""):"")).toUpperCase());
+  }
+  function studentAvatarHtml(row={}){
+    const initials=studentInitials(row);
+    return row.photo_url
+      ?`<span class="staff-avatar-photo"><img data-student-photo="${esc(row.photo_url)}" data-student-id="${esc(row.id||"")}" alt="Student photograph"><span>${initials}</span></span>`
+      :`<span class="avatar">${initials}</span>`;
+  }
+  async function studentPhotoUrl(studentId,photoPath){
+    const id=String(studentId||"").trim(),path=String(photoPath||"").trim();if(!id||!path)return "";
+    const cacheKey=id+"|"+path;if(studentPhotoUrls.has(cacheKey))return studentPhotoUrls.get(cacheKey);
+    const blob=await api().downloadStudentPhoto(id,path);
+    const url=URL.createObjectURL(blob);studentPhotoUrls.set(cacheKey,url);return url;
+  }
+  async function hydrateStudentPhotos(root=document){
+    const images=[...root.querySelectorAll("[data-student-photo]")];
+    await Promise.all(images.map(async img=>{
+      const id=img.dataset.studentId,path=img.dataset.studentPhoto;if(!id||!path)return;
+      try{img.src=await studentPhotoUrl(id,path);img.onload=()=>img.parentElement?.classList.add("loaded");}
+      catch(error){console.warn("student_photo_display_failed",error);}
+    }));
+  }
   async function renderStudents(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>Students</h3><p>Certified student directory, enrolment and bulk admission tools.</p></div></div>${loading("Loading certified student workspace")}`;
     let config;
@@ -48,8 +74,9 @@
       const rows=Array.isArray(data?.rows)?data.rows:[];
       if(!rows.length){box.innerHTML=empty("No student records match the selected filters.");return;}
       box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Student</th><th>Admission no.</th><th>Class</th><th>Academic year</th><th>Roll no.</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        ${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${esc(String(row.first_name||row.last_name||"S").charAt(0).toUpperCase())}</span><span class="cell-copy"><strong>${esc([row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.gender||"—")} • ${formatDate(row.date_of_birth)}</small></span></div></td><td>${esc(row.admission_no||"—")}</td><td>${esc(row.class_name||"—")}</td><td>${esc(row.academic_year_name||"—")}</td><td>${esc(row.roll_number||"—")}</td><td>${status(row.archived?"archived":row.status)}</td><td><div class="table-actions"><button class="button ghost small" data-student-view="${esc(row.id)}">View</button>${canManage&&!row.archived?`<button class="button secondary small" data-student-edit="${esc(row.id)}">Edit</button>`:""}${isSystemAdmin()&&!row.archived?`<button class="button danger small" data-student-archive="${esc(row.id)}">Remove</button>`:""}${isSystemAdmin()&&row.archived?`<button class="button success small" data-student-restore="${esc(row.id)}">Restore</button>`:""}</div></td></tr>`).join("")}
+        ${rows.map(row=>`<tr><td><div class="cell-main">${studentAvatarHtml(row)}<span class="cell-copy"><strong>${esc([row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.gender||"—")} • ${formatDate(row.date_of_birth)}</small></span></div></td><td>${esc(row.admission_no||"—")}</td><td>${esc(row.class_name||"—")}</td><td>${esc(row.academic_year_name||"—")}</td><td>${esc(row.roll_number||"—")}</td><td>${status(row.archived?"archived":row.status)}</td><td><div class="table-actions"><button class="button ghost small" data-student-view="${esc(row.id)}">View</button>${canManage&&!row.archived?`<button class="button secondary small" data-student-edit="${esc(row.id)}">Edit</button>`:""}${isSystemAdmin()&&!row.archived?`<button class="button danger small" data-student-archive="${esc(row.id)}">Remove</button>`:""}${isSystemAdmin()&&row.archived?`<button class="button success small" data-student-restore="${esc(row.id)}">Restore</button>`:""}</div></td></tr>`).join("")}
       </tbody></table></div>`;
+      await hydrateStudentPhotos(box);
       box.querySelectorAll("[data-student-view]").forEach(b=>b.onclick=()=>openStudentRecord(b.dataset.studentView));
       box.querySelectorAll("[data-student-edit]").forEach(b=>b.onclick=async()=>{const config=await academicConfig();openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},b.dataset.studentEdit);});
       box.querySelectorAll("[data-student-archive]").forEach(b=>b.onclick=()=>archiveStudent(b.dataset.studentArchive));
@@ -60,8 +87,10 @@
   async function openStudentRecord(id){
     try{
       const data=await certified("get_student_record_v5",{target_student_id:id}),student=data?.student||{},enrolments=Array.isArray(data?.enrollments)?data.enrollments:[],guardians=Array.isArray(data?.guardians)?data.guardians:[],reports=Array.isArray(data?.reports)?data.reports:[];
+      let photoUrl="";if(student.id&&student.photo_url){try{photoUrl=await studentPhotoUrl(student.id,student.photo_url);}catch(_){}}
+      const recordPhoto=photoUrl?`<img class="student-record-photo" src="${esc(photoUrl)}" alt="Student photograph">`:`<span class="avatar large">${studentInitials(student)}</span>`;
       openModal([student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" ")||"Student",student.admission_no||"",`
-        <div class="grid two"><section class="panel pad"><div class="cell-main"><span class="avatar large">${esc(String(student.first_name||student.last_name||"S").charAt(0).toUpperCase())}</span><div class="cell-copy"><strong>${esc([student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" "))}</strong><small>${esc(student.gender||"—")} • ${formatDate(student.date_of_birth)}</small><small>${status(student.archived?"archived":student.status)}</small></div></div><div class="hr"></div><div class="section-title"><h4>Guardians</h4></div>${guardians.length?guardians.map(g=>'<div class="metric"><strong>'+esc(g.full_name||"Guardian")+'</strong><span>'+esc(g.relationship||"Guardian")+' • '+esc(g.phone||"No phone")+' • '+esc(g.email||"No email")+'</span></div>').join(""):'<p class="help-text">No guardian record</p>'}</section>
+        <div class="grid two"><section class="panel pad"><div class="cell-main">${recordPhoto}<div class="cell-copy"><strong>${esc([student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" "))}</strong><small>${esc(student.gender||"—")} • ${formatDate(student.date_of_birth)}</small><small>${status(student.archived?"archived":student.status)}</small></div></div><div class="hr"></div><div class="section-title"><h4>Guardians</h4></div>${guardians.length?guardians.map(g=>'<div class="metric"><strong>'+esc(g.full_name||"Guardian")+'</strong><span>'+esc(g.relationship||"Guardian")+' • '+esc(g.phone||"No phone")+' • '+esc(g.email||"No email")+'</span></div>').join(""):'<p class="help-text">No guardian record</p>'}</section>
         <section class="panel pad"><div class="section-title"><h4>Enrolment History</h4></div>${enrolments.length?enrolments.map(e=>'<div class="diff-row"><span>'+esc(e.academic_year_name||"")+' • '+esc(e.class_name||"")+'</span><b>'+(e.active?"Active":"Closed")+'</b></div>').join(""):'<p class="help-text">No enrolment record</p>'}<div class="hr"></div><div class="section-title"><h4>Report Cards</h4></div>${reports.length?reports.slice(0,10).map(r=>'<div class="diff-row"><span>'+esc(r.term_name||r.report_number||"Report")+'</span><b>'+esc(String(r.status||"draft").replaceAll("_"," "))+'</b></div>').join(""):'<p class="help-text">No report cards</p>'}</section></div>`,
         '<button id="studentRecordClose" class="button ghost" type="button">Close</button>'+(student.archived?'':'<button id="studentRecordEdit" class="button primary" type="button">Edit student</button>'));
       byId("studentRecordClose").onclick=closeModal;
@@ -101,8 +130,12 @@
     let guardians=[];try{guardians=await certified("list_guardian_portal_accounts",{search_text:""});}catch{}
     const student=record.student||{},latest=record.enrollments?.[0]||{},guardian=record.guardians?.find(g=>g.is_primary)||record.guardians?.[0]||{};
     const admission=student.admission_no||"";
+    let photoUrl="";if(student.id&&student.photo_url){try{photoUrl=await studentPhotoUrl(student.id,student.photo_url);}catch(_){}}
+    const initials=studentInitials(student);
     openModal(id?"Edit Student":"Add Student",id?admission:"Create a certified student. The admission number is generated from the admission class when the record is saved.",`
-      <form id="studentCertifiedForm" class="form-stack"><input type="hidden" name="id" value="${esc(student.id||"")}"><input type="hidden" name="updated_at" value="${esc(student.updated_at||"")}"><div class="form-grid three">
+      <form id="studentCertifiedForm" class="form-stack"><input type="hidden" name="id" value="${esc(student.id||"")}"><input type="hidden" name="updated_at" value="${esc(student.updated_at||"")}">
+      <div class="staff-photo-editor">${photoUrl?`<img id="studentPhotoPreview" src="${esc(photoUrl)}" alt="Student photograph">`:`<span id="studentPhotoPreview">${initials}</span>`}<label class="field"><span>Student photograph</span><input id="studentPhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG or WebP. The photograph is stored privately in the school’s dedicated R2 space.</small></label></div>
+      <div class="form-grid three">
         <label class="field"><span>Admission number</span><input id="studentAdmissionDisplay" value="${esc(id?admission:"Generated automatically on save")}" readonly aria-readonly="true"><small id="studentAdmissionHint">${id?"Admission identifier. It remains unchanged while the student is active and on promotion.":"Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001."}</small></label>
         <label class="field"><span>First name</span><input name="first_name" value="${esc(student.first_name||"")}" required></label>
         <label class="field"><span>Middle name</span><input name="middle_name" value="${esc(student.middle_name||"")}"></label>
@@ -113,7 +146,6 @@
         <label class="field"><span>Academic year</span><select name="academic_year_id">${optionRows(ctx.years,"id","name",latest.academic_year_id||"","No enrolment")}</select></label>
         <label class="field"><span>Class</span><select name="class_id">${optionRows(ctx.classes,"id","name",latest.class_id||"","No enrolment")}</select></label>
         <label class="field"><span>Roll number</span><input type="number" min="1" name="roll_number" value="${esc(latest.roll_number||"")}"></label>
-        <label class="field full"><span>Student photograph</span><input id="studentPhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG or WebP. The file is stored in the school’s dedicated R2 space.</small></label>
       </div><div class="section-title"><h4>Primary Guardian</h4></div><div class="form-grid three"><input type="hidden" name="guardian_id" value="${esc(guardian.id||"")}">
         <label class="field"><span>Full name</span><input name="guardian_name" value="${esc(guardian.full_name||student.guardian_name||"")}"></label>
         <label class="field"><span>Relationship</span><input name="relationship" value="${esc(guardian.relationship||"Guardian")}"></label>
@@ -136,7 +168,15 @@
     };
     studentForm.elements.class_id.addEventListener("change",refreshAdmissionHint);
     refreshAdmissionHint();
-    byId("studentCertifiedCancel").onclick=closeModal;
+    let localPhotoPreview="";
+    byId("studentPhotoFile").onchange=e=>{
+      const file=e.target.files?.[0];if(!file)return;
+      if(!["image/jpeg","image/png","image/webp"].includes(String(file.type||"").toLowerCase())){showMessage("studentCertifiedMessage","Student photographs must be JPEG, PNG or WebP images.");e.target.value="";return;}
+      if(file.size>8*1024*1024){showMessage("studentCertifiedMessage","Student photographs must be 8 MB or smaller.");e.target.value="";return;}
+      if(localPhotoPreview)URL.revokeObjectURL(localPhotoPreview);localPhotoPreview=URL.createObjectURL(file);
+      const current=byId("studentPhotoPreview"),next=document.createElement("img");next.id="studentPhotoPreview";next.alt="Student photograph";next.src=localPhotoPreview;current?.replaceWith(next);
+    };
+    byId("studentCertifiedCancel").onclick=()=>{if(localPhotoPreview)URL.revokeObjectURL(localPhotoPreview);closeModal();};
     studentForm.onsubmit=async e=>{
       e.preventDefault();const button=byId("studentCertifiedSave");button.disabled=true;
       try{
@@ -145,7 +185,16 @@
         if(!id&&(!v.academic_year_id||!v.class_id))throw new Error("Academic year and class are required for a new student so the admission number can be generated.");
         const payload={student:{id:v.id||"",updated_at:v.updated_at||"",admission_no:student.admission_no||"",first_name:String(v.first_name||"").trim(),middle_name:String(v.middle_name||"").trim(),last_name:String(v.last_name||"").trim(),gender:v.gender,date_of_birth:v.date_of_birth||"",status:v.status||"active",photo_url:student.photo_url||""},enrollment:v.academic_year_id&&v.class_id?{academic_year_id:v.academic_year_id,class_id:v.class_id,roll_number:v.roll_number||"",active:true}:{},guardian:{id:v.guardian_id||"",full_name:String(v.guardian_name||"").trim(),relationship:String(v.relationship||"Guardian").trim(),phone:String(v.guardian_phone||"").trim(),email:String(v.guardian_email||"").trim(),address:String(v.guardian_address||"").trim(),auth_user_id:v.guardian_auth_user_id||"",is_primary:true,can_view_reports:true,can_receive_notifications:e.currentTarget.elements.guardian_notify.checked},reason:id?"Student record updated":"Student registered"};
         let saved=await certified("save_student",{payload}),file=byId("studentPhotoFile")?.files?.[0];
-        if(file){const uploaded=await api().uploadFile(file,"student-photos");saved=await certified("set_student_photo",{target_student_id:saved?.student?.id||student.id,target_photo_url:uploaded.objectKey,expected_updated_at:saved?.student?.updated_at||null});}
+        if(file){
+          const savedStudent=saved?.student||saved;
+          const studentId=savedStudent?.id||student.id;
+          if(!studentId)throw new Error("The student photograph owner could not be verified.");
+          const uploaded=await api().uploadFile(file,"student-photos",{subfolder:studentId});
+          const photoPath=String(uploaded.referencePath||String(uploaded.objectKey||"").split("/student-photos/")[1]||"").trim();
+          if(!photoPath||!photoPath.startsWith(studentId+"/"))throw new Error("The student photograph path could not be verified.");
+          saved=await certified("set_student_photo",{target_student_id:studentId,target_photo_url:photoPath,expected_updated_at:savedStudent?.updated_at||null});
+        }
+        if(localPhotoPreview){URL.revokeObjectURL(localPhotoPreview);localPhotoPreview="";}
         closeModal();await loadCertifiedStudents();
       }catch(error){showMessage("studentCertifiedMessage",friendly(error));}
       finally{button.disabled=false;}
