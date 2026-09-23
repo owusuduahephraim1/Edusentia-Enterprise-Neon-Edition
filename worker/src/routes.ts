@@ -545,16 +545,9 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
         if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSubfolder))return error("invalid_upload_scope","Invalid teacher photograph scope",422,requestId);
         if(!/^image\/(jpeg|png|webp)$/i.test(type))return error("invalid_content_type","Teacher photographs must be JPEG, PNG, or WebP images",415,requestId);
         if(size>8*1024*1024)return error("invalid_file_size","Teacher photographs must be 8 MB or smaller",422,requestId);
-        const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
-          select (
-            public.license_write_allowed()
-            and exists(
-              select 1 from public.teachers t
-              where t.id=${rawSubfolder}::uuid and t.deleted_at is null
-                and (public.can_manage_teachers() or t.profile_id=${ctx.userId}::uuid)
-            )
-          ) allowed
-        `]);
+        const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+          txn`select public.neon_authorize_teacher_photo_upload(${rawSubfolder}::uuid) allowed`
+        ]);
         if((allowedRows[0] as any)?.allowed!==true)return error("forbidden","You are not authorized to upload this teacher photograph",403,requestId);
         subfolder=`/${rawSubfolder}`;
       }else return error("invalid_upload_scope","This upload type does not support subfolders",422,requestId);
@@ -613,16 +606,11 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const match=photoPath.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/([A-Za-z0-9._-]{1,220})$/i);
     if(!match)return error("invalid_photo_path","Invalid teacher photograph path",422,requestId);
     const teacherId=match[1];
-    const [accessRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
-      select t.photo_url,
-             (public.can_manage_teachers() or t.profile_id=${ctx.userId}::uuid) allowed
-      from public.teachers t
-      where t.id=${teacherId}::uuid and t.deleted_at is null
-      limit 1
-    `]);
-    const access=(accessRows[0] as any)||{};
-    if(access.allowed!==true)return error("forbidden","You are not authorized to view this teacher photograph",403,requestId);
-    if(String(access.photo_url||"")!==photoPath)return error("not_found","Teacher photograph is not available",404,requestId);
+    const [descriptorRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+      txn`select public.neon_teacher_photo_descriptor(${teacherId}::uuid) descriptor`
+    ]);
+    const descriptor=(descriptorRows[0] as any)?.descriptor||{};
+    if(String(descriptor.photo_url||"")!==photoPath)return error("not_found","Teacher photograph is not available",404,requestId);
     const key=`tenants/${ctx.tenantId}/staff-photos/${photoPath}`;
     const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'active') metadata`]);
     const metadata=(metaRows[0] as any)?.metadata as any;
