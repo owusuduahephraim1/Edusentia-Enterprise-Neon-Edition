@@ -96,3 +96,9 @@ test("Accounts Office dashboard accepts both certified role spellings",()=>{
   const dashboard=read("frontend/tenant-accountant-dashboard-v1.js");
   assert.match(dashboard,/\["accountant","accounts_office"\]\.includes/);
 });
+
+
+test("Teacher and Principal linked-record choices remain selected after change",()=>{
+  const ui=read("frontend/parity-enterprise-workspaces.js");
+  assert.match(ui,/selected=staffSelect\.value\|\|selectedGeneric\|\|""/);
+});
