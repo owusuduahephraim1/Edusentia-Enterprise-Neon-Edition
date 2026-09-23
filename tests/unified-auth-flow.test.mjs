@@ -107,3 +107,13 @@ test("Required password changes block workspace entry until completed",()=>{
   assert.match(identity,/action==="complete_own_required_password_change"/);
   assert.match(identity,/resetPassword\(sql,ctx,ctx\.userId,password,false\)/);
 });
+
+
+test("Tenant logout returns to the branded school sign-in instead of the public registration page",()=>{
+  const app=read("frontend/app.js");
+  assert.match(app,/function tenantLoginUrl\(session=state\.session\)/);
+  assert.match(app,/target\.searchParams\.set\("school",code\)/);
+  assert.match(app,/const target=tenantLoginUrl\(\);[\s\S]*api\(\)\.logout\(\)[\s\S]*location\.replace\(target\)/);
+  assert.match(app,/registerSchoolButton"\)\?\.classList\.toggle\("hidden",tenantMode\)/);
+  assert.match(app,/authBrandName"\)\.textContent=tenantMode\?\(tenant\.school_name/);
+});
