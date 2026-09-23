@@ -57,6 +57,25 @@ test("teacher photo Neon bridge uses Worker request context without auth-schema 
   assert.ok(upgrade.includes("0056_teacher_photo_neon_context_fix"));
 });
 
+test("teacher photo save contract stores certified teacher-relative paths over tenant R2", () => {
+  const sql = read("database/reference-compat/0057_teacher_photo_reference_contract.sql");
+  const install = read("database/reference-compat/install-operational-parity.sh");
+  const upgrade = read("scripts/update-isolated-operational-tenants.sh");
+  for (const marker of [
+    "app.current_user_id()",
+    "split_part(clean_path,'/',1)",
+    "target_teacher_id::text",
+    "tenants/'||v_tenant_id::text||'/staff-photos/'||clean_path",
+    "storage.object_metadata",
+    "m.status='active'",
+    "lower(m.content_type) like 'image/%'",
+    "grant execute on function public.set_teacher_photo(uuid,text,timestamptz) to edusentia_worker_runtime"
+  ]) assert.ok(sql.includes(marker), marker);
+  assert.equal(sql.includes("t.profile_id=auth.uid()"), false);
+  assert.ok(install.includes("0057_teacher_photo_reference_contract"));
+  assert.ok(upgrade.includes("0057_teacher_photo_reference_contract"));
+});
+
 test("teacher photo storage contract stays teacher-relative and private", () => {
   const routes = read("worker/src/routes.ts");
   const certified = read("database/reference-compat/0038_certified_teacher_principal_crud.sql");

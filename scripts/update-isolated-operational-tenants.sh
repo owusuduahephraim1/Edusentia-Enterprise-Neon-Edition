@@ -130,10 +130,10 @@ SQL
       '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
       '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
       '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
-      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix'
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract'
     )
   ")"
-  test "$migration_count" = "32"
+  test "$migration_count" = "33"
 
   plan_parity_count="$(psql "$TENANT_DATABASE_URL" -Atc "
     select count(*)
@@ -173,6 +173,10 @@ SQL
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))=0")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))>0")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('split_part(clean_path' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
 
   psql "$TENANT_DATABASE_URL" -Atc "
     select distinct p.proname
