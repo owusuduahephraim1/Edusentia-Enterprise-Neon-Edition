@@ -45,7 +45,7 @@
     const response=await fetch(uploadUrl,{method:prepared.method||"PUT",credentials:"include",headers:{"content-type":contentType},body:file});
     const payload=await response.json().catch(()=>({}));
     if(!response.ok){const e=payload?.error||{};throw new ApiError(e.message||`Upload failed (${response.status})`,response.status,e.code||"upload_failed",e.details);}
-    return {...payload,objectKey:payload.objectKey||prepared.objectKey};
+    return {...payload,objectKey:payload.objectKey||prepared.objectKey,referencePath:payload.referencePath||prepared.referencePath||""};
   }
 
   async function uploadReportPdf(reportId,file){
@@ -72,6 +72,12 @@
   async function downloadFile(objectKey){
     const response=await fetch(`${apiBase}/api/files/download?key=${encodeURIComponent(String(objectKey||""))}`,{credentials:"include"});
     if(!response.ok){const payload=await response.json().catch(()=>({}));const e=payload?.error||{};throw new ApiError(e.message||`Download failed (${response.status})`,response.status,e.code||"download_failed",e.details);}
+    return response.blob();
+  }
+
+  async function downloadStaffPhoto(photoPath){
+    const response=await fetch(`${apiBase}/api/files/staff-photo?path=${encodeURIComponent(String(photoPath||""))}`,{credentials:"include",headers:{accept:"image/avif,image/webp,image/png,image/jpeg,image/*"}});
+    if(!response.ok){const payload=await response.json().catch(()=>({}));const e=payload?.error||{};throw new ApiError(e.message||`Photograph download failed (${response.status})`,response.status,e.code||"photo_download_failed",e.details);}
     return response.blob();
   }
 
@@ -117,6 +123,7 @@
     prepareUpload:(payload)=>post("/api/files/upload-url",payload),
     uploadFile,
     downloadFile,
+    downloadStaffPhoto,
     uploadReportPdf,
     downloadReportPdf,
     deleteReportPdfObject,
