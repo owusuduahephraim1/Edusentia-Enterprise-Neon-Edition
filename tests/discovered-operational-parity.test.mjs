@@ -49,7 +49,47 @@ test("0061 is installed and verified for future and existing tenants",()=>{
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
   const template=read("database/tenant-template/install.sh");
   assert.match(install,/reconcile_once_recorded "0061_discovered_operational_parity_repairs"/);
+  assert.match(install,/reconcile_once_recorded "0062_user_directory_role_workspace_parity"/);
+  assert.match(upgrade,/0062_user_directory_role_workspace_parity/);
   assert.match(upgrade,/0061_discovered_operational_parity_repairs/);
-  assert.match(upgrade,/migration_count" = "37/);
+  assert.match(upgrade,/migration_count" = "38/);
   assert.match(template,/operational_repairs_ok/);
+});
+
+
+test("Users and Access exposes the certified linked-record directories on Neon",()=>{
+  const sql=read("database/reference-compat/0062_user_directory_role_workspace_parity.sql");
+  assert.match(sql,/create or replace function public\.list_profiles_with_access\(\)/i);
+  assert.match(sql,/'teacher_records'/);
+  assert.match(sql,/'headteacher_records'/);
+  assert.match(sql,/'accountant_records'/);
+  assert.match(sql,/'student_records'/);
+  assert.match(sql,/left join authn\.users/i);
+  assert.match(sql,/neon_certified_runtime_owner/);
+  assert.match(sql,/'teachers','headteachers','accounts_office_staff','students'/);
+  assert.match(sql,/grant execute on function public\.list_profiles_with_access\(\) to edusentia_worker_runtime/i);
+});
+
+test("Neon loads the certified user-access linkage repair instead of a missing module",()=>{
+  const linkage=read("frontend/tenant-user-access-linkage-v4.js");
+  const loader=read("frontend/tenant-accountant-student-submit-v3.js");
+  assert.match(loader,/tenant-user-access-linkage-v4\.js/);
+  assert.match(linkage,/EDS_USER_ACCESS_LINKAGE_V4/);
+  assert.match(linkage,/guardianAccountRecords/);
+  assert.match(linkage,/directoryUserManagement/);
+  assert.match(linkage,/parent_guardian/);
+  assert.match(linkage,/student/);
+});
+
+test("academic promotion and teacher assignment keep the saved Neon state visible",()=>{
+  const academics=read("frontend/parity-academics.js");
+  assert.match(academics,/S\.data\.school=\{\.\.\.\(S\.data\.school\|\|\{\}\),promotion_cutoff_score:saved\}/);
+  assert.match(academics,/shellState\.boot\.school/);
+  assert.match(academics,/teacher_records/);
+  assert.match(academics,/profile_id/);
+});
+
+test("Accounts Office dashboard accepts both certified role spellings",()=>{
+  const dashboard=read("frontend/tenant-accountant-dashboard-v1.js");
+  assert.match(dashboard,/\["accountant","accounts_office"\]\.includes/);
 });
