@@ -53,7 +53,8 @@
 
   function notify(title, message = "", kind = "info") {
     if (F()?.notify) F().notify(title, message, kind);
-    else if (kind === "error") window.alert(`${title}${message ? `\n\n${message}` : ""}`);
+    else if (typeof window.EdusentiaNotify === "function") window.EdusentiaNotify(title, message, kind);
+    else console[kind === "error" ? "error" : "log"](title, message);
   }
 
   function roleLabel(value) {
@@ -173,7 +174,13 @@
           `This replaces ${profile.full_name || "the user's"} current password and forces a password change at the next sign-in.`,
           "Issue password",
         )
-      : (window.prompt("Reason for issuing a new temporary password:") || "").trim();
+      : typeof window.EdusentiaPrompt === "function"
+        ? String(await window.EdusentiaPrompt(
+            "Reason for issuing a new temporary password:",
+            "",
+            { title: "Issue temporary password", confirmLabel: "Issue password", required: true },
+          ) || "").trim()
+        : "";
     if (!reason) return false;
 
     const password = generateTemporaryPassword();
