@@ -3,8 +3,8 @@ begin;
 
 -- Fix the production identity bridge membership upsert.  The original bridge
 -- used a PL/pgSQL parameter named tenant_id and ON CONFLICT(tenant_id,user_id),
--- which PostgreSQL treated as an ambiguous reference.  Use a distinct
--- parameter name and the primary-key constraint explicitly.
+-- which PostgreSQL treated as an ambiguous reference.  Keep the existing
+-- function parameter name for CREATE OR REPLACE compatibility and target the primary-key constraint explicitly.
 --
 -- Also complete the certified role enum so Accountant and Student accounts can
 -- be represented by the same profile model used by the working reference app.
@@ -14,7 +14,7 @@ alter type public.app_role add value if not exists 'student';
 
 create or replace function public.neon_identity_create_auth_user(
   actor_id uuid,
-  target_tenant_id uuid,
+  tenant_id uuid,
   target_user_id uuid,
   target_email text,
   target_display_name text,
@@ -37,7 +37,7 @@ begin
     raise exception 'Access denied' using errcode='42501';
   end if;
   perform public.require_sensitive_access();
-  if target_tenant_id is null or target_tenant_id is distinct from app.current_tenant_id() then
+  if tenant_id is null or tenant_id is distinct from app.current_tenant_id() then
     raise exception 'Tenant context mismatch' using errcode='42501';
   end if;
   if target_user_id is null or btrim(coalesce(target_email,''))='' or btrim(coalesce(target_display_name,''))='' then
@@ -67,7 +67,7 @@ begin
 
   insert into app.tenant_memberships(tenant_id,user_id,role,status,mfa_required)
   values(
-    target_tenant_id,target_user_id,target_role,
+    tenant_id,target_user_id,target_role,
     case when coalesce(target_active,true) then 'active' else 'suspended' end,
     coalesce(target_mfa_required,false)
   )
@@ -80,7 +80,7 @@ $function$;
 
 create or replace function public.neon_identity_update_auth_user(
   actor_id uuid,
-  target_tenant_id uuid,
+  tenant_id uuid,
   target_user_id uuid,
   target_email text,
   target_display_name text,
@@ -100,7 +100,7 @@ begin
     raise exception 'Access denied' using errcode='42501';
   end if;
   perform public.require_sensitive_access();
-  if target_tenant_id is null or target_tenant_id is distinct from app.current_tenant_id() then
+  if tenant_id is null or tenant_id is distinct from app.current_tenant_id() then
     raise exception 'Tenant context mismatch' using errcode='42501';
   end if;
 
@@ -122,7 +122,7 @@ begin
 
   insert into app.tenant_memberships(tenant_id,user_id,role,status,mfa_required)
   values(
-    target_tenant_id,target_user_id,target_role,
+    tenant_id,target_user_id,target_role,
     case when coalesce(target_active,true) then 'active' else 'suspended' end,
     coalesce(target_mfa_required,false)
   )
