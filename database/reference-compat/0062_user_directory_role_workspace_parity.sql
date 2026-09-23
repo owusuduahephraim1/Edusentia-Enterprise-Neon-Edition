@@ -1,3 +1,4 @@
+-- Production rollout marker: quality gate green before applying directory-role parity.
 begin;
 
 -- Neon production parity repair for directory-linked Users & Access and role workspaces.
