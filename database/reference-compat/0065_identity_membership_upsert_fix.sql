@@ -1,3 +1,4 @@
+-- Production rollout marker: quality gate green for identity membership fix.
 begin;
 
 -- Fix the production identity bridge membership upsert.  The original bridge
