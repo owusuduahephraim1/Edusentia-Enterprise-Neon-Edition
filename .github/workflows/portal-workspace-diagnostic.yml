@@ -79,6 +79,12 @@ jobs:
           from pg_class c join pg_namespace n on n.oid=c.relnamespace
           where n.nspname='public' and c.relname in ('teachers','headteachers','accounts_office_staff','students','student_guardians');
 
+          select 'POLICY_META '||coalesce(jsonb_agg(jsonb_build_object(
+            'table',tablename,'policy',policyname,'cmd',cmd,'roles',roles,'qual',qual
+          ) order by tablename,policyname),'[]'::jsonb)::text
+          from pg_policies
+          where schemaname='public' and tablename in ('teachers','headteachers','students','student_guardians');
+
           set local role edusentia_worker_runtime;
           select app.set_request_context(
             current_setting('diag.tenant_id')::uuid,
