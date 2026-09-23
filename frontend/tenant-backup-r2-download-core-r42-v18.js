@@ -3,7 +3,7 @@
   const SELECTOR='[data-backup-download]';
   const busy=new WeakSet();
   function config(){return window.RCE_CONFIG||window.NIS_CONFIG||{}}
-  function tenantClient(){if(window.EDS_TENANT_AUTH_CLIENT||window.EdusentiaCompatClient)return window.EDS_TENANT_AUTH_CLIENT||window.EdusentiaCompatClient;const c=config();if(!window.supabase?.createClient||!/\.supabase\.co$/i.test(new URL(String(c.supabaseUrl||"https://invalid.invalid")).hostname))return null;return window.supabase.createClient(c.supabaseUrl,c.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}
+  function tenantClient(){return window.EDS_TENANT_AUTH_CLIENT||window.EdusentiaCompatClient||null}
   function notice(title,message,type="success"){
     const stack=document.getElementById("toastStack");
     if(!stack){if(type==="error")alert(`${title}\n\n${message}`);return}
