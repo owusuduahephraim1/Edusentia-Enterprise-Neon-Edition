@@ -130,10 +130,10 @@ SQL
       '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
       '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
       '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
-      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges'
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix'
     )
   ")"
-  test "$migration_count" = "40"
+  test "$migration_count" = "41"
 
   user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
     select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
@@ -146,6 +146,9 @@ SQL
       and has_function_privilege('edusentia_worker_runtime','public.neon_identity_link_guardian(uuid,uuid,uuid)','execute')
       and has_function_privilege('edusentia_worker_runtime','public.neon_identity_reset_password(uuid,uuid,uuid,text,text,text,boolean)','execute')
       and has_function_privilege('edusentia_worker_runtime','public.neon_identity_delete_auth_user(uuid,uuid,uuid,text)','execute')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='accountant')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='student')
+      and position('on conflict on constraint tenant_memberships_pkey' in lower(pg_get_functiondef('public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)'::regprocedure)))>0
       and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
       and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
       and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
