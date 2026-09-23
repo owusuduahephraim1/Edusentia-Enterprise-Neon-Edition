@@ -256,7 +256,7 @@ SQL
       lower(trim(u.email)),
       t.id::text,
       t.code,
-      :'database_name',
+      '$database_name',
       m.role,
       case when u.disabled_at is null and m.status='active' and coalesce(p.active,true) then 'true' else 'false' end
     )
@@ -269,12 +269,12 @@ SQL
     order by lower(trim(u.email))
   " | psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1
 
-  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -At -v tenant_code="$tenant_code" -v database_name="$database_name" -c "
+  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "
     select count(*)
     from platform.login_directory d
     join platform.tenant_control tc on tc.tenant_id=d.tenant_id
-    where tc.tenant_code=:'tenant_code'
-      and tc.database_name=:'database_name'
+    where tc.tenant_code='$tenant_code'
+      and tc.database_name='$database_name'
       and d.active
   ")"
   tenant_login_count="$(psql "$TENANT_DATABASE_URL" -Atc "
