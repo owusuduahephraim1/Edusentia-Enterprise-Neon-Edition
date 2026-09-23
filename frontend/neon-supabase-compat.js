@@ -41,6 +41,8 @@
           ?await api().adminUserManagement(action,payload)
           :await api().directoryUserManagement(action,payload);
       }else if(name==="tenant-auth-recovery")data=await api().tenantAuthRecovery(action,body);
+      else if(name==="scheduled-backup")data=await api().scheduledBackup(action,body);
+      else if(name==="backup-download-gateway")data=await api().backupDownloadGateway(String(body?.backup_id||payload?.backup_id||""));
       else throw Object.assign(new Error("Unsupported compatibility function: "+name),{code:"compat_function_not_supported"});
       return {data,error:null};
     }catch(error){return {data:null,error:asError(error)};}
@@ -51,6 +53,7 @@
   }
   const auth={
     async getSession(){try{return {data:{session:await sessionValue()},error:null};}catch(error){return {data:{session:null},error:asError(error)};}},
+    mfa:{async getAuthenticatorAssuranceLevel(){try{const session=await sessionValue();const level=Number(session?.assurance_level||1)>=2?"aal2":"aal1";return {data:{currentLevel:level,nextLevel:level},error:null};}catch(error){return {data:null,error:asError(error)};}}},
     onAuthStateChange(callback){
       let active=true;listeners.add(callback);
       queueMicrotask(async()=>{if(!active)return;const session=await sessionValue().catch(()=>null);if(active)callback(session?"SIGNED_IN":"SIGNED_OUT",session);});
