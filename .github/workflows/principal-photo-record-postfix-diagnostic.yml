@@ -1,0 +1,123 @@
+name: Principal Photo Record Postfix Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/principal-photo-record-postfix-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      RAW_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Verify production Principal record and photograph contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN_DATABASE_URL="$(RAW_DATABASE_URL="$RAW_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.RAW_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          TENANT_DATABASE_URL="$(ADMIN_DATABASE_URL="$ADMIN_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.ADMIN_DATABASE_URL);
+            u.pathname="/edusentia_nis_000001";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$ADMIN_DATABASE_URL"
+          echo "::add-mask::$TENANT_DATABASE_URL"
+
+          psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 -At <<'SQL'
+          begin;
+          select app.set_request_context(
+            (select id from app.tenants order by created_at limit 1),
+            (select id from public.profiles where public.current_app_role_for(role)='system_admin' and active order by created_at limit 1),
+            'system_admin',
+            2::smallint
+          );
+
+          do $verify$
+          declare
+            hid uuid;
+            tid uuid:=app.current_tenant_id();
+            p text;
+            record jsonb;
+            key text;
+            photo_count integer;
+          begin
+            if not exists(select 1 from app.schema_migrations where version='0060_principal_photo_r2_contract') then
+              raise exception '0060 Principal photo migration is not installed';
+            end if;
+            if to_regprocedure('public.neon_authorize_headteacher_photo_upload(uuid)') is null
+               or to_regprocedure('public.neon_headteacher_photo_descriptor(uuid)') is null then
+              raise exception 'Principal photograph bridge functions are missing';
+            end if;
+            if position('app.current_user_id()' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))=0
+               or position('storage.object_metadata' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))=0 then
+              raise exception 'Principal photo save function is not on the protected Neon/R2 contract';
+            end if;
+
+            select h.id into hid
+            from public.headteachers h
+            where h.deleted_at is null
+            order by h.updated_at desc
+            limit 1;
+            if hid is null then raise exception 'No active Principal record exists'; end if;
+
+            record:=public.get_headteacher_record(hid);
+            if not (record ? 'principal') then
+              raise exception 'Certified Principal record response shape is missing the principal object';
+            end if;
+            if btrim(coalesce(record->'principal'->>'full_name',''))=''
+               or btrim(coalesce(record->'principal'->>'phone',''))='' then
+              raise exception 'Principal record is not populated';
+            end if;
+
+            select count(*) into photo_count
+            from public.headteachers h
+            where h.deleted_at is null and btrim(coalesce(h.photo_url,''))<>'';
+
+            if photo_count>0 then
+              select h.id,h.photo_url into hid,p
+              from public.headteachers h
+              where h.deleted_at is null and btrim(coalesce(h.photo_url,''))<>''
+              order by h.updated_at desc
+              limit 1;
+
+              if p like ('tenants/'||tid::text||'/staff-photos/%') then key:=p;
+              else key:='tenants/'||tid::text||'/staff-photos/'||p;
+              end if;
+
+              if not exists(
+                select 1 from storage.object_metadata m
+                where m.tenant_id=tid and m.object_key=key and m.status='active'
+                  and lower(m.content_type) like 'image/%'
+              ) then
+                raise exception 'Existing Principal photograph lacks active image metadata';
+              end if;
+
+              if (public.neon_headteacher_photo_descriptor(hid)->>'photo_url') is distinct from p then
+                raise exception 'Principal photo descriptor does not match the record';
+              end if;
+            end if;
+
+            raise notice 'PRINCIPAL_POSTFIX_OK active_record=true record_populated=true photo_rows=%',photo_count;
+          end
+          $verify$;
+          rollback;
+          SQL
