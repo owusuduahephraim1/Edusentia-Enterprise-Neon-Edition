@@ -126,6 +126,9 @@ begin
   end if;
 
   if kind='programme' then
+    if btrim(coalesce(payload->>'code',''))='' or btrim(coalesce(payload->>'name',''))='' then
+      raise exception 'Programme code and name are required' using errcode='22023';
+    end if;
     insert into public.academic_programmes(
       code,name,institution_scope,award_type,duration_years,description,active
     ) values(
@@ -137,10 +140,7 @@ begin
       btrim(coalesce(payload->>'description','')),
       coalesce((payload->>'active')::boolean,true)
     )
-    returning to_jsonb(academic_programmes.*) into result;
-    if coalesce(result->>'code','')='' or coalesce(result->>'name','')='' then
-      raise exception 'Programme code and name are required' using errcode='22023';
-    end if;
+    returning to_jsonb(academic_programmes) into result;
 
   elsif kind='level' then
     programme_id:=(payload->>'programme_id')::uuid;
@@ -156,7 +156,7 @@ begin
       (payload->>'level_order')::integer,
       coalesce((payload->>'active')::boolean,true)
     )
-    returning to_jsonb(academic_levels.*) into result;
+    returning to_jsonb(academic_levels) into result;
 
   elsif kind='mapping' then
     programme_id:=(payload->>'programme_id')::uuid;
@@ -184,7 +184,7 @@ begin
       coalesce((payload->>'required')::boolean,true),
       coalesce(nullif(payload->>'display_order','')::integer,0)
     )
-    returning to_jsonb(shs_programme_subjects.*) into result;
+    returning to_jsonb(shs_programme_subjects) into result;
 
   elsif kind='enrollment' then
     student_id:=(payload->>'student_id')::uuid;
@@ -216,7 +216,7 @@ begin
       student_id,programme_id,academic_year_id,level_id,status_text,
       nullif(payload->>'started_on','')::date
     )
-    returning to_jsonb(student_programme_enrollments.*) into result;
+    returning to_jsonb(student_programme_enrollments) into result;
 
   else
     raise exception 'Unsupported Senior High academic entity' using errcode='22023';
