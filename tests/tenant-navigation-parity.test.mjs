@@ -128,7 +128,7 @@ test("tenant shell does not render literal newline escape text above the workspa
 
 test("PWA shell carries every navigation parity registrar",()=>{
   const sw=read("frontend/service-worker.js");
-  assert.match(sw,/edusentia-neon-v18/);
+  assert.match(sw,/edusentia-neon-v19/);
   for(const asset of [
     "parity-common.js","parity-academics.js","parity-students.js","parity-teachers.js",
     "parity-principal.js","parity-timetable.js","parity-reports.js",
