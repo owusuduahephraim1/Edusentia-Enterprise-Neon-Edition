@@ -105,8 +105,8 @@ test("Users and Access preserves blueprint directory-linked account creation",()
   assert.match(ui,/staff_record_id/);
   assert.match(api,/guardianAccountRecords:\(\)=>request\("\/api\/admin\/guardian-account-records"\)/);
   assert.match(routes,/p==="\/api\/admin\/guardian-account-records"/);
-  assert.match(routes,/public\.student_guardians/);
-  assert.match(routes,/public\.guardian_links/);
+  assert.match(routes,/public\.neon_guardian_account_records\(\)/);
+  assert.doesNotMatch(routes.split('p==="\/api\/admin\/guardian-account-records"')[1]?.split('p==="\/api\/settings\/school"')[0]||"",/public\.students/);
 });
 
 
