@@ -237,6 +237,62 @@ SQL
     exit 1
   fi
 
+  # Keep the master login router synchronized with every active tenant identity.
+  # Only the master control database can resolve an email to an isolated tenant DB.
+  # Mark prior routes inactive first so renamed, disabled, or deleted accounts cannot
+  # leave stale login entries, then upsert the current tenant identities.
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+update platform.login_directory d
+set active=false,updated_at=now()
+from platform.tenant_control tc
+where tc.tenant_id=d.tenant_id
+  and tc.tenant_code=:'tenant_code'
+  and tc.database_name=:'database_name';
+SQL
+
+  psql "$TENANT_DATABASE_URL" -At -v database_name="$database_name" -c "
+    select format(
+      'insert into platform.login_directory(email_normalized,tenant_id,tenant_code,database_name,role_hint,active) values(%L,%L::uuid,%L,%L,%L,%L::boolean) on conflict(email_normalized,tenant_id) do update set tenant_code=excluded.tenant_code,database_name=excluded.database_name,role_hint=excluded.role_hint,active=excluded.active,updated_at=now();',
+      lower(trim(u.email)),
+      t.id::text,
+      t.code,
+      :'database_name',
+      m.role,
+      case when u.disabled_at is null and m.status='active' and coalesce(p.active,true) then 'true' else 'false' end
+    )
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and m.tenant_id=t.id
+    order by lower(trim(u.email))
+  " | psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1
+
+  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -At -v tenant_code="$tenant_code" -v database_name="$database_name" -c "
+    select count(*)
+    from platform.login_directory d
+    join platform.tenant_control tc on tc.tenant_id=d.tenant_id
+    where tc.tenant_code=:'tenant_code'
+      and tc.database_name=:'database_name'
+      and d.active
+  ")"
+  tenant_login_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and u.disabled_at is null
+      and m.status='active'
+      and coalesce(p.active,true)
+  ")"
+  test "$route_count" = "$tenant_login_count" || {
+    echo "::error::Login directory synchronization mismatch for $tenant_code: master=$route_count tenant=$tenant_login_count" >&2
+    exit 1
+  }
+
   psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
 insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
 select
