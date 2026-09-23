@@ -48,4 +48,59 @@ psql "$TENANT_DATABASE_URL" -Atc "select count(*) from app.schema_migrations whe
   '0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers'
 )"
 
+printf 'plan_parity_count='
+psql "$TENANT_DATABASE_URL" -Atc "select count(*) from platform.license_plans p where p.code in('starter','professional','enterprise') and (select count(*) from jsonb_object_keys(p.feature_flags))=27 and p.feature_flags->>'id_cards'='true' and p.feature_flags->>'staff_id_cards'='true' and p.feature_flags->>'timetable'='true' and p.feature_flags->>'school_prospectus'='true' and p.feature_flags->>'advanced_analytics'='false' and p.feature_flags->>'integrations'='false'"
+
+check starter_finance_exports "select feature_flags->>'finance_exports'='false' from platform.license_plans where code='starter'"
+check professional_finance_exports "select feature_flags->>'finance_exports'='true' from platform.license_plans where code='professional'"
+check professional_financial_holds "select feature_flags->>'financial_holds'='true' from platform.license_plans where code='professional'"
+check enterprise_payroll "select feature_flags->>'payroll'='true' from platform.license_plans where code='enterprise'"
+check enterprise_payroll_statutory "select feature_flags->>'payroll_statutory'='true' from platform.license_plans where code='enterprise'"
+check enterprise_custom_branding "select feature_flags->>'custom_branding'='true' from platform.license_plans where code='enterprise'"
+check school_logo_exec "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')"
+check class_generator_exists "select to_regprocedure('public.generate_class_student_identifier(uuid)') is not null"
+check admission_sequence_exists "select to_regclass('public.student_admission_sequences') is not null"
+check reset_audit_exec "select has_function_privilege('edusentia_worker_runtime','public.reset_audit_log(text)','EXECUTE')"
+check prepare_upload_exec "select has_function_privilege('edusentia_worker_runtime','public.prepare_object_upload(text,text,text,bigint)','EXECUTE')"
+check get_upload_exec "select has_function_privilege('edusentia_worker_runtime','public.get_object_upload_metadata(text,text)','EXECUTE')"
+check transition_upload_exec "select has_function_privilege('edusentia_worker_runtime','public.transition_object_upload(uuid,text,text)','EXECUTE')"
+check school_logo_context "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0"
+check report_template_path "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0"
+check report_template_constraint "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'"
+check shs_console_exec "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_console()','EXECUTE')"
+check shs_insert_exec "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_insert(text,jsonb)','EXECUTE')"
+check shs_remove_exec "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_remove(text,uuid)','EXECUTE')"
+check teacher_auth_exec "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_teacher_photo_upload(uuid)','EXECUTE')"
+check teacher_desc_exec "select has_function_privilege('edusentia_worker_runtime','public.neon_teacher_photo_descriptor(uuid)','EXECUTE')"
+check teacher_auth_context "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))>0"
+check teacher_auth_no_auth_uid "select position('auth.uid()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))=0"
+check teacher_desc_context "select position('app.current_user_id()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))>0"
+check teacher_desc_no_auth_uid "select position('auth.uid()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))=0"
+check teacher_set_context "select position('app.current_user_id()' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0"
+check teacher_set_storage "select position('storage.object_metadata' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0"
+
+EXPECTED_FILE="$(mktemp)"
+ACTUAL_FILE="$(mktemp)"
+MISSING_FILE="$(mktemp)"
+trap 'rm -f "$EXPECTED_FILE" "$ACTUAL_FILE" "$MISSING_FILE"' EXIT
+node --input-type=module -e '
+  import fs from "node:fs";
+  const x=JSON.parse(fs.readFileSync("reference/future-tenant-rpc-surface.json","utf8"));
+  process.stdout.write([...x.operations].sort().join("\n")+"\n");
+' > "$EXPECTED_FILE"
+psql "$TENANT_DATABASE_URL" -Atc "
+  select distinct p.proname
+  from pg_proc p
+  join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public'
+    and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')
+  order by p.proname
+" > "$ACTUAL_FILE"
+comm -23 "$EXPECTED_FILE" "$ACTUAL_FILE" > "$MISSING_FILE"
+echo "missing_rpc_count=$(wc -l < "$MISSING_FILE" | tr -d ' ')"
+if [ -s "$MISSING_FILE" ]; then
+  echo "missing_rpcs:"
+  cat "$MISSING_FILE"
+fi
+
 echo "Admission reuse diagnostic complete."
