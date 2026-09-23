@@ -1,6 +1,15 @@
 -- Production rollout marker: quality gate green before applying directory-role parity.
 begin;
 
+-- The certified Supabase Student and Student Portal contracts both bind a
+-- student's login profile directly on public.students.profile_id.
+alter table public.students
+  add column if not exists profile_id uuid references public.profiles(id) on delete set null;
+
+create unique index if not exists students_profile_id_uidx
+  on public.students(profile_id)
+  where profile_id is not null;
+
 -- Neon production parity repair for directory-linked Users & Access and role workspaces.
 -- The certified Supabase implementation exposes active Teacher, Principal, Accounts
 -- Office Staff, and Student directory records through list_profiles_with_access().
