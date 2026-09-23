@@ -111,7 +111,9 @@ student_photo_contract_ok="$(psql "$TEMPLATE_URL" -Atc "select has_function_priv
 
 principal_photo_contract_ok="$(psql "$TEMPLATE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_headteacher_photo_upload(uuid)','execute') and has_function_privilege('edusentia_worker_runtime','public.neon_headteacher_photo_descriptor(uuid)','execute') and position('app.current_user_id()' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0 and position('staff-photos/' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0 and position('storage.object_metadata' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")"
 
-echo "Tenant template validation: runtime_schema=$tenant_runtime_schema compat_schema=$compat_schema compat_version=$compat_version bootstrap_count=$bootstrap_count worker_rpc_count=$worker_rpc_count plan_parity_count=$plan_parity_count runtime_acl_ok=$runtime_acl_ok admission_reuse_ok=$admission_reuse_ok student_photo_contract_ok=$student_photo_contract_ok principal_photo_contract_ok=$principal_photo_contract_ok"
+operational_repairs_ok="$(psql "$TEMPLATE_URL" -Atc "select exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status') and has_function_privilege('edusentia_worker_runtime','public.neon_guardian_account_records()','execute') and position('public.neon_cron_jobs_snapshot()' in pg_get_functiondef('public.operations_dashboard(uuid)'::regprocedure))>0")"
+
+echo "Tenant template validation: runtime_schema=$tenant_runtime_schema compat_schema=$compat_schema compat_version=$compat_version bootstrap_count=$bootstrap_count worker_rpc_count=$worker_rpc_count plan_parity_count=$plan_parity_count runtime_acl_ok=$runtime_acl_ok admission_reuse_ok=$admission_reuse_ok student_photo_contract_ok=$student_photo_contract_ok principal_photo_contract_ok=$principal_photo_contract_ok operational_repairs_ok=$operational_repairs_ok"
 
 test "$tenant_runtime_schema" = "0020"
 test "$compat_schema" = "0048"
@@ -123,6 +125,7 @@ test "$runtime_acl_ok" = "t"
 test "$admission_reuse_ok" = "t"
 test "$student_photo_contract_ok" = "t"
 test "$principal_photo_contract_ok" = "t"
+test "$operational_repairs_ok" = "t"
 
 if [ "$(template_owner)" = "edusentia_runtime" ]; then
   psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "alter database \"$TEMPLATE_DB\" owner to edusentia_provisioner;"
