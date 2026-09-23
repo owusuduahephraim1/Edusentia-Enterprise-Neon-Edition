@@ -40,9 +40,10 @@
       if(name==="directory-user-management")data=await api().directoryUserManagement(action,payload);
       else if(name==="admin-user-management")data=await api().adminUserManagement(action,payload);
       else if(name==="finance-user-management"){
+        const financePayload={...payload,role:payload?.role==="accounts_office"?"accountant":payload?.role};
         data=action==="reset_password"
-          ?await api().adminUserManagement(action,payload)
-          :await api().directoryUserManagement(action,payload);
+          ?await api().adminUserManagement(action,financePayload)
+          :await api().directoryUserManagement(action,financePayload);
       }else if(name==="tenant-auth-recovery")data=await api().tenantAuthRecovery(action,body);
       else if(name==="scheduled-backup")data=await api().scheduledBackup(action,body);
       else if(name==="backup-download-gateway")data=await api().backupDownloadGateway(String(body?.backup_id||payload?.backup_id||""));
