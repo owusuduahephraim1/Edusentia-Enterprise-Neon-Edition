@@ -32,6 +32,8 @@ test("finance workflow preserves upgrade-plan gates",()=>{
   assert.match(product,/data-finance-tab="holds"/);
   assert.match(product,/data-finance-tab="payroll"/);
   assert.match(product,/Fee Class Range/);
+  assert.match(product,/EdusentiaShell\?\.state\?\.session/);
+  assert.match(product,/setTimeout\(\(\)=>void loadFinance\(\),1000\)/);
 });
 
 test("accounts office follow-up and credential workflows are inherited",()=>{
