@@ -13,7 +13,7 @@ import { handleTenantAuthRecovery } from "./recovery-compat";
 import { backupDownloadGateway, handleBackupTransfer, handleScheduledBackupCompat } from "./backup-service";
 import { cancelRestore, executeRestore, handleRestoreTransfer, prepareRestore } from "./restore-service";
 
-// Authentication and authorization routes fail closed before tenant data access.
+// Authentication and authorization routes fail closed before tenant data access. Users, Reports, and Operations include the 0061 Neon production parity repairs.
 // Protected uploads use tenant-scoped R2 keys; teacher and Principal photographs preserve certified staff-relative path contracts with session-scoped authorization.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}

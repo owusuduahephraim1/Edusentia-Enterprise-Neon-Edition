@@ -212,6 +212,7 @@
     }catch(e){byId("content").innerHTML=sectionHead("Certificates","Promotion, completion, and teacher-recognition certificates")+pageError(e);}
   }
 
+  // ID-card issue/expiry date parity release for production.
   async function renderIdCards(){
     byId("content").innerHTML=sectionHead("ID Card Management","Professional student and staff cards with QR verification, lifecycle controls, and print-ready issuance")+loading("Loading ID card console");
     try{
