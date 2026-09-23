@@ -108,3 +108,30 @@ test("Users and Access preserves blueprint directory-linked account creation",()
   assert.match(routes,/public\.student_guardians/);
   assert.match(routes,/public\.guardian_links/);
 });
+
+
+test("Starter System Administrator enterprise navigation registrar is syntactically valid and complete",()=>{
+  const enterprise=read("frontend/parity-enterprise-workspaces.js");
+  assert.doesNotThrow(()=>new Function(enterprise));
+  for(const id of [
+    "history","prospectus","delegations","certificates","id_cards","insights",
+    "users","compliance","backup_restore","plan_upgrade","license_capacity","settings"
+  ]){
+    assert.match(enterprise,new RegExp(`registerView\\(\\{id:["']${id}["']`),id+" registration missing");
+  }
+});
+
+test("tenant shell does not render literal newline escape text above the workspace",()=>{
+  const html=read("frontend/index.html");
+  assert.doesNotMatch(html,/<head>\\\\n/);
+});
+
+test("PWA shell carries every navigation parity registrar",()=>{
+  const sw=read("frontend/service-worker.js");
+  assert.match(sw,/edusentia-neon-v17/);
+  for(const asset of [
+    "parity-common.js","parity-academics.js","parity-students.js","parity-teachers.js",
+    "parity-principal.js","parity-timetable.js","parity-reports.js",
+    "parity-audit-security-finance.js","parity-operations.js","parity-enterprise-workspaces.js"
+  ]) assert.ok(sw.includes(asset),asset);
+});
