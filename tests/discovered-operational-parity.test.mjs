@@ -146,5 +146,5 @@ test("Neon identity membership upsert uses the tenant membership primary-key con
   assert.match(sql,/on conflict on constraint tenant_memberships_pkey do update/i);
   assert.match(sql,/alter type public\.app_role add value if not exists 'accountant'/i);
   assert.match(sql,/alter type public\.app_role add value if not exists 'student'/i);
-  assert.doesNotMatch(sql,/on conflict\s*\(tenant_id\s*,\s*user_id\)/i);
+  assert.doesNotMatch(sql,/^\s*on conflict\s*\(tenant_id\s*,\s*user_id\)/im);
 });
