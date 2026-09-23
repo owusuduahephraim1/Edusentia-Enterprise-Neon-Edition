@@ -536,7 +536,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const allowed=["image/","application/pdf","text/csv","application/vnd.openxmlformats-officedocument"];
     if(!allowed.some(x=>type.startsWith(x)))return error("invalid_content_type","This file type is not allowed",422,requestId);
     const rawSubfolder=String(b.subfolder||"").trim();
-    let subfolder="",referencePath="";
+    let subfolder="",referencePath="",storageKind=kind;
     if(rawSubfolder){
       if(kind==="report-card-templates"){
         if(!["early_years","basic_1_6","basic_7_9"].includes(rawSubfolder))return error("invalid_upload_scope","Invalid report-card template class range",422,requestId);
@@ -550,6 +550,16 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
         ]);
         if((allowedRows[0] as any)?.allowed!==true)return error("forbidden","You are not authorized to upload this teacher photograph",403,requestId);
         subfolder=`/${rawSubfolder}`;
+      }else if(kind==="principal-photos"){
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSubfolder))return error("invalid_upload_scope","Invalid Principal photograph scope",422,requestId);
+        if(!/^image\/(jpeg|png|webp)$/i.test(type))return error("invalid_content_type","Principal photographs must be JPEG, PNG, or WebP images",415,requestId);
+        if(size>8*1024*1024)return error("invalid_file_size","Principal photographs must be 8 MB or smaller",422,requestId);
+        const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+          txn`select public.neon_authorize_headteacher_photo_upload(${rawSubfolder}::uuid) allowed`
+        ]);
+        if((allowedRows[0] as any)?.allowed!==true)return error("forbidden","You are not authorized to upload this Principal photograph",403,requestId);
+        subfolder=`/${rawSubfolder}`;
+        storageKind="staff-photos";
       }else if(kind==="student-photos"){
         if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSubfolder))return error("invalid_upload_scope","Invalid student photograph scope",422,requestId);
         if(!/^image\/(jpeg|png|webp)$/i.test(type))return error("invalid_content_type","Student photographs must be JPEG, PNG, or WebP images",415,requestId);
@@ -564,10 +574,12 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       return error("invalid_upload_scope","A teacher identifier is required for staff photographs",422,requestId);
     }else if(kind==="student-photos"){
       return error("invalid_upload_scope","A student identifier is required for student photographs",422,requestId);
+    }else if(kind==="principal-photos"){
+      return error("invalid_upload_scope","A Principal identifier is required for Principal photographs",422,requestId);
     }
     const objectName=`${crypto.randomUUID()}-${name}`;
-    const key=`tenants/${ctx.tenantId}/${kind}${subfolder}/${objectName}`;
-    if(kind==="staff-photos"||kind==="student-photos")referencePath=`${rawSubfolder}/${objectName}`;
+    const key=`tenants/${ctx.tenantId}/${storageKind}${subfolder}/${objectName}`;
+    if(kind==="staff-photos"||kind==="principal-photos"||kind==="student-photos")referencePath=`${rawSubfolder}/${objectName}`;
     try{
       const [preparedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.prepare_object_upload(${key},${name},${type},${size}::bigint) metadata`]);
       if(!(preparedRows[0] as any)?.metadata)throw new Error("Upload metadata was not created");
@@ -629,6 +641,38 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const contentType=String(metadata.content_type||"").toLowerCase();
     if(!contentType.startsWith("image/"))return error("invalid_content_type","Stored teacher photograph is not an image",415,requestId);
     const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","Teacher photograph is not available",404,requestId);
+    const h=new Headers();obj.writeHttpMetadata(h);
+    h.set("content-type",contentType);
+    h.set("content-disposition","inline");
+    h.set("cache-control","private, no-store");
+    h.set("x-content-type-options","nosniff");
+    return new Response(obj.body,{headers:h});
+  }
+  if(method==="GET"&&p==="/api/files/principal-photo"){
+    const principalId=String(url.searchParams.get("id")||"").trim();
+    const photoPath=String(url.searchParams.get("path")||"").trim();
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(principalId))return error("invalid_principal_id","Invalid Principal photograph owner",422,requestId);
+    if(!photoPath||photoPath.includes("..")||photoPath.startsWith("/"))return error("invalid_photo_path","Invalid Principal photograph path",422,requestId);
+    const [descriptorRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+      txn`select public.neon_headteacher_photo_descriptor(${principalId}::uuid) descriptor`
+    ]);
+    const descriptor=(descriptorRows[0] as any)?.descriptor||{};
+    if(String(descriptor.photo_url||"")!==photoPath)return error("not_found","Principal photograph is not available",404,requestId);
+    const legacyPrefix=`tenants/${ctx.tenantId}/staff-photos/`;
+    let key="";
+    if(photoPath.startsWith(legacyPrefix)){
+      key=photoPath;
+    }else{
+      const match=photoPath.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/([A-Za-z0-9._-]{1,220})$/i);
+      if(!match||match[1].toLowerCase()!==principalId.toLowerCase())return error("invalid_photo_path","Invalid Principal photograph path",422,requestId);
+      key=`tenants/${ctx.tenantId}/staff-photos/${photoPath}`;
+    }
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'active') metadata`]);
+    const metadata=(metaRows[0] as any)?.metadata as any;
+    if(!metadata)return error("not_found","Principal photograph is not available",404,requestId);
+    const contentType=String(metadata.content_type||"").toLowerCase();
+    if(!contentType.startsWith("image/"))return error("invalid_content_type","Stored Principal photograph is not an image",415,requestId);
+    const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","Principal photograph is not available",404,requestId);
     const h=new Headers();obj.writeHttpMetadata(h);
     h.set("content-type",contentType);
     h.set("content-disposition","inline");
