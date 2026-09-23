@@ -28,6 +28,9 @@ test("removed students release their admission number for lowest-gap reuse",()=>
     "public.next_student_identifier_for_prefix(original_prefix)"
   ]) assert.ok(sql.includes(marker),marker);
   assert.doesNotMatch(sql,/last_number\s*\+\s*1/i);
+  const install=read("database/reference-compat/install-operational-parity.sh");
+  assert.match(install,/reconcile_once_recorded "0058_reusable_student_admission_numbers"/);
+  assert.ok(install.indexOf("0049x_class_scoped_student_admission_numbers")<install.indexOf("0058_reusable_student_admission_numbers"));
 });
 
 test("restore keeps a released number when free and reallocates on collision",()=>{
