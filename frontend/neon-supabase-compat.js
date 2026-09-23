@@ -4,7 +4,7 @@
   window.EDS_NEON_REFERENCE_COMPAT=true;
   const api=()=>window.EdusentiaApi;
   const listeners=new Set();
-  const tenantCode=String(new URLSearchParams(location.search).get("school")||"NEON").trim().toUpperCase()||"NEON";
+  const params=new URLSearchParams(location.search);const tenantCode=String(params.get("school")||params.get("tenant")||params.get("tenantCode")||"NEON").trim().toUpperCase()||"NEON";
   window.RCE_CONFIG=Object.assign({masterEdition:false,tenantCode},window.RCE_CONFIG||{});
   window.NIS_CONFIG=window.RCE_CONFIG;
 
