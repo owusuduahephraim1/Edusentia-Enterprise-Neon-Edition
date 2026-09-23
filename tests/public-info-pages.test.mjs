@@ -32,7 +32,7 @@ test("public information pages preserve Edusentia navigation and Neon architectu
 
 test("PWA shell caches public information pages",()=>{
   const sw=read("frontend/service-worker.js");
-  assert.match(sw,/edusentia-neon-v22/);
+  assert.match(sw,/edusentia-neon-v23/);
   for(const asset of ["about.html","support.html","privacy.html","terms.html","info-pages.css"]){
     assert.match(sw,new RegExp(asset.replace(".","\\.")));
   }
