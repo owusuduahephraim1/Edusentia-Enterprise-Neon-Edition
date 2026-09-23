@@ -59,6 +59,25 @@ jobs:
           select set_config('diag.principal_count',(select count(*)::text from public.headteachers where deleted_at is null and active),true);
           select set_config('diag.accountant_count',(select count(*)::text from public.accounts_office_staff where deleted_at is null and active),true);
           select set_config('diag.student_count',(select count(*)::text from public.students where deleted_at is null and status='active'),true);
+          select set_config('diag.guardian_count',(select count(*)::text from public.student_guardians),true);
+
+          select 'FUNCTION_META '||jsonb_build_object(
+            'owner',pg_get_userbyid(p.proowner),
+            'security_definer',p.prosecdef,
+            'search_path',p.proconfig,
+            'definition_md5',md5(pg_get_functiondef(p.oid))
+          )::text
+          from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+          where n.nspname='public' and p.proname='list_profiles_with_access' and p.pronargs=0;
+
+          select 'TABLE_META '||jsonb_agg(jsonb_build_object(
+            'table',c.relname,
+            'owner',pg_get_userbyid(c.relowner),
+            'rls',c.relrowsecurity,
+            'force_rls',c.relforcerowsecurity
+          ) order by c.relname)::text
+          from pg_class c join pg_namespace n on n.oid=c.relnamespace
+          where n.nspname='public' and c.relname in ('teachers','headteachers','accounts_office_staff','students','student_guardians');
 
           set local role edusentia_worker_runtime;
           select app.set_request_context(
@@ -78,11 +97,12 @@ jobs:
             accountant_role text:=current_setting('diag.accountant_role');
           begin
             payload:=public.list_profiles_with_access();
-            raise notice 'LINKAGE_COUNTS underlying teachers=% principals=% accountants=% students=% payload_profiles=% payload_teachers=% payload_principals=% payload_accountants=% payload_students=% classes=% subjects=%',
+            raise notice 'LINKAGE_COUNTS underlying teachers=% principals=% accountants=% students=% guardians=% payload_profiles=% payload_teachers=% payload_principals=% payload_accountants=% payload_students=% classes=% subjects=%',
               current_setting('diag.teacher_count')::integer,
               current_setting('diag.principal_count')::integer,
               current_setting('diag.accountant_count')::integer,
               current_setting('diag.student_count')::integer,
+              current_setting('diag.guardian_count')::integer,
               jsonb_array_length(coalesce(payload->'profiles','[]'::jsonb)),
               jsonb_array_length(coalesce(payload->'teacher_records','[]'::jsonb)),
               jsonb_array_length(coalesce(payload->'headteacher_records','[]'::jsonb)),
