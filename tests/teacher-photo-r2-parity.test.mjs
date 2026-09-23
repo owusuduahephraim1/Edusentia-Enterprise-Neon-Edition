@@ -34,7 +34,16 @@ test("teacher photo storage contract", () => {
   assert.ok(certified.includes("split_part(clean_path,'/',1)<>target_teacher_id::text"));
 });
 
-test("teacher photo Worker authorization never requires direct auth schema access", () => {\n  const routes = read("worker/src/routes.ts");\n  const photoSection = routes.slice(routes.indexOf('kind==="staff-photos"'), routes.indexOf('if(method==="GET"&&p==="/api/files/download")'));\n  assert.ok(photoSection.includes("t.profile_id=${ctx.userId}::uuid"));\n  assert.equal(photoSection.includes("auth.uid()"), false);\n});\n\ntest("teacher photo API client parity", () => {
+test("teacher photo Worker authorization never requires direct auth schema access", () => {
+  const routes = read("worker/src/routes.ts");
+  const start = routes.indexOf('kind==="staff-photos"');
+  const end = routes.indexOf('if(method==="GET"&&p==="/api/files/download")');
+  const photoSection = routes.slice(start, end);
+  assert.ok(photoSection.includes("t.profile_id=${ctx.userId}::uuid"));
+  assert.equal(photoSection.includes("auth.uid()"), false);
+});
+
+test("teacher photo API client parity", () => {
   const api = read("frontend/api-client.js");
   for (const marker of [
     "async function downloadStaffPhoto",
