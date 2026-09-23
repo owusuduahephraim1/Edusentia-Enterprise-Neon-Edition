@@ -25,7 +25,10 @@
   function asError(error){return error instanceof Error?error:Object.assign(new Error(String(error||"Request failed")),{code:error?.code});}
   async function rpc(name,args={}){
     try{
-      const response=await api().certifiedRpc(name,args||{});
+      const guardianOps=new Set(["finance_log_guardian_contact","finance_guardian_follow_up","finance_guardian_contact_history","finance_clear_guardian_contact_history"]);
+      const response=guardianOps.has(name)
+        ?await api().financeGuardianRpc(name,args||{})
+        :await api().certifiedRpc(name,args||{});
       return {data:response?.result??response,error:null};
     }catch(error){return {data:null,error:asError(error)};}
   }
