@@ -14,7 +14,7 @@ import { backupDownloadGateway, handleBackupTransfer, handleScheduledBackupCompa
 import { cancelRestore, executeRestore, handleRestoreTransfer, prepareRestore } from "./restore-service";
 
 // Authentication and authorization routes fail closed before tenant data access.
-// Protected uploads use tenant-scoped R2 keys and fail closed with actionable errors.
+// Protected uploads use tenant-scoped R2 keys; teacher photographs preserve the certified teacher-relative path contract.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}
 function uploadContentType(filename:string,value:unknown){
