@@ -24,7 +24,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y postgresql-client
           fi
-      - name: Diagnose production RPC and runtime read failures
+      - name: Verify production repairs
         shell: bash
         run: |
           set -euo pipefail
@@ -52,77 +52,39 @@ jobs:
             2::smallint
           );
 
-          do $diag$
+          do $verify$
           declare
             term_id uuid;
             result jsonb;
-            n integer;
+            rows_count integer;
           begin
+            if not exists(select 1 from app.schema_migrations where version='0061_discovered_operational_parity_repairs') then
+              raise exception '0061 is not installed';
+            end if;
+            if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status') then
+              raise exception 'student_reports.archived_status is missing';
+            end if;
+
             select id into term_id from public.terms where deleted_at is null order by is_active desc,created_at desc limit 1;
 
-            begin
-              result:=public.list_profiles_with_access();
-              raise notice 'DIAG list_profiles_with_access OK';
-            exception when others then
-              raise notice 'DIAG list_profiles_with_access ERROR state=% message=%',SQLSTATE,SQLERRM;
-            end;
+            result:=public.list_report_cards_v6(term_id,null,null,'','active',1,100);
+            if result is null or not (result ? 'rows') then raise exception 'Report Cards result is invalid'; end if;
 
-            begin
-              result:=public.list_guardian_portal_accounts('');
-              raise notice 'DIAG list_guardian_portal_accounts OK';
-            exception when others then
-              raise notice 'DIAG list_guardian_portal_accounts ERROR state=% message=%',SQLSTATE,SQLERRM;
-            end;
+            result:=public.operations_dashboard(term_id);
+            if result is null or not (result ? 'cron_jobs') then raise exception 'Operations result is invalid'; end if;
 
-            begin
-              result:=public.list_report_cards_v6(term_id,null,null,'','active',1,100);
-              raise notice 'DIAG list_report_cards_v6 OK';
-            exception when others then
-              raise notice 'DIAG list_report_cards_v6 ERROR state=% message=%',SQLSTATE,SQLERRM;
-            end;
+            result:=public.neon_guardian_account_records();
+            rows_count:=jsonb_array_length(coalesce(result,'[]'::jsonb));
 
-            begin
-              result:=public.operations_dashboard(term_id);
-              raise notice 'DIAG operations_dashboard OK';
-            exception when others then
-              raise notice 'DIAG operations_dashboard ERROR state=% message=%',SQLSTATE,SQLERRM;
-            end;
+            -- These two certified calls are also part of the Users & Access Promise.all.
+            result:=public.list_profiles_with_access();
+            if result is null or not (result ? 'profiles') then raise exception 'Users and Access profile payload is invalid'; end if;
 
-            begin
-              result:=public.get_report_correction_console(term_id,null);
-              raise notice 'DIAG get_report_correction_console OK';
-            exception when others then
-              raise notice 'DIAG get_report_correction_console ERROR state=% message=%',SQLSTATE,SQLERRM;
-            end;
+            result:=public.list_guardian_portal_accounts('');
+            if result is null then raise exception 'Guardian portal account payload is invalid'; end if;
 
-            begin
-              result:=public.list_academic_period_controls();
-              raise notice 'DIAG list_academic_period_controls OK';
-            exception when others then
-              raise notice 'DIAG list_academic_period_controls ERROR state=% message=%',SQLSTATE,SQLERRM;
-            end;
-
-            begin
-              select count(*) into n
-              from public.student_guardians sg
-              left join lateral (
-                select jsonb_agg(jsonb_build_object('student_id',s.id)) children
-                from public.guardian_links gl2
-                join public.students s on s.id=gl2.student_id and s.deleted_at is null and s.status='active'
-                where gl2.guardian_id=sg.id
-              ) children on true;
-              raise notice 'DIAG guardian_runtime_query OK rows=%',n;
-            exception when others then
-              raise notice 'DIAG guardian_runtime_query ERROR state=% message=%',SQLSTATE,SQLERRM;
-            end;
-
-            raise notice 'DIAG owners list_profiles=% reports=% ops=% correction=% controls=%',
-              pg_get_userbyid((select proowner from pg_proc where oid='public.list_profiles_with_access()'::regprocedure)),
-              pg_get_userbyid((select proowner from pg_proc where oid='public.list_report_cards_v6(uuid,uuid,public.report_status,text,text,integer,integer)'::regprocedure)),
-              pg_get_userbyid((select proowner from pg_proc where oid='public.operations_dashboard(uuid)'::regprocedure)),
-              pg_get_userbyid((select proowner from pg_proc where oid='public.get_report_correction_console(uuid,uuid)'::regprocedure)),
-              pg_get_userbyid((select proowner from pg_proc where oid='public.list_academic_period_controls()'::regprocedure));
+            raise notice 'POSTFIX_DISCOVERED_ISSUES_OK reports=true operations=true users=true guardian_rows=%',rows_count;
           end
-          $diag$;
+          $verify$;
           rollback;
           SQL
