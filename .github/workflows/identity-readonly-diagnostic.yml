@@ -85,4 +85,77 @@ jobs:
           ) order by created_at),'[]'::jsonb))::text
           from public.profiles
           where public.current_app_role_for(role)::text='system_admin';
+
+
+          begin;
+          select set_config('diag.tenant_id',(select id::text from app.tenants order by created_at limit 1),true);
+          select set_config('diag.admin_id',(select id::text from public.profiles where public.current_app_role_for(role)::text='system_admin' and active order by created_at limit 1),true);
+          select set_config('diag.teacher_id',(select id::text from public.teachers where active and deleted_at is null and profile_id is null order by created_at limit 1),true);
+          select set_config('diag.user_id',gen_random_uuid()::text,true);
+
+          set local role edusentia_worker_runtime;
+          select app.set_request_context(
+            current_setting('diag.tenant_id')::uuid,
+            current_setting('diag.admin_id')::uuid,
+            'system_admin',
+            2::smallint
+          );
+
+          select 'VALIDATE_RESULT '||public.admin_validate_user_bundle(
+            current_setting('diag.admin_id')::uuid,
+            jsonb_build_object(
+              'user_id',null,
+              'full_name','Diagnostic Teacher',
+              'phone','',
+              'email','diagnostic.teacher@nis000001.app',
+              'role','class_teacher',
+              'staff_record_id',current_setting('diag.teacher_id')::uuid,
+              'active',true,
+              'mfa_required',false,
+              'must_change_password',true,
+              'access','[]'::jsonb,
+              'reason','transactional diagnostic'
+            ),
+            false
+          )::text;
+
+          select 'CREATE_BRIDGE_RESULT '||public.neon_identity_create_auth_user(
+            current_setting('diag.admin_id')::uuid,
+            current_setting('diag.tenant_id')::uuid,
+            current_setting('diag.user_id')::uuid,
+            'diagnostic.teacher@nis000001.app',
+            'Diagnostic Teacher',
+            '',
+            true,
+            'class_teacher',
+            false,
+            true,
+            repeat('a',64),
+            repeat('b',32),
+            'scrypt-n32768-r8-p1'
+          )::text;
+
+          select 'APPLY_RESULT '||public.admin_apply_user_bundle(
+            current_setting('diag.admin_id')::uuid,
+            jsonb_build_object(
+              'user_id',current_setting('diag.user_id')::uuid,
+              'full_name','Diagnostic Teacher',
+              'phone','',
+              'email','diagnostic.teacher@nis000001.app',
+              'role','class_teacher',
+              'staff_record_id',current_setting('diag.teacher_id')::uuid,
+              'active',true,
+              'mfa_required',false,
+              'must_change_password',true,
+              'access','[]'::jsonb,
+              'reason','transactional diagnostic'
+            )
+          )::text;
+
+          select 'LINK_CHECK '||jsonb_build_object(
+            'teacher_linked',exists(select 1 from public.teachers where id=current_setting('diag.teacher_id')::uuid and profile_id=current_setting('diag.user_id')::uuid),
+            'profile_created',exists(select 1 from public.profiles where id=current_setting('diag.user_id')::uuid),
+            'auth_created',exists(select 1 from authn.users where id=current_setting('diag.user_id')::uuid)
+          )::text;
+          rollback;
           SQL
