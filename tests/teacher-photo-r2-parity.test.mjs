@@ -43,6 +43,19 @@ test("teacher photo bridge preserves certified Supabase authorization semantics"
     "grant execute on function public.neon_teacher_photo_descriptor(uuid) to edusentia_worker_runtime"
   ]) assert.ok(sql.includes(marker), marker);
 });
+test("teacher photo Neon bridge uses Worker request context without auth-schema access", () => {
+  const sql = read("database/reference-compat/0056_teacher_photo_neon_context_fix.sql");
+  const install = read("database/reference-compat/install-operational-parity.sh");
+  const upgrade = read("scripts/update-isolated-operational-tenants.sh");
+  assert.ok(sql.includes("app.current_user_id()"));
+  assert.equal(sql.includes("auth.uid()"), false);
+  assert.ok(sql.includes("public.is_system_admin() or t.profile_id=app.current_user_id()"));
+  assert.ok(sql.includes("t.profile_id is distinct from app.current_user_id()"));
+  assert.ok(sql.includes("grant execute on function public.neon_authorize_teacher_photo_upload(uuid) to edusentia_worker_runtime"));
+  assert.ok(sql.includes("grant execute on function public.neon_teacher_photo_descriptor(uuid) to edusentia_worker_runtime"));
+  assert.ok(install.includes("0056_teacher_photo_neon_context_fix"));
+  assert.ok(upgrade.includes("0056_teacher_photo_neon_context_fix"));
+});
 
 test("teacher photo storage contract stays teacher-relative and private", () => {
   const routes = read("worker/src/routes.ts");
