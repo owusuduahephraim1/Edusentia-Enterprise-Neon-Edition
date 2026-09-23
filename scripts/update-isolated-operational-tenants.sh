@@ -136,7 +136,9 @@ SQL
   test "$migration_count" = "38"
 
   user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
-    select has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
+    select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id')
+      and to_regclass('public.students_profile_id_uidx') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
       and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
       and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
       and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
