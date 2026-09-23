@@ -551,7 +551,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
             and exists(
               select 1 from public.teachers t
               where t.id=${rawSubfolder}::uuid and t.deleted_at is null
-                and (public.can_manage_teachers() or t.profile_id=auth.uid())
+                and (public.can_manage_teachers() or t.profile_id=${ctx.userId}::uuid)
             )
           ) allowed
         `]);
@@ -615,7 +615,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const teacherId=match[1];
     const [accessRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
       select t.photo_url,
-             (public.can_manage_teachers() or t.profile_id=auth.uid()) allowed
+             (public.can_manage_teachers() or t.profile_id=${ctx.userId}::uuid) allowed
       from public.teachers t
       where t.id=${teacherId}::uuid and t.deleted_at is null
       limit 1
