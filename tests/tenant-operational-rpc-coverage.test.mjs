@@ -64,6 +64,15 @@ test("guardian follow-up exceptions to the fixed 258 RPC manifest use a narrow M
   assert.match(routes,/A verified MFA session is required for parent and guardian fee follow-up/);
 });
 
+test("Accounts Office portal identity actions normalize the blueprint UI alias to Neon's accountant role",()=>{
+  const compat=read("frontend/neon-supabase-compat.js");
+  const accounts=read("frontend/finance-accounts.js");
+  const identity=read("worker/src/identity-admin.ts");
+  assert.match(accounts,/openPortalCreate\('accounts_office'/);
+  assert.match(compat,/payload\?\.role==="accounts_office"\?"accountant":payload\?\.role/);
+  assert.match(identity,/\["accountant","student","parent_guardian"\]/);
+});
+
 test("active inherited operational function invocations are all mapped by the Neon compatibility client",()=>{
   const compat=read("frontend/neon-supabase-compat.js");
   const invoked=new Set();
