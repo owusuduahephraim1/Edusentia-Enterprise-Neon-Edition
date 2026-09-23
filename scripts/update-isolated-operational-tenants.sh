@@ -135,6 +135,18 @@ SQL
   ")"
   test "$migration_count" = "38"
 
+  user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
+      and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''student_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('authn.users' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='teachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='headteachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+  ")"
+  test "$user_workspace_parity_ok" = "t"
+
   plan_parity_count="$(psql "$TENANT_DATABASE_URL" -Atc "
     select count(*)
     from platform.license_plans p
