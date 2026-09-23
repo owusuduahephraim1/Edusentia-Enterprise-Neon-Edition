@@ -98,7 +98,7 @@ test("report-card template upload preserves blueprint class-range paths inside t
   const migration=read("database/reference-compat/0053_blueprint_template_path_parity.sql");
   assert.match(api,/uploadFile\(file,kind="document",options=\{\}\)/);
   assert.match(api,/subfolder:String\(options\?\.subfolder\|\|""\)/);
-  assert.match(routes,/kind!=="report-card-templates"/);
+  assert.match(routes,/kind==="report-card-templates"/);
   assert.match(routes,/\["early_years","basic_1_6","basic_7_9"\]\.includes\(rawSubfolder\)/);
   assert.match(routes,/\$\{kind\}\$\{subfolder\}/);
   assert.ok(ui.includes('uploadFile(file,"report-card-templates",{subfolder:key})'));
