@@ -1,4 +1,5 @@
 -- Reusable class-scoped student admission numbers.
+-- Production rollout is guarded by active-only uniqueness and lowest-gap allocation checks.
 --
 -- Active students remain unique, but an admission number is returned to the
 -- class pool when a student is archived/removed. Historical student rows keep

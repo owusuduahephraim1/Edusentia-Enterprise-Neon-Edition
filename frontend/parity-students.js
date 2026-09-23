@@ -2,7 +2,7 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
-  // ---------- Students ----------
+  // ---------- Students: reusable admission numbering ----------
   async function renderStudents(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>Students</h3><p>Certified student directory, enrolment and bulk admission tools.</p></div></div>${loading("Loading certified student workspace")}`;
     let config;
