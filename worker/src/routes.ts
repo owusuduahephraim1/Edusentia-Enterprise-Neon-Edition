@@ -308,6 +308,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     };
     return json({
       tenant:tenantPayload,metrics:metrics[0]||{},
+      profile:certifiedBootstrap?.profile||null,
       permissions,
       license,
       capabilities:{role:ctx.role,assuranceLevel:ctx.assuranceLevel}
