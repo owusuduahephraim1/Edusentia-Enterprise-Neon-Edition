@@ -73,6 +73,7 @@ test("teacher photo save contract stores certified teacher-relative paths over t
   ]) assert.ok(sql.includes(marker), marker);
   assert.equal(sql.includes("t.profile_id=auth.uid()"), false);
   assert.ok(install.includes("0057_teacher_photo_reference_contract"));
+  assert.match(install,/reconcile_once_recorded "0057_teacher_photo_reference_contract"/);
   assert.ok(upgrade.includes("0057_teacher_photo_reference_contract"));
 });
 
