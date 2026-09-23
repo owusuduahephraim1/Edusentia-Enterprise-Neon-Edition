@@ -5,8 +5,8 @@
   function config(){return window.RCE_CONFIG||window.NIS_CONFIG||{}}
   function tenantClient(){return window.EDS_TENANT_AUTH_CLIENT||window.EdusentiaCompatClient||null}
   function notice(title,message,type="success"){
-    const stack=document.getElementById("toastStack");
-    if(!stack){if(type==="error")alert(`${title}\n\n${message}`);return}
+    if(typeof window.EdusentiaNotify==="function"){window.EdusentiaNotify(title,message,type);return}
+    const stack=document.getElementById("toastStack");if(!stack)return;
     const item=document.createElement("div");item.className=`toast ${type}`;item.innerHTML=`<strong></strong><span></span>`;item.querySelector("strong").textContent=title;item.querySelector("span").textContent=message;stack.appendChild(item);setTimeout(()=>item.remove(),type==="error"?10000:6500);
   }
   async function requireAal2(client){const {data,error}=await client.auth.mfa.getAuthenticatorAssuranceLevel();if(error)throw error;if(data?.currentLevel!=="aal2")throw new Error("Multi-factor authentication is required to download an encrypted school backup.")}
@@ -16,7 +16,7 @@
     if(busy.has(button))return;
     const backupId=String(button.dataset.backupDownload||"");if(!backupId)return;
     if(!window.JSZip){notice("Download unavailable","The ZIP packaging library did not load.","error");return}
-    if(!confirm("Download this encrypted school backup package?\n\nOnly the encrypted backup payload is downloaded. Keep the backup encryption secret in a separate secure location."))return;
+    const confirmDownload=window.EdusentiaConfirm||window.EdusentiaShell?.confirmAction;if(typeof confirmDownload!=="function"){notice("Download unavailable","The secure confirmation dialog could not be opened.","error");return}if(!await confirmDownload("Only the encrypted backup payload is downloaded. Keep the backup encryption secret in a separate secure location.",{title:"Download encrypted school backup?",confirmLabel:"Download backup",kind:"primary"}))return;
     const client=tenantClient();if(!client){notice("Download unavailable","Tenant authentication service is unavailable.","error");return}
     busy.add(button);const previous=button.textContent;button.disabled=true;button.textContent="Authorizing…";
     try{
