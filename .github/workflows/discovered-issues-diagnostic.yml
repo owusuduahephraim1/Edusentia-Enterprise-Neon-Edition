@@ -61,7 +61,7 @@ jobs:
             if not exists(select 1 from app.schema_migrations where version='0061_discovered_operational_parity_repairs') then
               raise exception '0061 is not installed';
             end if;
-            if not exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status') then
+            if not exists(select 1 from pg_attribute where attrelid='public.student_reports'::regclass and attname='archived_status' and not attisdropped) then
               raise exception 'student_reports.archived_status is missing';
             end if;
 
