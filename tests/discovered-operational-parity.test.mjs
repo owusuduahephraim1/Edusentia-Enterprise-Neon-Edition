@@ -52,11 +52,13 @@ test("0061 is installed and verified for future and existing tenants",()=>{
   assert.match(install,/reconcile_once_recorded "0062_user_directory_role_workspace_parity"/);
   assert.match(install,/reconcile_once_recorded "0063_identity_user_bundle_runtime_grants"/);
   assert.match(install,/reconcile_once_recorded "0064_neon_identity_admin_bridges"/);
+  assert.match(install,/reconcile_once_recorded "0065_identity_membership_upsert_fix"/);
+  assert.match(upgrade,/0065_identity_membership_upsert_fix/);
   assert.match(upgrade,/0064_neon_identity_admin_bridges/);
   assert.match(upgrade,/0063_identity_user_bundle_runtime_grants/);
   assert.match(upgrade,/0062_user_directory_role_workspace_parity/);
   assert.match(upgrade,/0061_discovered_operational_parity_repairs/);
-  assert.match(upgrade,/migration_count" = "40/);
+  assert.match(upgrade,/migration_count" = "41/);
   assert.match(template,/operational_repairs_ok/);
 });
 
@@ -136,4 +138,13 @@ test("user account lifecycle uses protected Neon identity bridges instead of dir
   assert.doesNotMatch(worker,/delete from authn\.users/i);
   assert.match(worker,/list_profiles_with_access\(\)/);
   assert.match(worker,/neon_guardian_account_records\(\)/);
+});
+
+
+test("Neon identity membership upsert uses the tenant membership primary-key constraint",()=>{
+  const sql=read("database/reference-compat/0065_identity_membership_upsert_fix.sql");
+  assert.match(sql,/on conflict on constraint tenant_memberships_pkey do update/i);
+  assert.match(sql,/alter type public\.app_role add value if not exists 'accountant'/i);
+  assert.match(sql,/alter type public\.app_role add value if not exists 'student'/i);
+  assert.doesNotMatch(sql,/on conflict\s*\(tenant_id\s*,\s*user_id\)/i);
 });
