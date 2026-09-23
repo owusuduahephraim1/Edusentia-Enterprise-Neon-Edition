@@ -153,9 +153,18 @@ jobs:
           )::text;
 
           select 'LINK_CHECK '||jsonb_build_object(
-            'teacher_linked',exists(select 1 from public.teachers where id=current_setting('diag.teacher_id')::uuid and profile_id=current_setting('diag.user_id')::uuid),
-            'profile_created',exists(select 1 from public.profiles where id=current_setting('diag.user_id')::uuid),
-            'auth_created',exists(select 1 from authn.users where id=current_setting('diag.user_id')::uuid)
+            'profile_visible',exists(
+              select 1
+              from jsonb_array_elements(public.list_profiles_with_access()->'profiles') p
+              where p->>'id'=current_setting('diag.user_id')
+                and p->>'teacher_id'=current_setting('diag.teacher_id')
+            ),
+            'teacher_record_linked',exists(
+              select 1
+              from jsonb_array_elements(public.list_profiles_with_access()->'teacher_records') t
+              where t->>'id'=current_setting('diag.teacher_id')
+                and t->>'profile_id'=current_setting('diag.user_id')
+            )
           )::text;
           rollback;
           SQL
