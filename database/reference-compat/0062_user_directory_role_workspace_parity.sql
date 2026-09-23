@@ -10,6 +10,11 @@ create unique index if not exists students_profile_id_uidx
   on public.students(profile_id)
   where profile_id is not null;
 
+-- Supabase Users & Access stores this state on the school profile and the
+-- certified identity bundle reads/writes it for every managed account.
+alter table public.profiles
+  add column if not exists must_change_password boolean not null default false;
+
 -- Neon production parity repair for directory-linked Users & Access and role workspaces.
 -- The certified Supabase implementation exposes active Teacher, Principal, Accounts
 -- Office Staff, and Student directory records through list_profiles_with_access().
