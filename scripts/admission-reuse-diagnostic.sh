@@ -103,4 +103,93 @@ if [ -s "$MISSING_FILE" ]; then
   cat "$MISSING_FILE"
 fi
 
+echo "functional_reuse_test=starting"
+psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 -At <<'SQL'
+begin;
+select app.set_request_context(
+  (select id from app.tenants order by created_at limit 1),
+  (select id from public.profiles where public.current_app_role_for(role)='system_admin' and active order by created_at limit 1),
+  'system_admin',
+  2::smallint
+);
+do $reuse$
+declare
+  y uuid;
+  c uuid;
+  first_saved jsonb;
+  second_saved jsonb;
+  first_id uuid;
+  first_no text;
+  second_no text;
+begin
+  select id into y
+  from public.academic_years
+  where deleted_at is null
+  order by is_active desc,start_date desc nulls last,created_at
+  limit 1;
+
+  select id into c
+  from public.classes
+  where deleted_at is null and active
+  order by level_order,name
+  limit 1;
+
+  if y is null or c is null then
+    raise exception 'No academic year/class available for functional reuse diagnostic';
+  end if;
+
+  first_saved:=public.save_student(jsonb_build_object(
+    'student',jsonb_build_object(
+      'first_name','ReuseDiagnosticOne',
+      'last_name','Temporary',
+      'gender','Other',
+      'status','active'
+    ),
+    'enrollment',jsonb_build_object(
+      'academic_year_id',y,
+      'class_id',c,
+      'active',true
+    ),
+    'guardian',jsonb_build_object(),
+    'reason','Transactional admission reuse diagnostic'
+  ));
+  first_id:=nullif(first_saved#>>'{student,id}','')::uuid;
+  first_no:=first_saved#>>'{student,admission_no}';
+
+  if first_id is null or coalesce(first_no,'')='' then
+    raise exception 'First diagnostic student was not created';
+  end if;
+
+  if not public.archive_student(first_id,'Transactional admission reuse diagnostic') then
+    raise exception 'First diagnostic student was not archived';
+  end if;
+
+  second_saved:=public.save_student(jsonb_build_object(
+    'student',jsonb_build_object(
+      'first_name','ReuseDiagnosticTwo',
+      'last_name','Temporary',
+      'gender','Other',
+      'status','active'
+    ),
+    'enrollment',jsonb_build_object(
+      'academic_year_id',y,
+      'class_id',c,
+      'active',true
+    ),
+    'guardian',jsonb_build_object(),
+    'reason','Transactional admission reuse diagnostic replacement'
+  ));
+  second_no:=second_saved#>>'{student,admission_no}';
+
+  if second_no is distinct from first_no then
+    raise exception 'Released admission number was not reused: first %, second %',first_no,second_no;
+  end if;
+
+  raise notice 'FUNCTIONAL_REUSE_OK|%|%',first_no,second_no;
+end
+$reuse$;
+rollback;
+SQL
+echo "functional_reuse_test=passed"
+
 echo "Admission reuse diagnostic complete."
