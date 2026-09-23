@@ -78,3 +78,32 @@ test("browser authentication scripts remain syntactically valid",()=>{
   }
   assert.doesNotMatch(read("frontend/api-client.js"),/\\\\n\s+listFinance/);
 });
+
+
+test("Tenant-managed users are synchronized into the master login directory",()=>{
+  const identity=read("worker/src/identity-admin.ts");
+  const upgrade=read("scripts/update-isolated-operational-tenants.sh");
+  assert.match(identity,/import \{ db, tenantTx \} from "\.\/db"/);
+  assert.match(identity,/async function syncLoginRoute/);
+  assert.match(identity,/platform\.login_directory/);
+  assert.match(identity,/on conflict\(email_normalized,tenant_id\) do update/);
+  assert.match(identity,/async function removeLoginRoute/);
+  assert.match(identity,/createIdentity\(env,sql,ctx,payload/);
+  assert.match(identity,/updateIdentity\(env,sql,ctx,payload/);
+  assert.match(upgrade,/Tenant \$tenant_code login directory synchronized/);
+  assert.match(upgrade,/platform\.login_directory/);
+  assert.match(upgrade,/tenant_login_count/);
+});
+
+test("Required password changes block workspace entry until completed",()=>{
+  const app=read("frontend/app.js");
+  const routes=read("worker/src/routes.ts");
+  const identity=read("worker/src/identity-admin.ts");
+  assert.match(routes,/profile:certifiedBootstrap\?\.profile\|\|null/);
+  assert.match(app,/state\.boot\?\.profile\?\.must_change_password===true/);
+  assert.match(app,/openRequiredPasswordChange\(\)/);
+  assert.match(app,/complete_own_required_password_change/);
+  assert.match(app,/Password Change Required/);
+  assert.match(identity,/action==="complete_own_required_password_change"/);
+  assert.match(identity,/resetPassword\(sql,ctx,ctx\.userId,password,false\)/);
+});
