@@ -43,7 +43,7 @@ test("student UI explains automatic lowest-available class numbering",()=>{
   assert.match(ui,/Generated automatically on save/);
   assert.match(ui,/Basic 3 → NIS000001-STU-BS3001/);
   assert.match(ui,/lowest available/);
-  assert.match(ui,/released for reuse/i);
+  assert.match(ui,/released by removed students are reused/i);
   assert.doesNotMatch(ui,/generate_school_identifier",\{identifier_kind:"student"\}/);
   assert.match(ui,/Academic year and class are required for a new student/);
 });
