@@ -550,13 +550,24 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
         ]);
         if((allowedRows[0] as any)?.allowed!==true)return error("forbidden","You are not authorized to upload this teacher photograph",403,requestId);
         subfolder=`/${rawSubfolder}`;
+      }else if(kind==="student-photos"){
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSubfolder))return error("invalid_upload_scope","Invalid student photograph scope",422,requestId);
+        if(!/^image\/(jpeg|png|webp)$/i.test(type))return error("invalid_content_type","Student photographs must be JPEG, PNG, or WebP images",415,requestId);
+        if(size>8*1024*1024)return error("invalid_file_size","Student photographs must be 8 MB or smaller",422,requestId);
+        const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+          txn`select public.neon_authorize_student_photo_upload(${rawSubfolder}::uuid) allowed`
+        ]);
+        if((allowedRows[0] as any)?.allowed!==true)return error("forbidden","You are not authorized to upload this student photograph",403,requestId);
+        subfolder=`/${rawSubfolder}`;
       }else return error("invalid_upload_scope","This upload type does not support subfolders",422,requestId);
     }else if(kind==="staff-photos"){
       return error("invalid_upload_scope","A teacher identifier is required for staff photographs",422,requestId);
+    }else if(kind==="student-photos"){
+      return error("invalid_upload_scope","A student identifier is required for student photographs",422,requestId);
     }
     const objectName=`${crypto.randomUUID()}-${name}`;
     const key=`tenants/${ctx.tenantId}/${kind}${subfolder}/${objectName}`;
-    if(kind==="staff-photos")referencePath=`${rawSubfolder}/${objectName}`;
+    if(kind==="staff-photos"||kind==="student-photos")referencePath=`${rawSubfolder}/${objectName}`;
     try{
       const [preparedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.prepare_object_upload(${key},${name},${type},${size}::bigint) metadata`]);
       if(!(preparedRows[0] as any)?.metadata)throw new Error("Upload metadata was not created");
@@ -618,6 +629,38 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const contentType=String(metadata.content_type||"").toLowerCase();
     if(!contentType.startsWith("image/"))return error("invalid_content_type","Stored teacher photograph is not an image",415,requestId);
     const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","Teacher photograph is not available",404,requestId);
+    const h=new Headers();obj.writeHttpMetadata(h);
+    h.set("content-type",contentType);
+    h.set("content-disposition","inline");
+    h.set("cache-control","private, no-store");
+    h.set("x-content-type-options","nosniff");
+    return new Response(obj.body,{headers:h});
+  }
+  if(method==="GET"&&p==="/api/files/student-photo"){
+    const studentId=String(url.searchParams.get("id")||"").trim();
+    const photoPath=String(url.searchParams.get("path")||"").trim();
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(studentId))return error("invalid_student_id","Invalid student photograph owner",422,requestId);
+    if(!photoPath||photoPath.includes("..")||photoPath.startsWith("/"))return error("invalid_photo_path","Invalid student photograph path",422,requestId);
+    const [descriptorRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+      txn`select public.neon_student_photo_descriptor(${studentId}::uuid) descriptor`
+    ]);
+    const descriptor=(descriptorRows[0] as any)?.descriptor||{};
+    if(String(descriptor.photo_url||"")!==photoPath)return error("not_found","Student photograph is not available",404,requestId);
+    const legacyPrefix=`tenants/${ctx.tenantId}/student-photos/`;
+    let key="";
+    if(photoPath.startsWith(legacyPrefix)){
+      key=photoPath;
+    }else{
+      const match=photoPath.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/([A-Za-z0-9._-]{1,220})$/i);
+      if(!match||match[1].toLowerCase()!==studentId.toLowerCase())return error("invalid_photo_path","Invalid student photograph path",422,requestId);
+      key=`tenants/${ctx.tenantId}/student-photos/${photoPath}`;
+    }
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'active') metadata`]);
+    const metadata=(metaRows[0] as any)?.metadata as any;
+    if(!metadata)return error("not_found","Student photograph is not available",404,requestId);
+    const contentType=String(metadata.content_type||"").toLowerCase();
+    if(!contentType.startsWith("image/"))return error("invalid_content_type","Stored student photograph is not an image",415,requestId);
+    const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","Student photograph is not available",404,requestId);
     const h=new Headers();obj.writeHttpMetadata(h);
     h.set("content-type",contentType);
     h.set("content-disposition","inline");
