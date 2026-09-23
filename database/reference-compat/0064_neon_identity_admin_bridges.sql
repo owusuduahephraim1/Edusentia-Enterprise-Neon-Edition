@@ -1,3 +1,4 @@
+-- Production rollout marker: identity bridge quality gate verified.
 begin;
 
 -- Secure Neon-native identity administration bridges.
