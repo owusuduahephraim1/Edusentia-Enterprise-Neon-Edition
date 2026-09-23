@@ -44,10 +44,12 @@ jobs:
 
           psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 -At <<'SQL'
           begin;
+          select id as diagnostic_tenant_id from app.tenants order by created_at limit 1 \gset
+          select id as diagnostic_admin_id from public.profiles where public.current_app_role_for(role)='system_admin' and active order by created_at limit 1 \gset
           set local role edusentia_worker_runtime;
           select app.set_request_context(
-            (select id from app.tenants order by created_at limit 1),
-            (select id from public.profiles where public.current_app_role_for(role)='system_admin' and active order by created_at limit 1),
+            :'diagnostic_tenant_id'::uuid,
+            :'diagnostic_admin_id'::uuid,
             'system_admin',
             2::smallint
           );
