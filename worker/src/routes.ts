@@ -536,12 +536,34 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const allowed=["image/","application/pdf","text/csv","application/vnd.openxmlformats-officedocument"];
     if(!allowed.some(x=>type.startsWith(x)))return error("invalid_content_type","This file type is not allowed",422,requestId);
     const rawSubfolder=String(b.subfolder||"").trim();
-    let subfolder="";
+    let subfolder="",referencePath="";
     if(rawSubfolder){
-      if(kind!=="report-card-templates"||!["early_years","basic_1_6","basic_7_9"].includes(rawSubfolder))return error("invalid_upload_scope","Invalid report-card template class range",422,requestId);
-      subfolder=`/${rawSubfolder}`;
+      if(kind==="report-card-templates"){
+        if(!["early_years","basic_1_6","basic_7_9"].includes(rawSubfolder))return error("invalid_upload_scope","Invalid report-card template class range",422,requestId);
+        subfolder=`/${rawSubfolder}`;
+      }else if(kind==="staff-photos"){
+        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSubfolder))return error("invalid_upload_scope","Invalid teacher photograph scope",422,requestId);
+        if(!/^image\/(jpeg|png|webp)$/i.test(type))return error("invalid_content_type","Teacher photographs must be JPEG, PNG, or WebP images",415,requestId);
+        if(size>8*1024*1024)return error("invalid_file_size","Teacher photographs must be 8 MB or smaller",422,requestId);
+        const [allowedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
+          select (
+            public.license_write_allowed()
+            and exists(
+              select 1 from public.teachers t
+              where t.id=${rawSubfolder}::uuid and t.deleted_at is null
+                and (public.can_manage_teachers() or t.profile_id=auth.uid())
+            )
+          ) allowed
+        `]);
+        if((allowedRows[0] as any)?.allowed!==true)return error("forbidden","You are not authorized to upload this teacher photograph",403,requestId);
+        subfolder=`/${rawSubfolder}`;
+      }else return error("invalid_upload_scope","This upload type does not support subfolders",422,requestId);
+    }else if(kind==="staff-photos"){
+      return error("invalid_upload_scope","A teacher identifier is required for staff photographs",422,requestId);
     }
-    const key=`tenants/${ctx.tenantId}/${kind}${subfolder}/${crypto.randomUUID()}-${name}`;
+    const objectName=`${crypto.randomUUID()}-${name}`;
+    const key=`tenants/${ctx.tenantId}/${kind}${subfolder}/${objectName}`;
+    if(kind==="staff-photos")referencePath=`${rawSubfolder}/${objectName}`;
     try{
       const [preparedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.prepare_object_upload(${key},${name},${type},${size}::bigint) metadata`]);
       if(!(preparedRows[0] as any)?.metadata)throw new Error("Upload metadata was not created");
@@ -550,7 +572,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       throw Object.assign(new Error("The upload could not be prepared. Please retry."),{code:"upload_prepare_failed",status:503});
     }
     // R2 native binding does not expose public credentials. Upload is proxied by the Worker in the dedicated PUT route.
-    return json({objectKey:key,uploadUrl:`/api/files/upload?key=${encodeURIComponent(key)}`,method:"PUT",expiresInSeconds:900,contentType:type});
+    return json({objectKey:key,referencePath:referencePath||undefined,uploadUrl:`/api/files/upload?key=${encodeURIComponent(key)}`,method:"PUT",expiresInSeconds:900,contentType:type});
   }
   if(method==="PUT"&&p==="/api/files/upload"){
     const key=url.searchParams.get("key")||"";if(!key.startsWith(`tenants/${ctx.tenantId}/`))return error("forbidden","Invalid object scope",403,requestId);
@@ -585,6 +607,35 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       throw Object.assign(new Error("The upload could not be finalized. Please retry."),{code:"upload_finalize_failed",status:503});
     }
     return json({ok:true,objectKey:key,size:bytes.byteLength,contentType:expectedType});
+  }
+  if(method==="GET"&&p==="/api/files/staff-photo"){
+    const photoPath=String(url.searchParams.get("path")||"").trim();
+    const match=photoPath.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/([A-Za-z0-9._-]{1,220})$/i);
+    if(!match)return error("invalid_photo_path","Invalid teacher photograph path",422,requestId);
+    const teacherId=match[1];
+    const [accessRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
+      select t.photo_url,
+             (public.can_manage_teachers() or t.profile_id=auth.uid()) allowed
+      from public.teachers t
+      where t.id=${teacherId}::uuid and t.deleted_at is null
+      limit 1
+    `]);
+    const access=(accessRows[0] as any)||{};
+    if(access.allowed!==true)return error("forbidden","You are not authorized to view this teacher photograph",403,requestId);
+    if(String(access.photo_url||"")!==photoPath)return error("not_found","Teacher photograph is not available",404,requestId);
+    const key=`tenants/${ctx.tenantId}/staff-photos/${photoPath}`;
+    const [metaRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.get_object_upload_metadata(${key},'active') metadata`]);
+    const metadata=(metaRows[0] as any)?.metadata as any;
+    if(!metadata)return error("not_found","Teacher photograph is not available",404,requestId);
+    const contentType=String(metadata.content_type||"").toLowerCase();
+    if(!contentType.startsWith("image/"))return error("invalid_content_type","Stored teacher photograph is not an image",415,requestId);
+    const obj=await env.OBJECTS.get(key);if(!obj)return error("not_found","Teacher photograph is not available",404,requestId);
+    const h=new Headers();obj.writeHttpMetadata(h);
+    h.set("content-type",contentType);
+    h.set("content-disposition","inline");
+    h.set("cache-control","private, no-store");
+    h.set("x-content-type-options","nosniff");
+    return new Response(obj.body,{headers:h});
   }
   if(method==="GET"&&p==="/api/files/download"){
     const key=url.searchParams.get("key")||"";
