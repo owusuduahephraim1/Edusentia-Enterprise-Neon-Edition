@@ -50,9 +50,11 @@ test("0061 is installed and verified for future and existing tenants",()=>{
   const template=read("database/tenant-template/install.sh");
   assert.match(install,/reconcile_once_recorded "0061_discovered_operational_parity_repairs"/);
   assert.match(install,/reconcile_once_recorded "0062_user_directory_role_workspace_parity"/);
+  assert.match(install,/reconcile_once_recorded "0063_identity_user_bundle_runtime_grants"/);
+  assert.match(upgrade,/0063_identity_user_bundle_runtime_grants/);
   assert.match(upgrade,/0062_user_directory_role_workspace_parity/);
   assert.match(upgrade,/0061_discovered_operational_parity_repairs/);
-  assert.match(upgrade,/migration_count" = "38/);
+  assert.match(upgrade,/migration_count" = "39/);
   assert.match(template,/operational_repairs_ok/);
 });
 
@@ -101,4 +103,14 @@ test("Accounts Office dashboard accepts both certified role spellings",()=>{
 test("Teacher and Principal linked-record choices remain selected after change",()=>{
   const ui=read("frontend/parity-enterprise-workspaces.js");
   assert.match(ui,/selected=staffSelect\.value\|\|selectedGeneric\|\|""/);
+});
+
+
+test("Neon Worker can execute the protected user-bundle helpers used by account creation",()=>{
+  const sql=read("database/reference-compat/0063_identity_user_bundle_runtime_grants.sql");
+  const worker=read("worker/src/identity-admin.ts");
+  assert.match(worker,/admin_validate_user_bundle/);
+  assert.match(worker,/admin_apply_user_bundle/);
+  assert.match(sql,/grant execute on function public\.admin_validate_user_bundle\(uuid,jsonb,boolean\)\s+to edusentia_worker_runtime/i);
+  assert.match(sql,/grant execute on function public\.admin_apply_user_bundle\(uuid,jsonb\)\s+to edusentia_worker_runtime/i);
 });
