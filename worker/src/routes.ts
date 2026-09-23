@@ -149,6 +149,41 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({ok:true,result:true});
   }
 
+  const financeGuardianRpcMatch=p.match(/^\/api\/compat\/finance-guardian-rpc\/(finance_(?:log_guardian_contact|guardian_follow_up|guardian_contact_history|clear_guardian_contact_history))$/);
+  if(method==="POST"&&financeGuardianRpcMatch){
+    requireRole(ctx,["accountant","accounts_office"]);
+    if(ctx.assuranceLevel<2)return error("mfa_required","A verified MFA session is required for parent and guardian fee follow-up",403,requestId);
+    const operation=financeGuardianRpcMatch[1],body=await readJson<any>(request),args=body?.args&&typeof body.args==="object"&&!Array.isArray(body.args)?body.args:{};
+    let rows:any[];
+    if(operation==="finance_log_guardian_contact"){
+      const payload=args.payload&&typeof args.payload==="object"&&!Array.isArray(args.payload)?args.payload:{};
+      [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.finance_log_guardian_contact(${JSON.stringify(payload)}::jsonb) result`]);
+    }else if(operation==="finance_guardian_follow_up"){
+      [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
+        select public.finance_guardian_follow_up(
+          ${args.target_academic_year_id||null}::uuid,
+          ${args.target_term_id||null}::uuid,
+          ${args.target_class_id||null}::uuid,
+          ${String(args.status_filter||"outstanding")},
+          ${args.search_text==null?null:String(args.search_text)}
+        ) result`
+      ]);
+    }else if(operation==="finance_guardian_contact_history"){
+      [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
+        select public.finance_guardian_contact_history(
+          ${args.target_academic_year_id||null}::uuid,
+          ${args.target_term_id||null}::uuid,
+          ${args.search_text==null?null:String(args.search_text)},
+          ${Math.max(1,Number(args.page_number||1))}::integer,
+          ${Math.min(200,Math.max(1,Number(args.page_size||100)))}::integer
+        ) result`
+      ]);
+    }else{
+      [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.finance_clear_guardian_contact_history() result`]);
+    }
+    return json({ok:true,operation,result:(rows[0] as any)?.result??null});
+  }
+
   const certifiedRpcMatch=p.match(/^\/api\/compat\/rpc\/([a-z0-9_]+)$/);
   if(method==="POST"&&certifiedRpcMatch){
     const operation=certifiedRpcMatch[1],destructiveMutation=/^(archive_|delete_|remove_)/.test(operation);
