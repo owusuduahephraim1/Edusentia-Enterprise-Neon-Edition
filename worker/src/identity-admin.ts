@@ -74,27 +74,18 @@ async function createIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<st
     await validateBundle(sql,ctx,{...bundle,user_id:null},false);
     try{
       const results=await tenantTx<any[]>(sql,ctx,txn=>[
-        txn`insert into authn.users(
-              id,email,display_name,phone,disabled_at,raw_user_meta_data,raw_app_meta_data
-            ) values(
-              ${userId}::uuid,${email},${bundle.full_name},${bundle.phone||null},
-              case when ${bundle.active}::boolean then null else now() end,
-              ${JSON.stringify({full_name:bundle.full_name,must_change_password:bundle.must_change_password})}::jsonb,
-              ${JSON.stringify({role:bundle.role})}::jsonb
-            )`,
-        txn`insert into authn.password_credentials(user_id,password_hash,password_salt,algorithm)
-            values(${userId}::uuid,${credential.hash},${credential.salt},${credential.algorithm})`,
-        txn`insert into app.tenant_memberships(tenant_id,user_id,role,status,mfa_required)
-            values(${ctx.tenantId}::uuid,${userId}::uuid,${String(bundle.role)},
-              case when ${bundle.active}::boolean then 'active' else 'suspended' end,${bundle.mfa_required})
-            on conflict(tenant_id,user_id) do update set
-              role=excluded.role,status=excluded.status,mfa_required=excluded.mfa_required`,
+        txn`select public.neon_identity_create_auth_user(
+          ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${email},
+          ${bundle.full_name},${bundle.phone||null},${bundle.active}::boolean,${String(bundle.role)},
+          ${bundle.mfa_required}::boolean,${bundle.must_change_password}::boolean,
+          ${credential.hash},${credential.salt},${credential.algorithm}
+        ) result`,
         txn`select public.admin_apply_user_bundle(${ctx.userId}::uuid,${JSON.stringify(bundle)}::jsonb) result`,
-        ...(guardianId?[txn`update public.guardian_links set auth_user_id=${userId}::uuid where guardian_id=${guardianId}::uuid`]:[])
+        ...(guardianId?[txn`select public.neon_identity_link_guardian(${ctx.userId}::uuid,${guardianId}::uuid,${userId}::uuid) result`]:[])
       ]);
-      return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[3] as any)?.[0]?.result??(results[3] as any)?.result};
+      return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[1] as any)?.[0]?.result??(results[1] as any)?.result};
     }catch(e:any){
-      if(String(e?.code||"")==="23505"&&/email|users_email_lower_uidx/i.test(String(e?.message||"")))continue;
+      if(String(e?.code||"")==="23505"&&/email|users_email_lower_uidx|already exists/i.test(String(e?.message||"")))continue;
       throw e;
     }
   }
@@ -109,22 +100,15 @@ async function updateIdentity(sql:TenantSql,ctx:SessionContext,payload:Record<st
   const bundle=bundleFrom(payload,email,userId,overrides);
   await validateBundle(sql,ctx,bundle,true);
   const results=await tenantTx<any[]>(sql,ctx,txn=>[
-    txn`update authn.users set
-          email=${email},display_name=${bundle.full_name},phone=${bundle.phone||null},
-          disabled_at=case when ${bundle.active}::boolean then null else coalesce(disabled_at,now()) end,
-          raw_user_meta_data=coalesce(raw_user_meta_data,'{}'::jsonb)||${JSON.stringify({full_name:bundle.full_name,must_change_password:bundle.must_change_password})}::jsonb,
-          raw_app_meta_data=coalesce(raw_app_meta_data,'{}'::jsonb)||${JSON.stringify({role:bundle.role})}::jsonb,
-          updated_at=now()
-        where id=${userId}::uuid`,
-    txn`insert into app.tenant_memberships(tenant_id,user_id,role,status,mfa_required)
-        values(${ctx.tenantId}::uuid,${userId}::uuid,${String(bundle.role)},
-          case when ${bundle.active}::boolean then 'active' else 'suspended' end,${bundle.mfa_required})
-        on conflict(tenant_id,user_id) do update set
-          role=excluded.role,status=excluded.status,mfa_required=excluded.mfa_required`,
+    txn`select public.neon_identity_update_auth_user(
+      ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${email},
+      ${bundle.full_name},${bundle.phone||null},${bundle.active}::boolean,${String(bundle.role)},
+      ${bundle.mfa_required}::boolean,${bundle.must_change_password}::boolean
+    ) result`,
     txn`select public.admin_apply_user_bundle(${ctx.userId}::uuid,${JSON.stringify(bundle)}::jsonb) result`,
-    ...(guardianId?[txn`update public.guardian_links set auth_user_id=${userId}::uuid where guardian_id=${guardianId}::uuid`]:[])
+    ...(guardianId?[txn`select public.neon_identity_link_guardian(${ctx.userId}::uuid,${guardianId}::uuid,${userId}::uuid) result`]:[])
   ]);
-  return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[2] as any)?.[0]?.result??(results[2] as any)?.result};
+  return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[1] as any)?.[0]?.result??(results[1] as any)?.result};
 }
 
 async function ensureDeletable(sql:TenantSql,ctx:SessionContext,userId:string){
@@ -143,16 +127,10 @@ async function resetPassword(sql:TenantSql,ctx:SessionContext,userId:string,pass
   if(password.length<8||password.length>128)fail("Use a password between 8 and 128 characters.","invalid_password",422);
   const credential=await passwordHash(password);
   await tenantTx<any[]>(sql,ctx,txn=>[
-    txn`insert into authn.password_credentials(user_id,password_hash,password_salt,algorithm,password_changed_at,failed_attempts,locked_until)
-        values(${userId}::uuid,${credential.hash},${credential.salt},${credential.algorithm},now(),0,null)
-        on conflict(user_id) do update set
-          password_hash=excluded.password_hash,password_salt=excluded.password_salt,algorithm=excluded.algorithm,
-          password_changed_at=now(),failed_attempts=0,locked_until=null`,
-    txn`update authn.users set raw_user_meta_data=coalesce(raw_user_meta_data,'{}'::jsonb)||
-          ${JSON.stringify({must_change_password:mustChange})}::jsonb,updated_at=now() where id=${userId}::uuid`,
-    txn`update public.profiles set must_change_password=${mustChange},updated_at=now() where id=${userId}::uuid`,
-    txn`select audit.record_auth_event(${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.password.admin_reset',
-          ${JSON.stringify({target_user_id:userId,must_change_password:mustChange})}::jsonb)`
+    txn`select public.neon_identity_reset_password(
+      ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,
+      ${credential.hash},${credential.salt},${credential.algorithm},${mustChange}::boolean
+    ) result`
   ]);
   return {ok:true,id:userId,password_reset:true,must_change_password:mustChange};
 }
@@ -180,9 +158,9 @@ async function genericAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
     const userId=uuid(payload.user_id);if(!userId)fail("User account is required","validation_error",422);
     await ensureDeletable(sql,ctx,userId);
     await tenantTx<any[]>(sql,ctx,txn=>[
-      txn`select audit.record_auth_event(${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.user.delete',
-            ${JSON.stringify({target_user_id:userId,reason:clean(payload.reason,500)})}::jsonb)`,
-      txn`delete from authn.users where id=${userId}::uuid`
+      txn`select public.neon_identity_delete_auth_user(
+        ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${clean(payload.reason,500)}
+      ) result`
     ]);
     return {ok:true,id:userId,deleted:true};
   }
@@ -190,29 +168,21 @@ async function genericAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
 }
 
 async function directoryRecord(sql:TenantSql,ctx:SessionContext,role:string,recordId:string){
-  if(role==="accountant"){
-    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select id,profile_id,full_name,phone,active,deleted_at from public.accounts_office_staff where id=${recordId}::uuid limit 1`]);
-    const row=(rows[0] as any)?.[0]??(rows[0] as any);if(!row||row.deleted_at||row.active!==true)fail("Accounts Office Staff record is unavailable","directory_record_unavailable",404);
-    return {profileId:row.profile_id||null,fullName:String(row.full_name||""),phone:String(row.phone||"")};
+  if(role==="accountant"||role==="student"){
+    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.list_profiles_with_access() result`]);
+    const data=(rows[0] as any)?.result||{};
+    const source=role==="accountant"?(Array.isArray(data.accountant_records)?data.accountant_records:[]):(Array.isArray(data.student_records)?data.student_records:[]);
+    const row=source.find((item:any)=>String(item?.id||"")===recordId);
+    if(!row||row.active===false)fail(role==="accountant"?"Accounts Office Staff record is unavailable":"Student record is unavailable","directory_record_unavailable",404);
+    return {profileId:row.profile_id||null,fullName:String(row.full_name||""),phone:role==="accountant"?String(row.phone||""):""};
   }
-  if(role==="student"){
-    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select id,profile_id,first_name,middle_name,last_name,status,deleted_at from public.students where id=${recordId}::uuid limit 1`]);
-    const row=(rows[0] as any)?.[0]??(rows[0] as any);if(!row||row.deleted_at||row.status!=="active")fail("Student record is unavailable","directory_record_unavailable",404);
-    return {profileId:row.profile_id||null,fullName:[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ").trim(),phone:""};
-  }
-  const [guardianRows,linkRows]=await tenantTx<any[]>(sql,ctx,txn=>[
-    txn`select id,full_name,phone from public.student_guardians where id=${recordId}::uuid limit 1`,
-    txn`select distinct auth_user_id from public.guardian_links where guardian_id=${recordId}::uuid and auth_user_id is not null`
-  ]);
-  const guardian=(guardianRows[0] as any)?.[0]??(guardianRows[0] as any);
-  const links=Array.isArray(linkRows)?linkRows:[];if(!guardian)fail("Parent or Guardian record is unavailable","directory_record_unavailable",404);
-  if(!links.length){
-    const [countRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select count(*)::int count from public.guardian_links where guardian_id=${recordId}::uuid`]);
-    const count=Number(((countRows[0] as any)?.[0]??(countRows[0] as any))?.count||0);
-    if(count<1)fail("This Parent or Guardian record is not linked to a student","directory_record_unavailable",409);
-  }
-  if(links.length>1)fail("This Parent or Guardian record has conflicting portal-account links","directory_link_conflict",409);
-  return {profileId:links[0]?.auth_user_id||null,fullName:String(guardian.full_name||""),phone:String(guardian.phone||"")};
+  const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.neon_guardian_account_records() result`]);
+  const guardians=Array.isArray((rows[0] as any)?.result)?(rows[0] as any).result:[];
+  const guardian=guardians.find((item:any)=>String(item?.id||"")===recordId);
+  if(!guardian)fail("Parent or Guardian record is unavailable","directory_record_unavailable",404);
+  if(Number(guardian.linked_account_count||0)>1)fail("This Parent or Guardian record has conflicting portal-account links","directory_link_conflict",409);
+  if(!Array.isArray(guardian.children)||guardian.children.length<1)fail("This Parent or Guardian record is not linked to a student","directory_record_unavailable",409);
+  return {profileId:guardian.auth_user_id||null,fullName:String(guardian.full_name||""),phone:String(guardian.phone||"")};
 }
 
 async function directoryAdmin(sql:TenantSql,ctx:SessionContext,body:Body){
