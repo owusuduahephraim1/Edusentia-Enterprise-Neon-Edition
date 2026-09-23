@@ -25,7 +25,7 @@ test("teacher photo storage contract", () => {
   for (const marker of [
     'kind==="staff-photos"',
     "referencePath=",
-    "public.can_manage_teachers() or t.profile_id=auth.uid()",
+    "public.can_manage_teachers() or t.profile_id=${ctx.userId}::uuid",
     'p==="/api/files/staff-photo"',
     'h.set("content-disposition","inline")',
     'h.set("cache-control","private, no-store")',
@@ -34,7 +34,7 @@ test("teacher photo storage contract", () => {
   assert.ok(certified.includes("split_part(clean_path,'/',1)<>target_teacher_id::text"));
 });
 
-test("teacher photo API client parity", () => {
+test("teacher photo Worker authorization never requires direct auth schema access", () => {\n  const routes = read("worker/src/routes.ts");\n  const photoSection = routes.slice(routes.indexOf('kind==="staff-photos"'), routes.indexOf('if(method==="GET"&&p==="/api/files/download")'));\n  assert.ok(photoSection.includes("t.profile_id=${ctx.userId}::uuid"));\n  assert.equal(photoSection.includes("auth.uid()"), false);\n});\n\ntest("teacher photo API client parity", () => {
   const api = read("frontend/api-client.js");
   for (const marker of [
     "async function downloadStaffPhoto",
