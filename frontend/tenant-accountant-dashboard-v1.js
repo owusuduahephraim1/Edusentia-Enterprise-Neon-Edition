@@ -27,7 +27,7 @@
   }
 
   function isAccountant() {
-    return String(F()?.S?.role || "") === "accountant";
+    return ["accountant","accounts_office"].includes(String(F()?.S?.role || ""));
   }
 
   function dashboardButton() {
@@ -159,7 +159,7 @@
         setTimeout(() => { if (!installed && isAccountant()) void install(); }, 800);
       });
     }
-    if (String(runtime.S.role || "") !== "accountant") return;
+    if (!["accountant","accounts_office"].includes(String(runtime.S.role || ""))) return;
     const nav = byId("mainNav"), content = byId("content"), title = byId("pageTitle");
     if (!nav || !content) return;
     installed = true;
