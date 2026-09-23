@@ -49,6 +49,6 @@ test("student photo contract is reconciled for future and existing tenants",()=>
   const template=read("database/tenant-template/install.sh");
   assert.match(install,/reconcile_once_recorded "0059_student_photo_r2_contract"/);
   assert.match(upgrade,/0059_student_photo_r2_contract/);
-  assert.match(upgrade,/migration_count" = "35/);
+  assert.match(upgrade,/migration_count" = "36/);
   assert.match(template,/student_photo_contract_ok/);
 });
