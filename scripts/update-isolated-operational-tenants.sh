@@ -292,6 +292,7 @@ SQL
     echo "::error::Login directory synchronization mismatch for $tenant_code: master=$route_count tenant=$tenant_login_count" >&2
     exit 1
   }
+  echo "Tenant $tenant_code login directory synchronized: $route_count/$tenant_login_count active identities routable."
 
   psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
 insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
