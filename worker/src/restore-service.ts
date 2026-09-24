@@ -212,7 +212,7 @@ export async function executeRestore(env:Env,sql:TenantSql,ctx:SessionContext,bo
   try{
     const prepared=await parseRestore(env,ctx,bytes,snap);
     const map=await reconcileUsers(sql,ctx,prepared.payload.auth_users||[]);
-    const pre=await performFullBackup(env,sql,ctx,"manual");
+    const pre=await performFullBackup(env,sql,ctx,"pre_restore");
     await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_set_restore_prebackup(${id}::uuid,${ctx.userId}::uuid,${String(pre.id)}::uuid)`]);
     await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.school_restore_clear_operational_data(${id}::uuid)`]);
     const tables=prepared.payload.tables||{};
