@@ -2,7 +2,7 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,certified,esc,status,formatDate,loading,pageError,byId,friendly,openModal,closeModal,formValues,optionRows,showMessage}=P;
-  const S={tab:"periods",data:null,components:[]};
+  const S={tab:"periods",data:null,components:[],assignmentClassSelections:new Set(),assignmentSubjectSelections:new Set()};
   const arr=v=>Array.isArray(v)?v:[];
   const num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d;
   const title=v=>String(v||"").replaceAll("_"," ").replace(/\b\w/g,m=>m.toUpperCase());
@@ -49,7 +49,89 @@
   }
   function classEditor(id=""){const row=arr(S.data?.classes).find(x=>x.id===id)||{},teachers=arr(S.data?.teacher_records).filter(x=>x.active!==false);openModal(id?"Edit Class":"Add Class","",'<form id="academicEntityForm" class="form-grid"><label class="field"><span>Name</span><input name="name" value="'+esc(row.name||"")+'" required></label><label class="field"><span>Level order</span><input type="number" name="level_order" value="'+esc(row.level_order||0)+'"></label><label class="field full"><span>Class teacher</span><select name="class_teacher_record_id"><option value="">Unassigned</option>'+teachers.map(t=>'<option value="'+esc(t.id)+'" '+(String(t.id)===String(row.class_teacher_record_id||"")?"selected":"")+'>'+esc(t.label||t.full_name||"Teacher")+'</option>').join("")+'</select></label><label class="check-field full"><input type="checkbox" name="active" '+(row.active!==false?"checked":"")+'><span>Active class</span></label><p id="academicEntityMessage" class="form-message hidden full"></p></form>','<button class="button ghost" id="academicEntityCancel">Cancel</button><button class="button primary" id="academicEntitySave">Save</button>');bindEntitySave("classes",id);}
   function subjectEditor(id=""){const row=arr(S.data?.subjects).find(x=>x.id===id)||{};openModal(id?"Edit Subject":"Add Subject",id?"The unique subject code remains permanent.":"The code is generated automatically from the subject name.",'<form id="academicEntityForm" class="form-grid"><label class="field"><span>Subject name</span><input id="subjectName" name="name" value="'+esc(row.name||"")+'" required></label><label class="field"><span>Unique code</span><input id="subjectCode" name="code" value="'+esc(row.code||"")+'" readonly placeholder="Generated automatically"></label><label class="field"><span>Display order</span><input type="number" name="display_order" value="'+esc(row.display_order||0)+'"></label><label class="check-field"><input type="checkbox" name="active" '+(row.active!==false?"checked":"")+'><span>Active subject</span></label><p id="academicEntityMessage" class="form-message hidden full"></p></form>','<button class="button ghost" id="academicEntityCancel">Cancel</button><button class="button primary" id="academicEntitySave">Save</button>');if(!id){let timer;byId("subjectName").oninput=()=>{clearTimeout(timer);timer=setTimeout(async()=>{try{byId("subjectCode").value=await certified("generate_subject_code",{subject_name:byId("subjectName").value.trim(),exclude_subject_id:null});}catch{}},350);};}bindEntitySave("subjects",id);}
-  function assignmentEditor(){const profileTeachers=arr(S.data?.profiles).filter(x=>["class_teacher","subject_teacher"].includes(String(x.role||"")));const profileById=new Map(profileTeachers.map(x=>[String(x.id),x]));const linkedTeachers=arr(S.data?.teacher_records).filter(x=>x.active!==false&&x.profile_id).map(x=>{const profile=profileById.get(String(x.profile_id));return{id:x.profile_id,full_name:profile?.full_name||x.full_name||x.label||x.staff_no||"Teacher",role:profile?.role||"subject_teacher"};});const teachers=[...new Map([...profileTeachers,...linkedTeachers].filter(x=>x.id).map(x=>[String(x.id),x])).values()].sort((a,b)=>String(a.full_name||"").localeCompare(String(b.full_name||"")));openModal("Assign Subjects","Assign one teacher to one or more class-subject combinations.",'<form id="assignmentForm" class="form-stack"><label class="field"><span>Teacher</span><select name="teacher_id" required>'+optionRows(teachers,"id","full_name","","Select teacher")+'</select></label><div class="form-grid"><label class="field"><span>Classes</span><select name="class_ids" multiple size="8" required>'+arr(S.data?.classes).filter(x=>x.active!==false).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("")+'</select></label><label class="field"><span>Subjects</span><select name="subject_ids" multiple size="8" required>'+arr(S.data?.subjects).filter(x=>x.active!==false).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' '+esc(x.code||"")+'</option>').join("")+'</select></label></div><label class="check-field"><input type="checkbox" name="active" checked><span>Active assignments</span></label><p id="assignmentMessage" class="form-message hidden"></p></form>','<button class="button ghost" id="assignmentCancel">Cancel</button><button class="button primary" id="assignmentSave">Save assignments</button>');byId("assignmentCancel").onclick=closeModal;byId("assignmentSave").onclick=async()=>{const form=byId("assignmentForm"),classes=[...form.elements.class_ids.selectedOptions].map(x=>x.value),subjects=[...form.elements.subject_ids.selectedOptions].map(x=>x.value);if(!form.reportValidity()||!classes.length||!subjects.length)return;const v=formValues(form),b=byId("assignmentSave");b.disabled=true;try{await certified("save_class_subject_assignments_batch",{payload:{id:null,teacher_id:v.teacher_id,active:form.elements.active.checked,selections:classes.flatMap(class_id=>subjects.map(subject_id=>({class_id,subject_id}))),reason:"Class-subject assignments created"}});closeModal();toast("Subject assignments saved");await refresh();}catch(e){showMessage("assignmentMessage",friendly(e));}finally{b.disabled=false;}};}
+  function multiSelectSummary(items,selected,emptyLabel){
+    const chosen=items.filter(item=>selected.has(String(item.id)));
+    if(!chosen.length)return emptyLabel;
+    if(chosen.length===1)return chosen[0].name;
+    if(chosen.length===2)return chosen[0].name+", "+chosen[1].name;
+    return chosen.length+" selected";
+  }
+
+  function renderVerticalChecklistDropdown({rootId,label,items,selected,emptyLabel="Select",allLabel="",showCode=false,onChange}){
+    const root=byId(rootId);if(!root)return;
+    const normalized=items.filter(item=>item?.id).map(item=>({...item,id:String(item.id)}));
+    const allSelected=normalized.length>0&&normalized.every(item=>selected.has(item.id));
+    root.innerHTML='<details class="vertical-check-dropdown"><summary><span class="vertical-check-title">'+esc(label)+'</span><span class="vertical-check-value">'+esc(multiSelectSummary(normalized,selected,emptyLabel))+'</span></summary><div class="vertical-check-panel">'+
+      (allLabel?'<label class="vertical-check-option all-option"><span>'+esc(allLabel)+'</span><input type="checkbox" data-check-all '+(allSelected?"checked":"")+'></label>':"")+
+      (normalized.length?normalized.map(item=>'<label class="vertical-check-option"><span><strong>'+esc(item.name)+'</strong>'+(showCode&&item.code?'<small>'+esc(item.code)+'</small>':"")+'</span><input type="checkbox" data-check-id="'+esc(item.id)+'" '+(selected.has(item.id)?"checked":"")+'></label>').join(""):'<div class="vertical-check-empty">No records available</div>')+
+      '</div></details>';
+    root.querySelectorAll("[data-check-id]").forEach(input=>input.onchange=()=>{
+      const id=String(input.dataset.checkId||"");
+      if(input.checked)selected.add(id);else selected.delete(id);
+      onChange?.();
+    });
+    const allInput=root.querySelector("[data-check-all]");
+    if(allInput)allInput.onchange=()=>{
+      if(allInput.checked)normalized.forEach(item=>selected.add(item.id));else selected.clear();
+      onChange?.();
+    };
+  }
+
+  function renderAssignmentVerticalSelectors(){
+    const classes=arr(S.data?.classes).filter(item=>item.active!==false);
+    const subjects=arr(S.data?.subjects).filter(item=>item.active!==false);
+    renderVerticalChecklistDropdown({
+      rootId:"assignmentClassDropdown",
+      label:"Class",
+      items:classes,
+      selected:S.assignmentClassSelections,
+      emptyLabel:"Select class",
+      onChange:renderAssignmentVerticalSelectors
+    });
+    renderVerticalChecklistDropdown({
+      rootId:"assignmentSubjectDropdown",
+      label:"Subject",
+      items:subjects,
+      selected:S.assignmentSubjectSelections,
+      emptyLabel:"Select subject",
+      allLabel:"All subjects",
+      showCode:true,
+      onChange:renderAssignmentVerticalSelectors
+    });
+    const count=S.assignmentClassSelections.size*S.assignmentSubjectSelections.size;
+    const summary=byId("assignmentCombinationSummary");
+    if(summary)summary.textContent=count
+      ?count+" class-subject assignment"+(count===1?"":"s")+" will be saved."
+      :"Select one or more classes and one or more subjects.";
+  }
+
+  function assignmentEditor(){
+    const profileTeachers=arr(S.data?.profiles).filter(x=>["class_teacher","subject_teacher"].includes(String(x.role||"")));
+    const profileById=new Map(profileTeachers.map(x=>[String(x.id),x]));
+    const linkedTeachers=arr(S.data?.teacher_records).filter(x=>x.active!==false&&x.profile_id).map(x=>{
+      const profile=profileById.get(String(x.profile_id));
+      return{id:x.profile_id,full_name:profile?.full_name||x.full_name||x.label||x.staff_no||"Teacher",role:profile?.role||"subject_teacher"};
+    });
+    const teachers=[...new Map([...profileTeachers,...linkedTeachers].filter(x=>x.id).map(x=>[String(x.id),x])).values()].sort((a,b)=>String(a.full_name||"").localeCompare(String(b.full_name||"")));
+    S.assignmentClassSelections=new Set();
+    S.assignmentSubjectSelections=new Set();
+    openModal("Assign Subjects","Select one or more classes and subjects for the selected teacher.",'<form id="assignmentForm" class="form-stack"><label class="field"><span>Teacher</span><select name="teacher_id" required>'+optionRows(teachers,"id","full_name","","Select teacher")+'</select></label><div class="independent-check-grid"><div id="assignmentClassDropdown"></div><div id="assignmentSubjectDropdown"></div></div><p class="help-text" id="assignmentCombinationSummary"></p><p class="help-text">For different subject groups, save one group first, then use Assign more for the next class range.</p><label class="check-field"><input type="checkbox" name="active" checked><span>Active assignments</span></label><p id="assignmentMessage" class="form-message hidden"></p></form>','<button class="button ghost" id="assignmentCancel">Cancel</button><button class="button primary" id="assignmentSave">Save assignments</button>');
+    renderAssignmentVerticalSelectors();
+    byId("assignmentCancel").onclick=closeModal;
+    byId("assignmentSave").onclick=async()=>{
+      const form=byId("assignmentForm"),classes=[...S.assignmentClassSelections],subjects=[...S.assignmentSubjectSelections];
+      if(!form.reportValidity())return;
+      if(!classes.length){showMessage("assignmentMessage","Select at least one class.");return;}
+      if(!subjects.length){showMessage("assignmentMessage","Select at least one subject.");return;}
+      const v=formValues(form),b=byId("assignmentSave"),selections=classes.flatMap(class_id=>subjects.map(subject_id=>({class_id,subject_id})));
+      b.disabled=true;b.textContent="Saving";
+      try{
+        await certified("save_class_subject_assignments_batch",{payload:{id:null,teacher_id:v.teacher_id,active:form.elements.active.checked,selections,reason:"Class-subject assignments created"}});
+        closeModal();toast(selections.length+" assignment"+(selections.length===1?"":"s")+" saved");await refresh();
+      }catch(e){showMessage("assignmentMessage",friendly(e));}
+      finally{b.disabled=false;b.textContent="Save assignments";}
+    };
+  }
 
   function assessment(){
     const rows=arr(S.data?.assessment_schemes);
