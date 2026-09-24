@@ -45,7 +45,7 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(template,/install-operational-parity\.sh/);
   assert.match(template,/count\(distinct p\.proname\)[\s\S]*258/);
   for(const migration of [
-    "0049a_operational_finance_reference.sql","0049v_live_plan_feature_parity.sql","0049w_school_identity_logo_parity.sql","0049x_class_scoped_student_admission_numbers.sql","0049y_audit_permanent_reset.sql","hr_staff_management_v1.sql",
+    "0049a_operational_finance_reference.sql","0049v_live_plan_feature_parity.sql","0049w_school_identity_logo_parity.sql","0068_commercial_plan_tiering.sql","0049x_class_scoped_student_admission_numbers.sql","0049y_audit_permanent_reset.sql","hr_staff_management_v1.sql",
     "student_services_foundation_v1.sql","admissions_applicant_management_v1.sql",
     "discipline_welfare_management_v1.sql","health_clinic_management_v1.sql",
     "communications_messaging_centre_v1.sql","hostel_boarding_management_v1.sql",
@@ -56,6 +56,7 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.match(grants,/finance_%/);
   assert.match(installer,/reconcile_once_recorded "0049v_live_plan_feature_parity"/);
   assert.match(installer,/reconcile_once_recorded "0049w_school_identity_logo_parity"/);
+  assert.match(installer,/reconcile_once_recorded "0068_commercial_plan_tiering"/);
   assert.doesNotMatch(installer,/run_once "0049w_school_identity_logo_parity"/);
   assert.match(installer,/reconcile_once_recorded "0049x_class_scoped_student_admission_numbers"/);
   assert.doesNotMatch(installer,/run_once "0049x_class_scoped_student_admission_numbers"/);
@@ -83,8 +84,8 @@ test("tenant template installs deep blueprint module compatibility additively",(
   assert.equal(installer.includes("\\nrun_once"),false,"installer must not contain a literal backslash-n escape between migration calls");
   assert.equal(template.includes("\\ntest"),false,"tenant template must not contain a literal backslash-n escape between validation checks");
   const upgrader=read("scripts/update-isolated-operational-tenants.sh");
-  assert.match(upgrader,/tenant_commercial_plan_parity_verified/);
-  assert.match(upgrader,/0049v_live_plan_feature_parity/);
+  assert.match(upgrader,/tenant_commercial_plan_tiering_v2_verified/);
+  assert.match(upgrader,/0068_commercial_plan_tiering/);
   assert.match(upgrader,/feature_count',27/);
   assert.match(upgrader,/rpc_count',258/);
 });
