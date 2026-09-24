@@ -1,6 +1,6 @@
 (()=>{"use strict";
 if(window.EDS_STUDENT_SERVICES_V1)return;window.EDS_STUDENT_SERVICES_V1=true;
-const S={c:null,s:null,t:"overview",self:null},SRK="service"+"_"+"role",$=id=>document.getElementById(id),e=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),L=v=>String(v||"—").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()),DT=v=>v?new Date(v).toLocaleString("en-GH"):"—",D=v=>v?new Date(`${String(v).slice(0,10)}T00:00:00`).toLocaleDateString("en-GH"):"—",cap=k=>!!S.s?.capabilities?.[k],role=()=>S.s?.app_role||"",err=x=>String(x?.message||x||"Request failed").replaceAll("_"," ");
+const S={c:null,s:null,t:"overview",self:null},SRK="service"+"_"+"role",SHELL_ROLES=new Set(["principal","class_teacher","subject_teacher"]),$=id=>document.getElementById(id),e=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),L=v=>String(v||"—").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()),DT=v=>v?new Date(v).toLocaleString("en-GH"):"—",D=v=>v?new Date(`${String(v).slice(0,10)}T00:00:00`).toLocaleDateString("en-GH"):"—",cap=k=>!!S.s?.capabilities?.[k],role=()=>S.s?.app_role||"",err=x=>String(x?.message||x||"Request failed").replaceAll("_"," ");
 let authSubscription=null,bootVersion=0;
 function clearAccess(){bootVersion++;S.s=null;S.self=null;$("studentServicesNav")?.remove()}
 function cli(){
@@ -45,10 +45,12 @@ async function appoint(c){try{const p=await form("Appoint Student Services staff
 async function loadSelf(){const x={guardianIncidents:[],health:[],boarding:[],alumni:null,threads:[],visible:false};for(const [k,n] of [["guardianIncidents","discipline_my_children_incidents"],["health","health_my_children_emergency_summary"],["boarding","hostel_my_children_boarding"],["threads","communications_my_threads"]]){try{x[k]=await r(n)}catch{}}try{x.alumni=await r("alumni_my_record")}catch{}x.visible=!!(x.guardianIncidents?.length||x.health?.length||x.boarding?.length||x.alumni||x.threads?.length);return x}
 async function mine(){const x=S.self||await loadSelf();shell("My Student Services","Guardian/student self-service information permitted for this account",`${x.guardianIncidents?.length?`<section class="ssp"><h3>Discipline updates</h3>${T(["Student","Date","Type","Summary","Status"],x.guardianIncidents.map(v=>`<tr><td>${e(v.student_name)}</td><td>${e(DT(v.occurred_at))}</td><td>${e(L(v.incident_type))}</td><td class="wrap">${e(v.summary)}</td><td>${B(v.status)}</td></tr>`) )}</section>`:""}${x.health?.length?`<section class="ssp"><h3>Emergency health summary</h3>${T(["Student","Blood","Allergies","Conditions","Emergency contact"],x.health.map(v=>`<tr><td>${e(v.student_name)}</td><td>${e(v.blood_group||"—")}</td><td class="wrap">${e(v.allergies||"—")}</td><td class="wrap">${e(v.chronic_conditions||"—")}</td><td>${e(v.emergency_contact_name||"—")} ${e(v.emergency_contact_phone||"")}</td></tr>`) )}</section>`:""}${x.boarding?.length?`<section class="ssp"><h3>Boarding</h3>${T(["Student","House","Room","Bed","Type","Latest movement"],x.boarding.map(v=>`<tr><td>${e(v.student_name)}</td><td>${e(v.house_name)}</td><td>${e(v.room_code)}</td><td>${e(v.bed_code)}</td><td>${e(L(v.boarding_type))}</td><td>${e(L(v.latest_movement?.movement_type||"—"))}</td></tr>`) )}</section>`:""}${x.alumni?`<section class="ssp"><h3>My alumni record</h3><div class="ssms">${K("Alumni code",x.alumni.alumni_code)}${K("Admission",x.alumni.former_admission_no)}${K("Verification",L(x.alumni.verification_status))}</div></section>`:""}${x.threads?.length?`<section class="ssp"><h3>Message threads</h3>${T(["Subject","Messages","Updated"],x.threads.map(v=>`<tr><td>${e(v.subject)}</td><td>${e(v.message_count||0)}</td><td>${e(DT(v.updated_at))}</td></tr>`) )}</section>`:""}`)}
 async function render(){try{const fn={overview,admissions,wellbeing,health,communications,hostel,alumni,staff,mine}[S.t]||overview;await fn()}catch(x){bad(x)}}
+async function openFromShell(){css();$("sidebar")?.classList.remove("open");if(!S.s)await boot();if(!S.s)throw new Error("Student Services access could not be initialized");await render()}
 function nav(){
   const n=$("mainNav");if(!n)return;
+  if(SHELL_ROLES.has(role())){$("studentServicesNav")?.remove();return}
   let b=$("studentServicesNav");
-  if(!b){b=document.createElement("button");b.type="button";b.id="studentServicesNav";b.className="nav-item ssnav";b.setAttribute("data-student-services","1");b.innerHTML='<span aria-hidden="true">◎</span><span>Student Services</span>';b.onclick=()=>{S.t="overview";render()}}
+  if(!b){b=document.createElement("button");b.type="button";b.id="studentServicesNav";b.className="nav-item ssnav";b.setAttribute("data-student-services","1");b.innerHTML='<span aria-hidden="true">◎</span><span>Student Services</span>';b.onclick=()=>{S.t="overview";$("sidebar")?.classList.remove("open");render()}}
   const operations=n.querySelector('[data-view="operations"]');
   if(operations){if(operations.nextElementSibling!==b)n.insertBefore(b,operations.nextElementSibling)}
   else if(b.parentElement!==n)n.appendChild(b);
@@ -76,5 +78,6 @@ async function boot(){
 }
 new MutationObserver(()=>{const hasStaff=S.s&&Object.values(S.s.capabilities||{}).some(Boolean);if(hasStaff||S.self?.visible)nav()}).observe(document.documentElement,{childList:true,subtree:true});
 for(const event of ["load","pageshow","focus","edusentia:tenant-ready"])window.addEventListener(event,()=>setTimeout(boot,0));
+window.EdusentiaStudentServices=Object.freeze({openFromShell,render,boot});
 setTimeout(boot,300);setTimeout(boot,1500);
 })();
