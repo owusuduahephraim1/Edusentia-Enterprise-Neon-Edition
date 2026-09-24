@@ -369,6 +369,55 @@
       byId("content").querySelectorAll("[data-dashboard-view]").forEach(button=>button.onclick=()=>navigate(button.dataset.dashboardView));
       return;
     }
+    if(role()==="principal"){
+      const terms=Array.isArray(data.terms)?data.terms:[],years=Array.isArray(data.academic_years)?data.academic_years:[],term=terms.find(item=>item.is_active)||terms[0]||null,year=years.find(item=>item.is_active)||years.find(item=>String(item.id)===String(term?.academic_year_id))||years[0]||null;
+      const [metrics,signatureRecord]=await Promise.all([
+        certified("get_role_dashboard",{target_term_id:term?.id||null}).catch(()=>({})),
+        certified("get_my_headteacher_signature",{}).catch(error=>({linked:false,error:friendly(error)}))
+      ]);
+      const statuses=metrics?.by_status||{},reports=Number(metrics?.reports||0),published=Number(metrics?.published||0),completion=reports?Math.round(published/reports*100):0;
+      const signatureLinked=signatureRecord?.linked!==false&&Boolean(signatureRecord?.id||signatureRecord?.full_name||signatureRecord?.signature_path);
+      byId("content").innerHTML=`
+        <div class="page-head"><div><h3>Principal Dashboard</h3><p>School performance, approvals, and publication</p></div><div class="page-actions"><button class="button secondary" data-dashboard-view="delegations">Emergency Delegation</button></div></div>
+        <section class="stat-grid">
+          <article class="stat-card"><span class="stat-icon blue">◉</span><div><span>Active Students</span><strong>${Number(metrics?.active_students||0)}</strong></div></article>
+          <article class="stat-card"><span class="stat-icon gold">⌛</span><div><span>Awaiting Action</span><strong>${Number(metrics?.pending_review||0)}</strong></div></article>
+          <article class="stat-card"><span class="stat-icon green">✓</span><div><span>Published Reports</span><strong>${published}</strong></div></article>
+          <article class="stat-card"><span class="stat-icon purple">%</span><div><span>Published Average</span><strong>${Number(metrics?.average||0).toFixed(1)}%</strong></div></article>
+        </section>
+        <section class="panel signature-panel" style="margin-top:18px"><div class="panel-header"><div><h3>Digital Signature</h3><p>The current signature replaces any signature embedded in report templates</p></div>${status(signatureRecord?.signature_path?"uploaded":"not uploaded")}</div>
+          <div class="panel-body signature-layout">
+            <div class="signature-preview-wrap">${signatureRecord?.signature_path?'<img id="principalDashboardSignaturePreview" alt="Principal signature">':'<div class="signature-empty">No signature uploaded</div>'}</div>
+            <div class="form-stack"><div><strong>${escapeHtml(signatureRecord?.full_name||"Principal")}</strong><p class="muted">${signatureLinked?"Use a clear PNG, JPEG or WebP signature. A transparent PNG gives the best result.":escapeHtml(signatureRecord?.error||"Ask the System Administrator to link this account to a Principal record.")}</p></div>
+              ${signatureLinked?'<label class="field"><span>Signature Image</span><input id="principalDashboardSignatureFile" type="file" accept="image/png,image/jpeg,image/webp"></label><div class="button-row"><button class="button primary" id="principalDashboardSignatureUpload" type="button">Upload signature</button>'+(signatureRecord?.signature_path?'<button class="button danger" id="principalDashboardSignatureRemove" type="button">Remove signature</button>':"")+'</div>':""}
+            </div>
+          </div>
+        </section>
+        <div class="grid two" style="margin-top:18px">
+          <section class="panel"><div class="panel-header"><div><h3>Current Academic Period</h3><p>${escapeHtml(year?.name||"No active academic year")} • ${escapeHtml(term?.name||"No active term")}</p></div></div><div class="panel-body"><div class="metric-row"><div class="metric"><span>Draft</span><strong>${Number(statuses.draft||0)}</strong></div><div class="metric"><span>Submitted</span><strong>${Number(statuses.submitted||0)}</strong></div><div class="metric"><span>Approved</span><strong>${Number(statuses.approved||0)}</strong></div><div class="metric"><span>Completion</span><strong>${completion}%</strong></div></div><div class="progress"><span style="width:${completion}%"></span></div></div></section>
+          <section class="panel"><div class="panel-header"><div><h3>Class Performance</h3><p>Published report averages</p></div></div><div class="panel-body"><div class="bar-list">${Array.isArray(metrics?.class_performance)&&metrics.class_performance.length?metrics.class_performance.map(row=>`<div class="bar-item"><label>${escapeHtml(row.class_name||"Class")}</label><div class="bar-track"><span style="width:${Math.min(100,Number(row.average||0))}%"></span></div><b>${Number(row.average||0).toFixed(1)}</b></div>`).join(""):'<div class="empty"><strong>No published results</strong></div>'}</div></div></section>
+        </div>
+        <section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Recent Report Cards</h3><p>Latest authorised activity</p></div><button class="button secondary small" data-dashboard-view="reports">View reports</button></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>Class</th><th>Term</th><th>Status</th><th>Average</th><th>Updated</th></tr></thead><tbody>${Array.isArray(metrics?.recent)&&metrics.recent.length?metrics.recent.map(row=>`<tr><td>${escapeHtml(row.student_name||row.full_name||"—")}</td><td>${escapeHtml(row.class_name||"—")}</td><td>${escapeHtml(row.term_name||"—")}</td><td>${status(row.status||"draft")}</td><td>${row.average==null?"—":escapeHtml(Number(row.average||0).toFixed(1)+"%")}</td><td>${formatDateTime(row.updated_at||row.published_at)}</td></tr>`).join(""):'<tr><td colspan="6"><div class="empty"><strong>No report cards</strong><span>Records will appear here when available.</span></div></td></tr>'}</tbody></table></div></section>`;
+      byId("content").querySelectorAll("[data-dashboard-view]").forEach(button=>button.onclick=()=>navigate(button.dataset.dashboardView));
+      if(signatureRecord?.signature_path&&byId("principalDashboardSignaturePreview")){
+        try{const blob=await api().downloadFile(signatureRecord.signature_path);byId("principalDashboardSignaturePreview").src=URL.createObjectURL(blob);}catch{}
+      }
+      byId("principalDashboardSignatureUpload")?.addEventListener("click",async()=>{
+        const input=byId("principalDashboardSignatureFile"),file=input?.files?.[0],button=byId("principalDashboardSignatureUpload");
+        if(!file){notifyAction("Signature not uploaded","Select a signature image first.","error");return;}
+        if(!["image/png","image/jpeg","image/webp"].includes(String(file.type||"").toLowerCase())){notifyAction("Signature not uploaded","Use a PNG, JPEG or WebP image.","error");return;}
+        if(file.size>5*1024*1024){notifyAction("Signature not uploaded","The image must be 5 MB or smaller.","error");return;}
+        button.disabled=true;
+        try{const uploaded=await api().uploadFile(file,"principal-signatures");await certified("set_my_headteacher_signature",{target_signature_path:uploaded.objectKey,expected_updated_at:signatureRecord?.updated_at||null});notifyAction("Digital signature uploaded","New and regenerated official report cards will use this signature.");await renderDashboard();}
+        catch(error){notifyAction("Signature not uploaded",friendly(error),"error");}
+        finally{button.disabled=false;}
+      });
+      byId("principalDashboardSignatureRemove")?.addEventListener("click",async()=>{
+        if(!await confirmAction("Remove the Principal digital signature?",{title:"Remove Digital Signature",confirmLabel:"Remove"}))return;
+        try{await certified("set_my_headteacher_signature",{target_signature_path:"",expected_updated_at:signatureRecord?.updated_at||null});notifyAction("Digital signature removed");await renderDashboard();}catch(error){notifyAction("Signature not removed",friendly(error),"error");}
+      });
+      return;
+    }
     if(role()!=="system_admin"){
       const metrics=data.metrics||{},stats=[
         ["Students",metrics.students??0,"◎","blue"],["Staff",metrics.staff??0,"♙","gold"],["Classes",metrics.classes??0,"▦","green"],
