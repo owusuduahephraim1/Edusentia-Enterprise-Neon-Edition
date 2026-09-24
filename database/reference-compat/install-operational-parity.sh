@@ -92,6 +92,7 @@ reconcile_once_recorded "0062_user_directory_role_workspace_parity" "$DIR/0062_u
 reconcile_once_recorded "0063_identity_user_bundle_runtime_grants" "$DIR/0063_identity_user_bundle_runtime_grants.sql"
 reconcile_once_recorded "0064_neon_identity_admin_bridges" "$DIR/0064_neon_identity_admin_bridges.sql"
 reconcile_once_recorded "0065_identity_membership_upsert_fix" "$DIR/0065_identity_membership_upsert_fix.sql"
+reconcile_once_recorded "0066_generated_user_email_first_name_fix" "$DIR/0066_generated_user_email_first_name_fix.sql"
 
 test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE') and (p.proname like 'finance_%' or p.proname like 'hr_%' or p.proname like 'student_services_%' or p.proname like 'admissions_%' or p.proname like 'discipline_%' or p.proname like 'welfare_%' or p.proname like 'health_%' or p.proname like 'communications_%' or p.proname like 'hostel_%' or p.proname like 'alumni_%' or p.proname in ('get_my_student_portal','get_my_student_portal_v2'))")" -ge 85
 
