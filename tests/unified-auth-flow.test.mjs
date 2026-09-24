@@ -121,11 +121,14 @@ test("Tenant-managed users are synchronized into the master login directory",()=
 test("Generated tenant user emails use the first usable name and can repair legacy addresses",()=>{
   const identity=read("worker/src/identity-admin.ts");
   const credentials=read("frontend/tenant-user-credential-actions-v3.js");
+  const migration=read("database/reference-compat/0066_generated_user_email_first_name_fix.sql");
 
   assert.match(identity,/const ACCOUNT_EMAIL_TITLES=new Set\(/);
   assert.match(identity,/function accountEmailBase\(fullName:unknown\)/);
   assert.match(identity,/parts\.find\(part=>!ACCOUNT_EMAIL_TITLES\.has\(part\)\)\|\|parts\[0\]\|\|"user"/);
   assert.match(identity,/const requestedBase=accountEmailBase\(fullName\);/);
+  assert.match(migration,/regexp_replace\(lower\(coalesce\(requested_base,''\)\),'\[\^a-z0-9\]','','g'\)/);
+  assert.match(migration,/0066_generated_user_email_first_name_fix/);
   assert.match(identity,/generate_nip_user_email\(\$\{ctx\.userId\}::uuid,\$\{requestedBase\},\$\{targetUserId\}::uuid\)/);
   assert.match(identity,/action==="refresh_generated_email"/);
   assert.match(identity,/async function refreshGeneratedEmail\(/);
