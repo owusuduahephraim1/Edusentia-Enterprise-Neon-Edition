@@ -1,4 +1,5 @@
 name: Backup Diagnostic
+# Runtime recheck: backup failure and failed-record cleanup investigation.
 
 on:
   push:
