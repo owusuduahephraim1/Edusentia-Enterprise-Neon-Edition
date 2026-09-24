@@ -5,8 +5,8 @@
 
   const P=window.EdusentiaParity,S=window.EdusentiaShell;
   if(!P||!S)return;
-  const {registerView,api,certified,role,esc,formatDate,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig}=P;
-  const local={attendance:{},insights:{}};
+  const {registerView,api,certified,role,esc,formatDate,formatDateTime,status,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig}=P;
+  const local={attendance:{},insights:{},history:{}};
   const arr=value=>Array.isArray(value)?value:[];
   const obj=value=>value&&typeof value==="object"&&!Array.isArray(value)?value:{};
   const state=()=>S.state||{};
@@ -159,6 +159,35 @@
     }catch(error){byId("content").innerHTML=sectionHead("Class Attendance","Mark daily attendance for your assigned class. Term totals update report cards automatically.")+pageError(error);}
   }
 
+  function historyRecordHtml(record={}){
+    const subjects=arr(record.subjects),opened=Number(record.days_school_opened||0),present=Number(record.days_present||0),attendance=opened?Math.round(present/opened*100):0;
+    return '<article class="academic-period-card"><header><div><strong>'+esc((record.academic_year_name||"Academic year")+" • "+(record.term_name||"Term"))+'</strong><span>'+esc(record.class_name||"Class")+(record.report_number?" • "+esc(record.report_number):"")+'</span></div><div><b>'+n(record.average,1)+'%</b><small>'+present+' / '+opened+' days ('+attendance+'%)</small></div></header>'+
+      (subjects.length?'<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Score</th><th>Grade</th><th>Remark</th></tr></thead><tbody>'+subjects.map(subject=>'<tr><td>'+esc(subject.subject_name||"Subject")+'</td><td>'+n(subject.total_score,1)+'</td><td>'+esc(subject.grade||"—")+'</td><td>'+esc(subject.remark||"")+'</td></tr>').join("")+'</tbody></table></div>':'<div class="panel-body"><p class="muted">No subject results recorded.</p></div>')+
+    '</article>';
+  }
+  async function renderTeacherHistory(){
+    byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+loading("Loading student history");
+    try{
+      const search=String(local.history.search||"").trim();
+      const found=await certified("search_students_v5",{search_text:search,target_class_id:null,target_status:null,archive_filter:"active",page_number:1,page_size:200});
+      const students=arr(found?.rows).map(row=>({...row,full_name:row.full_name||[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ")}));
+      if(local.history.studentId&&!students.some(row=>String(row.id)===String(local.history.studentId)))local.history.studentId="";
+      const selected=local.history.studentId||students[0]?.id||"";local.history.studentId=selected;
+      const data=selected?await certified("get_student_academic_history",{target_student_id:selected}):null;
+      const transcript=obj(data?.transcript),student=obj(transcript.student),records=arr(transcript.academic_records),lifecycle=arr(transcript.lifecycle),issuances=arr(data?.issuances);
+      const studentOptions='<option value="">'+(students.length?"Select student":"No accessible students")+'</option>'+students.map(row=>'<option value="'+esc(row.id)+'" '+(String(row.id)===String(selected)?"selected":"")+'>'+esc((row.full_name||"Student")+(row.admission_no?" • "+row.admission_no:""))+'</option>').join("");
+      byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+
+        '<section class="panel pad"><div class="form-grid"><label class="field"><span>Find student</span><input id="teacherHistorySearch" type="search" value="'+esc(search)+'" placeholder="Search name or admission number"></label><label class="field"><span>Student</span><select id="teacherHistoryStudent">'+studentOptions+'</select></label></div></section>'+
+        (student.id?'<div class="grid two maturity-grid" style="margin-top:18px"><section class="panel pad"><div class="section-title"><div><h4>'+esc(student.full_name||"Student")+'</h4><p>'+esc(student.admission_no||"")+'</p></div>'+status(student.status||"active")+'</div><div class="metric-row wrap"><div class="metric"><span>Academic periods</span><strong>'+records.length+'</strong></div><div class="metric"><span>Transcript issuances</span><strong>'+issuances.length+'</strong></div><div class="metric"><span>Current status</span><strong>'+esc(String(student.status||"active").replaceAll("_"," "))+'</strong></div></div></section>'+
+        '<section class="panel pad"><div class="section-title"><h4>Lifecycle</h4></div>'+(lifecycle.length?'<div class="timeline">'+lifecycle.map(item=>'<div class="timeline-item"><span class="timeline-dot"></span><div class="timeline-copy"><strong>'+esc(String(item.event_type||"Update").replaceAll("_"," "))+'</strong><small>'+esc(formatDate(item.effective_date))+(item.from_class_name?" • "+esc(item.from_class_name):"")+(item.to_class_name?" → "+esc(item.to_class_name):"")+(item.reason?" • "+esc(item.reason):"")+'</small></div></div>').join("")+'</div>':'<p class="help-text">No lifecycle events recorded.</p>')+'</section></div>'+
+        '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Cumulative academic record</h3><p>Approved, published, and historically retained report versions</p></div></div><div class="panel-body">'+(records.length?records.map(historyRecordHtml).join(""):empty("No cumulative academic record is available yet."))+'</div></section>'+
+        '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Transcript issuances</h3><p>Official transcript history is read-only in the teacher workspace.</p></div></div>'+(issuances.length?'<div class="table-wrap"><table><thead><tr><th>Issued</th><th>Purpose</th><th>Status</th></tr></thead><tbody>'+issuances.map(item=>'<tr><td>'+esc(formatDateTime(item.issued_at))+'</td><td>'+esc(item.purpose||"Academic transcript")+'</td><td>'+status(item.status||"valid")+'</td></tr>').join("")+'</tbody></table></div>':'<div class="panel-body"><p class="muted">No official transcript has been issued.</p></div>')+'</section>':
+        '<section class="panel pad" style="margin-top:18px">'+empty("Select an accessible student to view academic history.")+'</section>');
+      byId("teacherHistoryStudent")?.addEventListener("change",()=>{local.history.studentId=byId("teacherHistoryStudent").value;renderTeacherHistory();});
+      let timer;byId("teacherHistorySearch")?.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>{local.history.search=byId("teacherHistorySearch").value.trim();local.history.studentId="";renderTeacherHistory();},250);});
+    }catch(error){byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+pageError(error);}
+  }
+
   async function renderInsights(){
     byId("content").innerHTML=sectionHead("Academic Insights","Privacy-aware class, subject, attendance, and report-completion trends")+loading("Loading academic insights");
     try{
@@ -186,5 +215,6 @@
   registerView({id:"my_class",label:"My Class",icon:"▣",subtitle:"Assigned class, learners, and report progress",roles:["class_teacher"],render:renderMyClass});
   registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class attendance and automatic term totals",roles:["class_teacher"],feature:"attendance",render:renderAttendance});
   registerView({id:"my_subjects",label:"My Subjects",icon:"⌘",subtitle:"Assigned subjects, classes, and assessment progress",roles:["class_teacher","subject_teacher"],render:renderMySubjects});
+  registerView({id:"history",label:"Academic History",icon:"▧",subtitle:"Cumulative transcripts, lifecycle, transfers, and verification",roles:["class_teacher","subject_teacher"],feature:"academic_history",render:renderTeacherHistory});
   registerView({id:"insights",label:"Insights",icon:"◩",subtitle:"Performance, attendance, completion, and class trends",roles:["system_admin","principal","class_teacher","subject_teacher"],feature:"analytics",render:renderInsights});
 })();
