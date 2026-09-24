@@ -101,6 +101,7 @@ test("Student Parent Guardian and Accounts Office extension navigation is shell-
   assert.match(app,/function installExternalNavigationController\(\)/);
   assert.match(app,/\.nav-item:not\(\[data-view\]\)/);
   assert.match(app,/byId\("sidebar"\)\?\.classList\.remove\("open"\)/);
+  assert.match(app,/querySelectorAll\("\.nav-item"\)\.forEach\(button=>\{const active=button\.dataset\.view===item\.id/);
   assert.match(app,/externalNavForCurrentSession\(id\)/);
   assert.match(app,/Parent and Guardian Dashboard/);
   assert.match(app,/list_my_children_reports/);
@@ -153,6 +154,9 @@ test("Settings separates uploaded report-card design files from class-range summ
   assert.match(enterprise,/reportTemplateDesignFile/);
   assert.match(enterprise,/reportTemplateDesignUpload/);
   assert.match(enterprise,/data-template-range-summary="1"/);
+  assert.match(enterprise,/data-template-plan-upgrade="1"/);
+  assert.match(enterprise,/PLAN UPGRADE REQUIRED/);
+  assert.match(enterprise,/Professional and Enterprise plans/);
   assert.match(enterprise,/Report Card Templates by Class Range/);
   assert.match(enterprise,/Manage this file in Uploaded Report Card Designs above/);
   assert.match(enterprise,/save_report_card_template/);
