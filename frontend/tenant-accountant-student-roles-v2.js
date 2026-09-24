@@ -124,13 +124,32 @@
   function ensureAccountsDirectoryNav() {
     const nav = byId("mainNav");
     if (!nav) return;
-    const existing = nav.querySelector(".accounts-directory-nav-item");
-    if (currentRole() === "system_admin") {
-      existing?.remove();
+    let button = nav.querySelector(".accounts-directory-nav-item");
+    if (currentRole() !== "system_admin") {
+      button?.remove();
       setDirectoryActive(false);
       return;
     }
-    existing?.remove();
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "nav-item accounts-directory-nav-item";
+      button.innerHTML = '<span class="nav-icon">₵</span><span class="nav-label">Accounts Office Staff</span><span class="nav-active-dot"></span>';
+      button.addEventListener("click", async () => {
+        setDirectoryActive(true);
+        if (F()?.S) F().S.active = false;
+        byId("sidebar")?.classList.remove("open");
+        setExternalNavActive(button);
+        await renderAccountsDirectory();
+      });
+      const users = nav.querySelector('[data-view="users"]');
+      if (users) nav.insertBefore(button, users);
+      else nav.appendChild(button);
+    }
+    button.style.display = "";
+    button.removeAttribute("aria-hidden");
+    button.tabIndex = 0;
+    if (directoryActive) setExternalNavActive(button);
   }
 
   function directoryTable(rows) {
@@ -145,7 +164,7 @@
         <td>${active ? '<span class="status published">Active</span>' : '<span class="status withdrawn">Inactive</span>'}</td>
         <td><div class="table-actions">
           <button class="button ghost small" data-accountant-edit="${attr(row.id)}">Edit</button>
-          ${active ? `<button class="button secondary small" data-accountant-delete="${attr(row.id)}">Archive</button>` : ""}
+          ${active ? `<button class="button secondary small" data-accountant-delete="${attr(row.id)}">Archive / Remove</button>` : `<button class="button secondary small" data-accountant-restore="${attr(row.id)}">Restore</button>`}
         </div></td>
       </tr>`;
     }).join("")}</tbody></table></div>` : '<div class="empty"><strong>No Accounts Office Staff records</strong><span>Add an Accountant directory record to begin.</span></div>';
@@ -172,6 +191,29 @@
         await renderAccountsDirectory();
       } catch (error) {
         notify("Staff record was not archived", F()?.friendly?.(error) || String(error), "error");
+        button.disabled = false;
+      }
+    }));
+
+    document.querySelectorAll("[data-accountant-restore]").forEach((button) => button.addEventListener("click", async () => {
+      const row = rows.find((x) => String(x.id) === String(button.dataset.accountantRestore));
+      if (!row) return;
+      button.disabled = true;
+      try {
+        await rpc("admin_save_accounts_staff", { payload: {
+          id: row.id,
+          full_name: row.full_name,
+          phone: row.phone || "",
+          email: row.email || "",
+          contact_address: row.contact_address || "",
+          active: true
+        }});
+        notify("Accounts Office Staff restored", "The directory record is active again. Re-enable or create the linked login in Users and Access if required.");
+        userDataCache = null;
+        setDirectoryActive(true);
+        await renderAccountsDirectory();
+      } catch (error) {
+        notify("Staff record was not restored", F()?.friendly?.(error) || String(error), "error");
         button.disabled = false;
       }
     }));
