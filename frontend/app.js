@@ -410,7 +410,7 @@
     state.view=item.id;
     byId("pageTitle").textContent=item.label;
     byId("pageSubtitle").textContent=item.subtitle;
-    byId("mainNav").querySelectorAll("[data-view]").forEach(button=>button.classList.toggle("active",button.dataset.view===item.id));
+    byId("mainNav")?.querySelectorAll(".nav-item").forEach(button=>{const active=button.dataset.view===item.id;button.classList.toggle("active",active);button.setAttribute("aria-current",active?"page":"false");});
     byId("sidebar")?.classList.remove("open");
     setBusy(true);
     let failed=false;
