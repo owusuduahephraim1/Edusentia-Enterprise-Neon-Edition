@@ -166,6 +166,8 @@ async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,se
   const requestedEmail=clean(selector.email,320).toLowerCase();
   const requestedStaffId=uuid(selector.staff_record_id);
   if(!requestedUserId&&!requestedEmail&&!requestedStaffId)fail("User account is required","validation_error",422);
+  const requestedUserIdParam=requestedUserId||null;
+  const requestedStaffIdParam=requestedStaffId||null;
 
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
     with directory as (
@@ -173,11 +175,11 @@ async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,se
     )
     select profile
     from directory
-    where (${requestedUserId}::uuid is not null and profile->>'id'=${requestedUserId})
+    where (${requestedUserIdParam}::uuid is not null and profile->>'id'=${requestedUserId})
        or (${requestedEmail}<>'' and lower(coalesce(profile->>'email',''))=${requestedEmail})
-       or (${requestedStaffId}::uuid is not null and profile->>'staff_record_id'=${requestedStaffId})
+       or (${requestedStaffIdParam}::uuid is not null and profile->>'staff_record_id'=${requestedStaffId})
     order by
-      case when ${requestedUserId}::uuid is not null and profile->>'id'=${requestedUserId} then 0
+      case when ${requestedUserIdParam}::uuid is not null and profile->>'id'=${requestedUserId} then 0
            when ${requestedEmail}<>'' and lower(coalesce(profile->>'email',''))=${requestedEmail} then 1
            else 2 end
     limit 1`
