@@ -161,17 +161,32 @@ async function updateIdentity(env:Env,sql:TenantSql,ctx:SessionContext,payload:R
   return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[1] as any)?.[0]?.result??(results[1] as any)?.result};
 }
 
-async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,userId:string){
-  if(!userId)fail("User account is required","validation_error",422);
+async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,selector:Record<string,unknown>){
+  const requestedUserId=uuid(selector.user_id);
+  const requestedEmail=clean(selector.email,320).toLowerCase();
+  const requestedStaffId=uuid(selector.staff_record_id);
+  if(!requestedUserId&&!requestedEmail&&!requestedStaffId)fail("User account is required","validation_error",422);
+
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
-    select p.full_name,p.phone,p.active,p.mfa_required,p.must_change_password,
-           public.current_app_role_for(p.role)::text role
-    from public.profiles p
-    where p.id=${userId}::uuid
+    with directory as (
+      select jsonb_array_elements(coalesce(public.list_profiles_with_access()->'profiles','[]'::jsonb)) profile
+    )
+    select profile
+    from directory
+    where (${requestedUserId}::uuid is not null and profile->>'id'=${requestedUserId})
+       or (${requestedEmail}<>'' and lower(coalesce(profile->>'email',''))=${requestedEmail})
+       or (${requestedStaffId}::uuid is not null and profile->>'staff_record_id'=${requestedStaffId})
+    order by
+      case when ${requestedUserId}::uuid is not null and profile->>'id'=${requestedUserId} then 0
+           when ${requestedEmail}<>'' and lower(coalesce(profile->>'email',''))=${requestedEmail} then 1
+           else 2 end
     limit 1`
   ]);
-  const profile=(rows[0] as any)?.[0]??(rows[0] as any);
-  if(!profile)fail("User profile not found","not_found",404);
+  const directoryRow=(rows[0] as any)?.[0]??(rows[0] as any);
+  const profile=(directoryRow as any)?.profile;
+  const userId=uuid(profile?.id);
+  if(!profile||!userId)fail("User profile not found","not_found",404);
+
   const oldEmail=await identityEmail(sql,ctx,userId);
   const newEmail=await generateEmail(sql,ctx,clean(profile.full_name,200),userId);
   if(oldEmail===newEmail)return {ok:true,id:userId,email:newEmail,changed:false};
@@ -179,11 +194,11 @@ async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,us
   await tenantTx<any[]>(sql,ctx,txn=>[
     txn`select public.neon_identity_update_auth_user(
       ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${newEmail},
-      ${clean(profile.full_name,200)},${clean(profile.phone,50)||null},${profile.active!==false}::boolean,${String(profile.role)},
+      ${clean(profile.full_name,200)},${clean(profile.phone,50)||null},${profile.active!==false}::boolean,${clean(profile.role,64)},
       ${profile.mfa_required===true}::boolean,${profile.must_change_password===true}::boolean
     ) result`
   ]);
-  await syncLoginRoute(env,ctx,newEmail,String(profile.role),profile.active!==false);
+  await syncLoginRoute(env,ctx,newEmail,clean(profile.role,64),profile.active!==false);
   if(oldEmail&&oldEmail!==newEmail)await removeLoginRoute(env,ctx,oldEmail);
   return {ok:true,id:userId,email:newEmail,changed:true,old_email:oldEmail};
 }
@@ -232,7 +247,7 @@ async function genericAdmin(env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
     return resetPassword(sql,ctx,userId,password,payload.must_change_password!==false);
   }
   if(action==="refresh_generated_email"){
-    return refreshGeneratedEmail(env,sql,ctx,uuid(payload.user_id));
+    return refreshGeneratedEmail(env,sql,ctx,payload);
   }
   if(action==="delete"){
     const userId=uuid(payload.user_id);if(!userId)fail("User account is required","validation_error",422);
