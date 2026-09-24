@@ -9,7 +9,7 @@ const COOKIE_DEFAULT="__Host-edusentia_session";
 export function sessionCookieName(env:Env){return env.SESSION_COOKIE_NAME||COOKIE_DEFAULT;}
 export function clearCookie(env:Env){return `${sessionCookieName(env)}=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0`;}
 export function setCookie(env:Env,token:string){const ttl=Math.max(300,Number(env.SESSION_TTL_SECONDS||28800));return `${sessionCookieName(env)}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${ttl}`;}
-function privilegedRoleRequiresMfa(role:unknown){return ["system_admin","platform_super_admin"].includes(canonicalAppRole(role));}
+function privilegedRoleRequiresMfa(role:unknown){return ["system_admin","principal","platform_super_admin"].includes(canonicalAppRole(role));}
 
 async function routeForLogin(env:Env,email:string,tenantCode:string){
   const master=db(env);
