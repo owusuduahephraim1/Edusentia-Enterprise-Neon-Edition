@@ -56,6 +56,14 @@ jobs:
               and c.active and c.deleted_at is null
             order by c.level_order,c.name limit 1
           ),''),true);
+          select set_config('diag.year_id',coalesce((
+            select t.academic_year_id::text from public.terms t
+            where t.id=nullif(current_setting('diag.term_id'),'')::uuid
+          ),''),true);
+          select set_config('diag.school_date',coalesce((
+            select greatest(coalesce(t.start_date,current_date),least(current_date,coalesce(t.end_date,current_date)))::text
+            from public.terms t where t.id=nullif(current_setting('diag.term_id'),'')::uuid
+          ),current_date::text),true);
 
           select 'TEACHER_CONTEXT '||jsonb_build_object(
             'user_id',nullif(current_setting('diag.user_id'),''),
@@ -77,8 +85,11 @@ jobs:
             uid uuid:=nullif(current_setting('diag.user_id'),'')::uuid;
             termid uuid:=nullif(current_setting('diag.term_id'),'')::uuid;
             classid uuid:=nullif(current_setting('diag.class_id'),'')::uuid;
-            schooldate date;
+            schooldate date:=current_setting('diag.school_date')::date;
+            yearid uuid:=nullif(current_setting('diag.year_id'),'')::uuid;
+            studentid uuid;
             v jsonb;
+            entries jsonb;
           begin
             if uid is null then raise exception 'No active class teacher user exists'; end if;
 
@@ -121,11 +132,6 @@ jobs:
             end if;
 
             if termid is not null and classid is not null then
-              select greatest(
-                coalesce(t.start_date,current_date),
-                least(current_date,coalesce(t.end_date,current_date))
-              ) into schooldate from public.terms t where t.id=termid;
-
               begin
                 v:=public.get_class_attendance_register(termid,classid,schooldate);
                 raise notice 'RPC_ATTENDANCE_REGISTER_OK students=% opened=%',
@@ -153,7 +159,72 @@ jobs:
               exception when others then
                 raise notice 'RPC_STUDENTS_ERROR state=% message=%',SQLSTATE,SQLERRM;
               end;
+
+              begin
+                v:=public.list_report_cards_v6(termid,classid,null,'','active',1,20);
+                raise notice 'RPC_REPORTS_OK total=% rows=%',
+                  coalesce(v->>'total','0'),
+                  jsonb_array_length(coalesce(v->'rows','[]'::jsonb));
+              exception when others then
+                raise notice 'RPC_REPORTS_ERROR state=% message=%',SQLSTATE,SQLERRM;
+              end;
+
+              if yearid is not null then
+                begin
+                  v:=public.get_class_timetable_console(yearid,classid);
+                  raise notice 'RPC_TIMETABLE_OK entries=%',
+                    jsonb_array_length(coalesce(v->'entries','[]'::jsonb));
+                exception when others then
+                  raise notice 'RPC_TIMETABLE_ERROR state=% message=%',SQLSTATE,SQLERRM;
+                end;
+              end if;
+
+              begin
+                v:=public.search_students_v5('',classid,'active','active',1,20);
+                studentid:=public.safe_uuid(v#>>'{rows,0,id}');
+                if studentid is not null then
+                  v:=public.get_student_academic_history(studentid);
+                  raise notice 'RPC_HISTORY_OK student=%',studentid;
+                else
+                  raise notice 'RPC_HISTORY_SKIPPED no accessible active student';
+                end if;
+              exception when others then
+                raise notice 'RPC_HISTORY_ERROR state=% message=%',SQLSTATE,SQLERRM;
+              end;
+
+              begin
+                v:=public.get_class_attendance_register(termid,classid,schooldate);
+                select coalesce(jsonb_agg(jsonb_build_object(
+                  'enrollment_id',item->>'enrollment_id',
+                  'attendance_status',coalesce(nullif(item->>'attendance_status',''),'present')
+                )),'[]'::jsonb) into entries
+                from jsonb_array_elements(coalesce(v->'students','[]'::jsonb)) item;
+                if jsonb_array_length(entries)>0 then
+                  v:=public.save_class_attendance(termid,classid,schooldate,entries,'Transactional Class Teacher workspace diagnostic');
+                  raise notice 'RPC_ATTENDANCE_SAVE_OK students=%',jsonb_array_length(coalesce(v->'students','[]'::jsonb));
+                else
+                  raise notice 'RPC_ATTENDANCE_SAVE_SKIPPED no enrolled students';
+                end if;
+              exception when others then
+                raise notice 'RPC_ATTENDANCE_SAVE_ERROR state=% message=%',SQLSTATE,SQLERRM;
+              end;
             end if;
+
+            begin
+              v:=public.get_role_dashboard(termid);
+              raise notice 'RPC_DASHBOARD_OK assigned_classes=% assigned_subjects=%',
+                coalesce(v->>'assigned_classes','0'),coalesce(v->>'assigned_subjects','0');
+            exception when others then
+              raise notice 'RPC_DASHBOARD_ERROR state=% message=%',SQLSTATE,SQLERRM;
+            end;
+
+            begin
+              v:=public.list_notifications(1,10);
+              raise notice 'RPC_NOTIFICATIONS_OK total=% unread=%',
+                coalesce(v->>'total','0'),coalesce(v->>'unread','0');
+            exception when others then
+              raise notice 'RPC_NOTIFICATIONS_ERROR state=% message=%',SQLSTATE,SQLERRM;
+            end;
 
             begin
               raise notice 'RPC_GRANTS analytics=% workspace=% profile=% attendance_classes=% attendance_register=% save_attendance=%',
