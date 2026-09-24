@@ -114,6 +114,14 @@ test("System Administrator operational workspaces preserve blueprint UI actions"
   assert.match(enterprise,/save_school_prospectus_item/);
   assert.match(enterprise,/save_certificate_template/);
   assert.match(enterprise,/replace_student_id_card/);
+  assert.match(enterprise,/name="academic_year_id" required/);
+  assert.match(enterprise,/issue_staff_id_cards/);
+  assert.match(enterprise,/target_academic_year_id:form\.elements\.academic_year_id\.value/);
+  const idCardRuntime=read("database/reference-compat/0067_id_card_issue_runtime_prerequisites.sql");
+  assert.match(idCardRuntime,/create sequence if not exists public\.staff_id_card_number_seq/);
+  assert.match(idCardRuntime,/create sequence if not exists public\.student_id_card_number_seq/);
+  assert.match(idCardRuntime,/create table if not exists public\.staff_id_card_events/);
+  assert.match(idCardRuntime,/create table if not exists public\.id_card_events/);
   assert.match(enterprise,/updateSchoolSettings/);
 });
 
