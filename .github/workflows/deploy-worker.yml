@@ -210,6 +210,29 @@ jobs:
             printf '%s' "$TURNSTILE_SECRET_VALUE" | (cd worker && npx wrangler secret put TURNSTILE_SECRET)
           fi
 
+          # Backup encryption/signing secrets are generated once at the Worker
+          # boundary and then preserved across deployments. Never rotate them as
+          # part of routine deploys because historical ZIP backups must remain
+          # decryptable and transfer signatures need a stable key.
+          WORKER_SETTINGS="$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/edusentia-enterprise-neon-api/settings")"
+          SECRET_NAMES="$(WORKER_SETTINGS="$WORKER_SETTINGS" node --input-type=module -e '
+            const payload=JSON.parse(process.env.WORKER_SETTINGS||"{}");
+            for(const binding of payload.result?.bindings||[])if(binding.type==="secret_text")console.log(binding.name);
+          ')"
+          ensure_worker_secret(){
+            local name="$1" value
+            if printf '%s\n' "$SECRET_NAMES" | grep -qx "$name"; then
+              echo "$name is already configured; preserving the existing key."
+              return
+            fi
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            printf '%s' "$value" | (cd worker && npx wrangler secret put "$name")
+            echo "$name generated and installed."
+          }
+          ensure_worker_secret BACKUP_ENCRYPTION_KEY
+          ensure_worker_secret BACKUP_SIGNING_SECRET
+
       - name: Final deploy and live health check
         id: live
         if: steps.deployment_config.outputs.ready == 'true'
