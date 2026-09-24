@@ -2,7 +2,7 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   // Certified cross-domain coverage retained: Admissions, Attendance, Payroll, Communications.
-  const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,loading,pageError,byId,friendly,formValues,showMessage}=P;
+  const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,loading,pageError,byId,friendly,formValues,showMessage,academicConfig}=P;
   const arr=v=>Array.isArray(v)?v:[];
   const num=(v,d=0)=>Number.isFinite(Number(v))?Number(v):d;
   const text=v=>v==null||v===""?"—":String(v);
@@ -13,7 +13,7 @@
   const metric=(label,value,detail="")=>'<div class="metric maturity-metric"><span>'+esc(label)+'</span><strong>'+esc(text(value))+'</strong>'+(detail?'<small>'+esc(detail)+'</small>':"")+'</div>';
   const empty=(a,b="")=>'<div class="empty"><strong>'+esc(a)+'</strong>'+(b?'<span>'+esc(b)+'</span>':"")+'</div>';
   const optionRows=(rows,selected,blank="Select")=>'<option value="">'+esc(blank)+'</option>'+arr(rows).map(x=>'<option value="'+esc(x.id||"")+'" '+(String(x.id||"")===String(selected||"")?"selected":"")+'>'+esc(x.name||x.label||x.code||x.id)+'</option>').join("");
-  async function config(){return certified("get_academic_configuration");}
+  async function config(){return academicConfig();}
 
   async function renderOperations(){
     byId("content").innerHTML='<div class="page-head"><div><h3>Production Operations</h3><p>Academic deadlines, term locks, report corrections, alerts, health, and recovery readiness</p></div></div>'+loading("Loading production operations");
