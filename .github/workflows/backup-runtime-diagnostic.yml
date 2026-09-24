@@ -1,0 +1,56 @@
+name: Backup Runtime Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/backup-runtime-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Inspect NIS backup runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SOURCE_DATABASE_URL"
+          MASTER_URL="$(SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" node --input-type=module -e 'const u=new URL(process.env.SOURCE_DATABASE_URL);u.pathname="/edusentia";process.stdout.write(u.toString())')"
+          echo "::add-mask::$MASTER_URL"
+          DB_NAME="$(psql "$MASTER_URL" -X -qAtc "select database_name from platform.tenant_control where tenant_code='NIS-000001' and status='active' limit 1")"
+          test -n "$DB_NAME"
+          TENANT_URL="$(MASTER_URL="$MASTER_URL" DB_NAME="$DB_NAME" node --input-type=module -e 'const u=new URL(process.env.MASTER_URL);u.pathname="/"+process.env.DB_NAME;process.stdout.write(u.toString())')"
+          echo "::add-mask::$TENANT_URL"
+          echo "Tenant database resolved."
+          psql "$TENANT_URL" -X -P pager=off -c "
+            select id,backup_key,status,trigger_mode,verification_status,
+                   created_at,started_at,heartbeat_at,completed_at,
+                   left(coalesce(error_message,''),500) as error_message
+            from public.backup_exports
+            order by created_at desc
+            limit 12;
+          "
+          psql "$TENANT_URL" -X -P pager=off -c "
+            select
+              to_regprocedure('public.backup_worker_read_batch(uuid,jsonb)') is not null as read_batch,
+              to_regprocedure('public.backup_worker_create(uuid,text)') is not null as create_backup,
+              to_regprocedure('public.backup_worker_register_r2_object(uuid,text,text,text,bigint,uuid)') is not null as register_r2,
+              to_regprocedure('public.backup_worker_auth_users()') is not null as auth_users,
+              to_regprocedure('public.backup_worker_complete(uuid,text,text,jsonb,text,text,jsonb,bigint,text)') is not null as complete_backup,
+              has_function_privilege('edusentia_worker_runtime','public.backup_worker_read_batch(uuid,jsonb)','execute') as read_batch_exec,
+              has_function_privilege('edusentia_worker_runtime','public.backup_worker_register_r2_object(uuid,text,text,text,bigint,uuid)','execute') as register_r2_exec,
+              exists(select 1 from app.schema_migrations where version='0069_backup_schedule_restore_experience') as migration_0069,
+              exists(select 1 from app.schema_migrations where version='0070_backup_worker_batch_resilience') as migration_0070;
+          "
