@@ -475,7 +475,7 @@
       }
       button.disabled = true;
       try {
-        const result = await window.EdusentiaApi.adminUserManagement("refresh_generated_email", { user_id: profile.id });
+        const result = await window.EdusentiaApi.adminUserManagement("refresh_generated_email", { user_id: profile.id, email: profile.email || "", staff_record_id: profile.staff_record_id || "", role: profile.role || "" });
         profileCache = null;
         profileLoadedAt = 0;
         await loadProfiles(true);
