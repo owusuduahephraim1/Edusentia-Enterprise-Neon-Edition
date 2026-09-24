@@ -20,5 +20,11 @@ self.addEventListener("activate", e => e.waitUntil(caches.keys().then(keys => Pr
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin || e.request.method !== "GET") return;
-  e.respondWith(fetch(e.request).then(r => { const copy=r.clone(); caches.open(CACHE).then(c => c.put(e.request,copy)); return r; }).catch(() => caches.match(e.request).then(r => r || caches.match("./index.html"))));
+  const liveCodeAsset=e.request.mode==="navigate"||["document","script","style","worker"].includes(e.request.destination)||/\.(?:json|webmanifest)$/i.test(url.pathname);
+  const networkRequest=liveCodeAsset?new Request(e.request,{cache:"no-store"}):e.request;
+  e.respondWith(fetch(networkRequest).then(r => {
+    const copy=r.clone();
+    caches.open(CACHE).then(c => c.put(e.request,copy));
+    return r;
+  }).catch(() => caches.match(e.request).then(r => r || caches.match("./index.html"))));
 });
