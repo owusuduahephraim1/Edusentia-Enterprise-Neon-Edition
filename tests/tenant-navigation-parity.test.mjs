@@ -7,7 +7,7 @@ const read=p=>fs.readFileSync(p,"utf8");
 test("tenant shell follows reference role, permission and feature navigation contract",()=>{
   const app=read("frontend/app.js");
   assert.match(app,/const ROLE_NAV_IDS=Object\.freeze\(/);
-  assert.match(app,/system_admin:\["dashboard","operations","students","student_services","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
+  assert.match(app,/system_admin:\["dashboard","operations","students","student_services","staff","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
   assert.match(app,/principal:\["dashboard","operations","student_services","staff","history","timetable","delegations","reports","certificates","insights","notifications","compliance"\]/);
   assert.match(app,/class_teacher:\["dashboard","teacher_profile","my_class","attendance","my_subjects","students","student_services","history","timetable","reports","insights","notifications"\]/);
   assert.match(app,/subject_teacher:\["dashboard","teacher_profile","my_subjects","students","student_services","history","timetable","reports","insights","notifications"\]/);
@@ -86,11 +86,24 @@ test("Principal and teacher Student Services use native shell navigation",()=>{
   assert.match(actions,/document\.querySelector\('#mainNav \[data-view="student_services"\]'\)/);
 });
 
-test("System Administrator sidebar excludes extension-only HR and Finance entries",()=>{
+test("Staff & HR uses native shell routing only for Principal and System Administrator",()=>{
+  const app=read("frontend/app.js");
   const hr=read("frontend/tenant-hr-staff-v1.js");
   const finance=read("frontend/finance-core.js");
   const accountantRoles=read("frontend/tenant-accountant-student-roles-v2.js");
-  assert.match(hr,/if\(S\.role!=="principal"\)/);
+
+  assert.match(app,/id:"staff",label:"Staff & HR"[\s\S]*roles:\["system_admin","principal"\][\s\S]*render:renderStaff/);
+  assert.doesNotMatch(app,/id:"staff"[\s\S]*nav:false/);
+  assert.match(app,/const runtime=window\.EdusentiaHrStaff/);
+  assert.match(app,/await runtime\.openFromShell\(\)/);
+  assert.match(hr,/\["system_admin","principal"\]\.includes\(S\.role\)/);
+  assert.match(hr,/window\.EdusentiaHrStaff=Object\.freeze\(\{openFromShell:open/);
+  assert.match(hr,/function nav\(\)\{document\.querySelectorAll\("\.hr-nav-item"\)\.forEach\(x=>x\.remove\(\)\)\}/);
+  assert.match(hr,/function isActiveView\(\)/);
+  assert.match(hr,/Loading staff directory/);
+  assert.match(hr,/min-width:0/);
+  assert.match(hr,/@media\(max-width:700px\)/);
+
   assert.doesNotMatch(finance,/S\.role==="system_admin"&&hasFeature\("finance_fees"\)/);
   assert.match(accountantRoles,/currentRole\(\) === "system_admin"[\s\S]*existing\?\.remove\(\)[\s\S]*setDirectoryActive\(false\)/);
 });
