@@ -96,6 +96,7 @@ reconcile_once_recorded "0066_generated_user_email_first_name_fix" "$DIR/0066_ge
 reconcile_once_recorded "0067_id_card_issue_runtime_prerequisites" "$DIR/0067_id_card_issue_runtime_prerequisites.sql"
 reconcile_once_recorded "0068_commercial_plan_tiering" "$DIR/0068_commercial_plan_tiering.sql"
 reconcile_once_recorded "0069_backup_schedule_restore_experience" "$DIR/0069_backup_schedule_restore_experience.sql"
+reconcile_once_recorded "0070_backup_worker_batch_resilience" "$DIR/0070_backup_worker_batch_resilience.sql"
 
 test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE') and (p.proname like 'finance_%' or p.proname like 'hr_%' or p.proname like 'student_services_%' or p.proname like 'admissions_%' or p.proname like 'discipline_%' or p.proname like 'welfare_%' or p.proname like 'health_%' or p.proname like 'communications_%' or p.proname like 'hostel_%' or p.proname like 'alumni_%' or p.proname in ('get_my_student_portal','get_my_student_portal_v2'))")" -ge 85
 
