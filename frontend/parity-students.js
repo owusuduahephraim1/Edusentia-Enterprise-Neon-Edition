@@ -2,6 +2,7 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
+  const shellState=()=>window.EdusentiaShell?.state||{};
   // ---------- Students: reusable admission numbering + protected photo parity ----------
   const studentPhotoUrls=new Map();
   function studentInitials(row={}){
@@ -34,6 +35,8 @@
     let config;
     try{config=await academicConfig();}catch(error){byId("content").innerHTML=pageError(error);return;}
     const classes=Array.isArray(config?.classes)?config.classes:[],years=Array.isArray(config?.academic_years)?config.academic_years:[];
+    const requestedClass=classes.some(c=>String(c.id)===String(shellState().studentClassFilter||""))?String(shellState().studentClassFilter):"";
+    if(!requestedClass)shellState().studentClassFilter="";
     const canManage=isSystemAdmin()||["principal","academic_admin","records_officer"].includes(currentRole());
     byId("content").innerHTML=`
       <div class="page-head"><div><h3>Student Directory</h3><p>Secure student, guardian, and enrolment records</p></div>
@@ -41,7 +44,7 @@
       <section class="panel">
         <form id="studentFilters" class="toolbar">
           <label class="search"><span class="sr-only">Search students</span><input id="studentSearchCertified" type="search" placeholder="Name or admission number"></label>
-          <select id="studentClassFilter"><option value="">All classes</option>${classes.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("")}</select>
+          <select id="studentClassFilter"><option value="">${["class_teacher","subject_teacher"].includes(currentRole())?"All assigned classes":"All classes"}</option>${classes.map(c=>`<option value="${esc(c.id)}" ${String(c.id)===String(requestedClass)?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
           <select id="studentStatusFilter"><option value="">All statuses</option><option value="active">Active</option><option value="graduated">Graduated</option><option value="withdrawn">Withdrawn</option><option value="suspended">Suspended</option></select>
           ${["system_admin","principal"].includes(currentRole())?'<select id="studentArchiveFilter"><option value="active">Current</option><option value="archived">Archived</option><option value="all">All</option></select>':""}
           <button class="button secondary" type="submit">Search</button>
@@ -49,7 +52,7 @@
         <div id="studentCertifiedResults">${loading("Loading students")}</div>
       </section>`;
     byId("studentFilters")?.addEventListener("submit",e=>{e.preventDefault();loadCertifiedStudents();});
-    byId("studentClassFilter")?.addEventListener("change",()=>loadCertifiedStudents());
+    byId("studentClassFilter")?.addEventListener("change",()=>{shellState().studentClassFilter=byId("studentClassFilter").value;loadCertifiedStudents();});
     byId("studentStatusFilter")?.addEventListener("change",()=>loadCertifiedStudents());
     byId("studentArchiveFilter")?.addEventListener("change",()=>loadCertifiedStudents());
     byId("studentAddButton")?.addEventListener("click",()=>openStudentEditor({config,years,classes}));
