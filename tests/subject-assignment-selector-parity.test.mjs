@@ -21,6 +21,14 @@ test("Assign Subjects uses the certified tickable class and subject selectors",(
   assert.match(academics,/save_class_subject_assignments_batch/);
   assert.doesNotMatch(academics,/name="class_ids" multiple size="8"/);
   assert.doesNotMatch(academics,/name="subject_ids" multiple size="8"/);
+  assert.match(academics,/function classSubjectAssignmentGroups\(/);
+  assert.match(academics,/assignmentCountText\(group\.classes\.size,"class","classes"\)/);
+  assert.match(academics,/assignmentCountText\(group\.subjects\.size,"subject"\)/);
+  assert.match(academics,/assignmentNamesPreview\(group\.classes\)/);
+  assert.match(academics,/assignmentNamesPreview\(group\.subjects\)/);
+  assert.match(academics,/id="toggleAssignmentList"/);
+  assert.match(academics,/Compact list/);
+  assert.match(academics,/Expand list/);
 
   for(const selector of [
     ".independent-check-grid",
