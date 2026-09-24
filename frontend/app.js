@@ -853,6 +853,24 @@
   window.addEventListener("online",()=>setSync("online","Connected"));
   window.addEventListener("offline",()=>setSync("offline","Offline"));
 
-  if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}),{once:true});
+  if("serviceWorker" in navigator){
+    let swReloading=false;
+    const refreshServiceWorker=async()=>{
+      try{
+        const registration=await navigator.serviceWorker.register("./service-worker.js",{updateViaCache:"none"});
+        await registration.update();
+        return registration;
+      }catch{return null;}
+    };
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{
+      if(swReloading)return;
+      swReloading=true;
+      window.location.reload();
+    });
+    window.addEventListener("load",()=>{refreshServiceWorker();},{once:true});
+    window.addEventListener("online",()=>{refreshServiceWorker();});
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refreshServiceWorker();});
+    window.setInterval(()=>{if(!document.hidden&&navigator.onLine)refreshServiceWorker();},60000);
+  }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
 })();
