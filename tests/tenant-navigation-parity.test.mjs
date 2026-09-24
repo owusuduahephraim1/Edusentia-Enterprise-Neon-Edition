@@ -86,6 +86,35 @@ test("Principal and teacher Student Services use native shell navigation",()=>{
   assert.match(actions,/document\.querySelector\('#mainNav \[data-view="student_services"\]'\)/);
 });
 
+test("Student Parent Guardian and Accounts Office extension navigation is shell-managed",()=>{
+  const app=read("frontend/app.js");
+  const finance=read("frontend/finance-core.js");
+  const student=read("frontend/tenant-student-portal-v2.js");
+  const parent=read("frontend/tenant-student-portal-v1.js");
+
+  assert.match(app,/\{id:"children",label:"My Children"[^}]*roles:\["parent_guardian"\][^}]*render:renderChildren\}/);
+  assert.match(app,/parent_guardian:\["dashboard","children","notifications"\]/);
+  assert.match(app,/accountant:\["dashboard","notifications"\]/);
+  assert.match(app,/accounts_office:\["dashboard","notifications"\]/);
+  assert.match(app,/student:\["dashboard"\]/);
+  assert.match(app,/const EXTERNAL_NAV_VIEW_PREFIX="extension:"/);
+  assert.match(app,/function installExternalNavigationController\(\)/);
+  assert.match(app,/\.nav-item:not\(\[data-view\]\)/);
+  assert.match(app,/byId\("sidebar"\)\?\.classList\.remove\("open"\)/);
+  assert.match(app,/externalNavForCurrentSession\(id\)/);
+  assert.match(app,/Parent and Guardian Dashboard/);
+  assert.match(app,/list_my_children_reports/);
+  assert.match(app,/finance_portal_report_detail/);
+
+  assert.match(finance,/\["accounts_office","accountant"\]\.includes\(S\.role\)/);
+  assert.match(finance,/byId\("sidebar"\)\?\.classList\.remove\("open"\);setActive\(true\)/);
+  assert.match(student,/data-student-module/);
+  assert.match(student,/byId\("sidebar"\)\?\.classList\.remove\("open"\)/);
+  assert.match(student,/get_my_student_portal_v2/);
+  assert.match(parent,/tenant-student-portal-v2\.js/);
+  assert.match(parent,/tenant-student-portal-v2-refinements\.js/);
+});
+
 test("Staff & HR uses native shell routing only for Principal and System Administrator",()=>{
   const app=read("frontend/app.js");
   const hr=read("frontend/tenant-hr-staff-v1.js");
@@ -173,7 +202,7 @@ test("tenant shell does not render literal newline escape text above the workspa
 
 test("PWA shell carries every navigation parity registrar",()=>{
   const sw=read("frontend/service-worker.js");
-  assert.match(sw,/edusentia-neon-v30/);
+  assert.match(sw,/edusentia-neon-v31/);
   for(const asset of [
     "parity-common.js","parity-academics.js","parity-students.js","parity-teachers.js",
     "parity-principal.js","parity-timetable.js","parity-reports.js",
