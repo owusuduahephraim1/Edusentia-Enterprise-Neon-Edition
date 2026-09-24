@@ -36,6 +36,7 @@ test("Tenant sign-in remains isolated-school aware",()=>{
   assert.match(auth,/tenantDb\(env,String\(route\.database_name\)\)/);
   assert.match(auth,/mfaRequired:true/);
   assert.match(auth,/assuranceLevel:2/);
+  assert.match(auth,/\["system_admin","principal","platform_super_admin"\]\.includes\(canonicalAppRole\(role\)\)/);
 });
 
 test("Approved school administrator setup returns to branded tenant sign-in",()=>{
