@@ -1,0 +1,60 @@
+name: Backup Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/backup-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Inspect Nipe backup failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SOURCE_DATABASE_URL"
+          MASTER_URL="$(SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" node --input-type=module -e 'const u=new URL(process.env.SOURCE_DATABASE_URL);u.pathname="/edusentia";process.stdout.write(u.toString())')"
+          echo "::add-mask::$MASTER_URL"
+          DB_NAME="$(psql "$MASTER_URL" -X -qAtc "select database_name from platform.tenant_control where lower(school_name) like '%nipe%international%school%' and database_state='isolated_ready' order by created_at desc limit 1")"
+          test -n "$DB_NAME"
+          TENANT_URL="$(MASTER_URL="$MASTER_URL" DB_NAME="$DB_NAME" node --input-type=module -e 'const u=new URL(process.env.MASTER_URL);u.pathname="/"+process.env.DB_NAME;process.stdout.write(u.toString())')"
+          echo "::add-mask::$TENANT_URL"
+          echo "Database: $DB_NAME"
+          echo "Recent backup rows:"
+          psql "$TENANT_URL" -X -P pager=off -c "select id,backup_key,status,verification_status,started_at,completed_at,left(coalesce(error_message,''),1000) error_message from public.backup_exports order by created_at desc limit 8;"
+          echo "Required backup worker functions:"
+          psql "$TENANT_URL" -X -P pager=off -c "select p.proname,count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('backup_worker_create','backup_worker_read_table','backup_worker_complete','backup_worker_fail','backup_worker_register_r2_object','backup_worker_schedule_policy','backup_worker_set_schedule_policy') group by p.proname order by p.proname;"
+          echo "Missing backup source tables:"
+          psql "$TENANT_URL" -X -qAtc "with names(name) as (values
+            ('school_settings'),('id_card_settings'),('id_card_deletion_tombstones'),('profiles'),('teachers'),('headteachers'),
+            ('academic_years'),('terms'),('classes'),('subjects'),('class_subjects'),('class_timetable_entries'),('school_prospectuses'),
+            ('school_prospectus_sections'),('school_prospectus_items'),('school_prospectus_revisions'),('user_class_access'),('students'),
+            ('student_guardians'),('guardian_links'),('enrollments'),('student_id_cards'),('id_card_events'),('staff_id_cards'),
+            ('staff_id_card_events'),('class_attendance_registers'),('student_attendance_entries'),('grading_scales'),('assessment_schemes'),
+            ('assessment_components'),('student_reports'),('subject_scores'),('subject_results'),('assessment_score_entries'),
+            ('emergency_academic_delegations'),('emergency_academic_delegation_events'),('academic_period_controls'),
+            ('report_correction_requests'),('report_correction_events'),('student_lifecycle_events'),('transcript_issuances'),
+            ('data_retention_policies'),('privacy_requests'),('security_events'),('security_verification_runs'),('recovery_test_runs'),
+            ('certificate_templates'),('teacher_award_categories'),('certificate_batches'),('certificates'),('certificate_events'),
+            ('report_workflow_events'),('report_revisions'),('report_publications'),('report_card_templates'),('license_plans'),
+            ('school_licenses'),('platform_access_locks'),('license_events'),('license_verification_logs'),('license_feature_catalog'),
+            ('license_plan_revisions'),('license_entitlement_overrides'),('license_binding_sessions'),('platform_distribution_authorities'),
+            ('platform_audit_archives'),('platform_package_templates'),('platform_package_artifacts'),('platform_package_events'),
+            ('platform_package_reconciliation'),('notifications'),('notification_outbox'),('import_batches'),('import_errors'),
+            ('audit_log'),('audit_log_archives'),('audit_log_archive_entries'),('client_error_events'),('system_maintenance_log'),
+            ('backup_exports'),('backup_storage_objects')
+          ) select name from names where to_regclass('public.'||name) is null order by name;"
