@@ -130,10 +130,10 @@ SQL
       '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
       '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
       '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
-      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix'
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering'
     )
   ")"
-  test "$migration_count" = "41"
+  test "$migration_count" = "44"
 
   user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
     select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
@@ -159,25 +159,28 @@ SQL
   ")"
   test "$user_workspace_parity_ok" = "t"
 
-  plan_parity_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+  plan_tiering_count="$(psql "$TENANT_DATABASE_URL" -Atc "
     select count(*)
     from platform.license_plans p
-    where p.code in('starter','professional','enterprise')
-      and (select count(*) from jsonb_object_keys(p.feature_flags))=27
-      and p.feature_flags->>'id_cards'='true'
-      and p.feature_flags->>'staff_id_cards'='true'
-      and p.feature_flags->>'timetable'='true'
-      and p.feature_flags->>'school_prospectus'='true'
-      and p.feature_flags->>'advanced_analytics'='false'
-      and p.feature_flags->>'integrations'='false'
+    where
+      (p.code='starter' and p.feature_flags='{\"payroll\":false,\"id_cards\":false,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":false,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":false,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":false,\"custom_branding\":false,\"finance_exports\":false,\"financial_holds\":false,\"academic_history\":true,\"priority_support\":false,\"scheduled_backup\":false,\"payroll_statutory\":false,\"school_prospectus\":false,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":false}'::jsonb)
+      or
+      (p.code='professional' and p.feature_flags='{\"payroll\":false,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":false,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":false,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+      or
+      (p.code='enterprise' and p.feature_flags='{\"payroll\":true,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":true,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":true,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
   ")"
-  test "$plan_parity_count" = "3"
-  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='starter'")" = "false"
+  test "$plan_tiering_count" = "3"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'bulk_workflow' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'scheduled_backup' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'priority_support' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='professional'")" = "true"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='professional'")" = "true"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'financial_holds' from platform.license_plans where code='professional'")" = "true"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
+
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regprocedure('public.generate_class_student_identifier(uuid)') is not null")" = "t"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.student_admission_sequences') is not null")" = "t"
@@ -299,10 +302,10 @@ insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
 select
   tenant_id,
   registration_id,
-  'tenant_commercial_plan_parity_verified',
+  'tenant_commercial_plan_tiering_v2_verified',
   jsonb_build_object(
     'database_name',:'database_name',
-    'migration','0049v_live_plan_feature_parity',
+    'migration','0068_commercial_plan_tiering',
     'feature_count',27,
     'rpc_count',258,
     'verified_at',now()
@@ -312,7 +315,7 @@ where tenant_code=:'tenant_code'
   and database_name=:'database_name';
 SQL
 
-  echo "Tenant $tenant_code operational surface verified: 258/258 executable and 27-feature plan parity confirmed."
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 confirmed."
   upgraded=$((upgraded+1))
 done
 
