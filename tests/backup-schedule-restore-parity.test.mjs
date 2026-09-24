@@ -49,6 +49,7 @@ test("manual backup snapshots use batched tenant-local reads and fail closed wit
 
   assert.match(worker,/DATABASE_BATCH_SIZE=12/);
   assert.match(worker,/backup_worker_read_batch/);
+  assert.match(worker,/async function readTable\(/);
   assert.match(worker,/Persist failure state before best-effort R2 cleanup/);
   assert.match(worker,/const material=await encryptionMaterial\(env\)/);
   assert.doesNotMatch(worker,/\\"license_plans\\",\s*\\"school_licenses\\"/);
@@ -72,6 +73,10 @@ test("backup workspace provides one tap backup, encrypted ZIP download and prote
   assert.match(enterprise,/RESTORE SCHOOL/);
   assert.match(enterprise,/function backupStatIcon/);
   assert.match(enterprise,/backup-stat-icon/);
+  const css=read("frontend/style.css");
+  assert.match(css,/\.backup-stat-icon\{width:62px;height:62px;min-width:62px;min-height:62px;flex:0 0 62px/);
+  assert.match(css,/width:38px;height:38px/);
+  assert.match(enterprise,/tones=\{history:"blue",automatic:"green",next:"purple",retention:"gold"\}/);
   assert.match(download,/backup-download-gateway/);
   assert.match(download,/new window\.JSZip/);
   assert.match(download,/AES-256-GCM encrypted database and protected-file payloads/);
@@ -86,4 +91,11 @@ test("commercial backup entitlements preserve manual backups for Starter and sch
   assert.match(tiering,/"scheduled_backup":false/);
   const scheduledTrue=(tiering.match(/"scheduled_backup":true/g)||[]).length;
   assert.ok(scheduledTrue>=2,"Professional and Enterprise should include scheduled backup");
+});
+
+test("production Worker deployment provisions stable backup encryption and transfer secrets",()=>{
+  const workflow=read(".github/workflows/deploy-worker.yml");
+  assert.match(workflow,/ensure_worker_secret BACKUP_ENCRYPTION_KEY/);
+  assert.match(workflow,/ensure_worker_secret BACKUP_SIGNING_SECRET/);
+  assert.match(workflow,/preserving the existing key/);
 });
