@@ -101,6 +101,20 @@ async function licence(sql:TenantSql,ctx:SessionContext,feature:string,write:boo
 
 type BackupReadRequest={table:string;offset:number;limit:number};
 
+async function readTable(sql:TenantSql,ctx:SessionContext,table:string){
+  const rows:any[]=[];
+  for(let offset=0;;offset+=1000){
+    const [pageRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+      txn\`select public.backup_worker_read_table(\${table},\${offset},1000) rows\`
+    ]);
+    const page=asArray((pageRows[0] as any)?.rows);
+    rows.push(...page);
+    if(page.length<1000)break;
+    if(offset>=1_000_000)fail(\`Backup table \${table} exceeded the safe maintenance read limit\`,"backup_row_limit",413);
+  }
+  return rows;
+}
+
 async function readBatch(sql:TenantSql,ctx:SessionContext,backupId:string,requests:BackupReadRequest[]){
   const [pageRows]=await tenantTx<any[]>(sql,ctx,txn=>[
     txn`select public.backup_worker_read_batch(${backupId}::uuid,${JSON.stringify(requests)}::jsonb) rows`
