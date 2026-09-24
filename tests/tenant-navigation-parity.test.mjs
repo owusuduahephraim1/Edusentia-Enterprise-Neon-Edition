@@ -130,7 +130,7 @@ test("tenant shell does not render literal newline escape text above the workspa
 
 test("PWA shell carries every navigation parity registrar",()=>{
   const sw=read("frontend/service-worker.js");
-  assert.match(sw,/edusentia-neon-v26/);
+  assert.match(sw,/edusentia-neon-v27/);
   for(const asset of [
     "parity-common.js","parity-academics.js","parity-students.js","parity-teachers.js",
     "parity-principal.js","parity-timetable.js","parity-reports.js",
@@ -167,4 +167,23 @@ test("Class Teacher navigation uses role-scoped bootstrap data and parity worksp
   assert.match(timetable,/View the timetable for your accessible classes/);
   assert.match(read("frontend/app.js"),/Class and Subject Teacher Dashboard/);
   assert.match(read("frontend/app.js"),/Home-class responsibilities and subject teaching assignments/);
+});
+
+
+test("Class Teacher history and notifications retain Supabase operational behavior",()=>{
+  const teacher=read("frontend/tenant-class-teacher-workspace-parity-v1.js");
+  const app=read("frontend/app.js");
+  const rpc=read("worker/src/certified-rpc.ts");
+  assert.doesNotMatch(teacher,/search_students_v5"[^\n]*page_size:200/);
+  assert.match(teacher,/search_students_v5"[^\n]*page_size:100/);
+  for(const label of ["Admission number","Academic periods","Transcript issuances","Preview transcript","Download transcript preview","Export CSV","Transcript rule: latest currently valid published report per term only"]){
+    assert.ok(teacher.includes(label),label);
+  }
+  for(const label of ["Mark all read","Clear notifications","Delete"]){
+    assert.ok(app.includes(label),label);
+  }
+  assert.match(app,/certified\("delete_notifications",\{notification_ids:null\}\)/);
+  assert.match(app,/data-notification-delete/);
+  assert.match(rpc,/const requestedPageSize=intArg\(args,"page_size",\{required:false,min:1,max:500\}\)\?\?20;/);
+  assert.match(rpc,/const pageSize=Math\.min\(100,requestedPageSize\);/);
 });
