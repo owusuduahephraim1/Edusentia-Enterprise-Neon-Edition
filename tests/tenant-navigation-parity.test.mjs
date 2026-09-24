@@ -54,11 +54,11 @@ test("legacy blueprint modules receive unwrapped Worker RPC results",()=>{
   assert.match(compat,/response\?\.result\?\?response/);
   const routes=read("worker/src/routes.ts");
   assert.match(routes,/const isSystemAdmin=ctx\.role==="system_admin"/);
-  assert.match(routes,/manage_academics:isSystemAdmin\|\|Boolean\(rawPermissions\["academics\.write"\]\)/);
-  assert.match(routes,/manage_teachers:isSystemAdmin\|\|Boolean\(rawPermissions\["staff\.write"\]\)/);
-  assert.match(routes,/manage_headteachers:isSystemAdmin\|\|Boolean\(rawPermissions\["admin\.tenant"\]\)/);
-  assert.match(routes,/manage_users:isSystemAdmin\|\|Boolean\(rawPermissions\["admin\.users"\]\)/);
-  assert.match(routes,/view_audit:isSystemAdmin\|\|Boolean\(rawPermissions\["admin\.tenant"\]\)/);
+  assert.match(routes,/manage_academics:isSystemAdmin\|\|Boolean\(certifiedPermissions\.manage_academics\)\|\|Boolean\(rawPermissions\["academics\.write"\]\)/);
+  assert.match(routes,/manage_teachers:isSystemAdmin\|\|Boolean\(certifiedPermissions\.manage_teachers\)\|\|Boolean\(rawPermissions\["staff\.write"\]\)/);
+  assert.match(routes,/manage_headteachers:isSystemAdmin\|\|Boolean\(certifiedPermissions\.manage_headteachers\)\|\|Boolean\(rawPermissions\["admin\.tenant"\]\)/);
+  assert.match(routes,/manage_users:isSystemAdmin\|\|Boolean\(certifiedPermissions\.manage_users\)\|\|Boolean\(rawPermissions\["admin\.users"\]\)/);
+  assert.match(routes,/view_audit:isSystemAdmin\|\|Boolean\(certifiedPermissions\.view_audit\)\|\|Boolean\(rawPermissions\["admin\.tenant"\]\)/);
 });
 
 
@@ -134,4 +134,25 @@ test("PWA shell carries every navigation parity registrar",()=>{
     "parity-principal.js","parity-timetable.js","parity-reports.js",
     "parity-audit-security-finance.js","parity-operations.js","parity-enterprise-workspaces.js"
   ]) assert.ok(sw.includes(asset),asset);
+});
+
+
+test("Class Teacher navigation uses role-scoped bootstrap data and parity workspaces",()=>{
+  const routes=read("worker/src/routes.ts");
+  const common=read("frontend/parity-common.js");
+  const teacher=read("frontend/tenant-class-teacher-workspace-parity-v1.js");
+  const index=read("frontend/index.html");
+  assert.match(routes,/academic_years:Array\.isArray\(certifiedBootstrap\?\.academic_years\)/);
+  assert.match(routes,/terms:Array\.isArray\(certifiedBootstrap\?\.terms\)/);
+  assert.match(routes,/classes:Array\.isArray\(certifiedBootstrap\?\.classes\)/);
+  assert.match(routes,/subjects:Array\.isArray\(certifiedBootstrap\?\.subjects\)/);
+  assert.match(common,/if\(isSystemAdmin\(\)\)return certified\("get_academic_configuration"\)/);
+  assert.match(common,/window\.EdusentiaShell\?\.state\?\.boot/);
+  for(const label of ["My Teacher Profile","My Class","My Subjects","Class Attendance","Academic Insights","Mark all present","Save attendance","Export summary"]){
+    assert.ok(teacher.includes(label),label);
+  }
+  assert.match(teacher,/save_class_attendance/);
+  assert.match(teacher,/academic_analytics/);
+  assert.match(teacher,/set_teacher_photo/);
+  assert.match(index,/tenant-class-teacher-workspace-parity-v1\.js/);
 });
