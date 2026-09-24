@@ -592,8 +592,7 @@
   }
 
   async function notificationConfirm(message){
-    if(typeof window.EdusentiaConfirm==="function")return Boolean(await window.EdusentiaConfirm(message));
-    return window.confirm(message);
+    return typeof window.EdusentiaConfirm==="function"?Boolean(await window.EdusentiaConfirm(message)):false;
   }
 
   async function renderNotifications(){
