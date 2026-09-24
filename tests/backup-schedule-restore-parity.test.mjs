@@ -24,7 +24,7 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   assert.match(upgrade,/0069_backup_schedule_restore_experience/);
   assert.match(upgrade,/0070_backup_worker_batch_resilience/);
   assert.match(upgrade,/0071_backup_r2_tenant_upsert_fix/);
-  assert.match(upgrade,/test "\$migration_count" = "46"/);
+  assert.match(upgrade,/test "\$migration_count" = "47"/);
   assert.match(resilience,/backup_worker_read_batch/);
   assert.match(resilience,/heartbeat_at/);
   assert.match(resilience,/backup_worker_reconcile_stale_backups/);
