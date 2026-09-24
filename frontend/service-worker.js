@@ -10,7 +10,7 @@
 // Manage Teacher Assignments now supports edit, remove/archive, delete inactive assignments, and assign-more parity.
 // Commercial plan tiering v2 is active in the Upgrade Plan workspace and entitlement cache.
 // Backup & Restore now provides one-tap manual ZIP backups for every plan, Weekly/Monthly automation for Professional and Enterprise, and protected ZIP restore with a pre-restore safety backup.
-// Backup manual execution now uses resilient batched Neon reads, stable Worker encryption secrets, stale-job recovery, and full-size SVG status icons.
+// Backup manual execution now uses resilient batched Neon reads, stable Worker encryption secrets, stale-job recovery, and the shared centered dashboard icon treatment.
 // System-wide statistic icons now use the certified Supabase centered shape geometry and responsive mobile sizing.
 // Backup & Restore production deployment marker: v41 Supabase icon parity release.
 const CACHE = "edusentia-neon-v41";
