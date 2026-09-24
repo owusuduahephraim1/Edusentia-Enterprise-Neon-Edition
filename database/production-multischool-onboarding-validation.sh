@@ -39,6 +39,7 @@ fi
 test -n "$REG_ID"
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "
+set role edusentia_worker_runtime;
 select platform.configure_initial_license(
   '$REG_ID'::uuid,
   '$ACTOR_ID'::uuid,
@@ -49,7 +50,7 @@ select platform.configure_initial_license(
   14
 );" >/dev/null
 
-psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "select platform.approve_registration('$REG_ID'::uuid,'$ACTOR_ID'::uuid);" >/dev/null
+psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "set role edusentia_worker_runtime; select platform.approve_registration('$REG_ID'::uuid,'$ACTOR_ID'::uuid);" >/dev/null
 
 TENANT_ID="$(psql "$MASTER_URL" -Atc "select tenant_id from platform.school_registrations where id='$REG_ID'::uuid")"
 TENANT_CODE="$(psql "$MASTER_URL" -Atc "select tenant_code from platform.tenant_control where tenant_id='$TENANT_ID'::uuid")"
@@ -64,6 +65,7 @@ test -n "$ADMIN_EMAIL"
 [[ "$DB_NAME" =~ ^edusentia_[a-z0-9_]{3,50}$ ]]
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "
+set role edusentia_worker_runtime;
 update platform.provisioning_jobs
 set status='running',stage='database_create',attempts=attempts+1,started_at=coalesce(started_at,now()),updated_at=now(),last_error=''
 where tenant_id='$TENANT_ID'::uuid and status<>'cancelled';
@@ -84,6 +86,7 @@ TENANT_URL="$(MASTER_URL="$MASTER_URL" DB_NAME="$DB_NAME" node --input-type=modu
 echo "::add-mask::$TENANT_URL"
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "
+set role edusentia_worker_runtime;
 update platform.provisioning_jobs set stage='tenant_initialize',updated_at=now()
 where tenant_id='$TENANT_ID'::uuid and status='running';
 " >/dev/null
@@ -107,6 +110,7 @@ test "$(psql "$TENANT_URL" -Atc "select schema_version from app.release_identity
 test "$(psql "$TENANT_URL" -Atc "select to_regprocedure('public.get_bootstrap_data()') is not null")" = "t"
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "
+set role edusentia_worker_runtime;
 update platform.provisioning_jobs set stage='release_verify',updated_at=now()
 where tenant_id='$TENANT_ID'::uuid and status='running';
 select platform.mark_isolated_tenant_ready(
@@ -118,7 +122,7 @@ select platform.mark_isolated_tenant_ready(
 );" >/dev/null
 
 test "$(psql "$MASTER_URL" -Atc "select status='active' and database_state='isolated_ready' and license_status='active' from platform.tenant_control where tenant_id='$TENANT_ID'::uuid")" = "t"
-test "$(psql "$MASTER_URL" -Atc "select count(*)=1 from platform.resolve_login_route('$ADMIN_EMAIL','$TENANT_CODE')")" = "t"
+test "$(psql "$MASTER_URL" -X -qAtc "set role edusentia_worker_runtime; select count(*)=1 from platform.resolve_login_route('$ADMIN_EMAIL','$TENANT_CODE')" | tail -n1)" = "t"
 test "$(psql "$MASTER_URL" -Atc "select count(*)=1 from platform.provisioning_jobs where tenant_id='$TENANT_ID'::uuid and status='ready' and stage='ready'")" = "t"
 
 ADMIN_ID="$(psql "$TENANT_URL" -Atc "select id from authn.users where lower(email)=lower('$ADMIN_EMAIL') limit 1")"
