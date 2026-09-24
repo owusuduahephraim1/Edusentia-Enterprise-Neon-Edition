@@ -12,6 +12,15 @@ function fail(message:string,code="identity_operation_failed",status=400):never{
 function clean(value:unknown,max=500){return String(value??"").trim().slice(0,max);}
 function bool(value:unknown,fallback=false){return value===undefined?fallback:value===true;}
 function uuid(value:unknown){const v=clean(value,64);return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)?v:"";}
+const ACCOUNT_EMAIL_TITLES=new Set([
+  "mr","mrs","ms","miss","madam","master","dr","doctor","rev","reverend",
+  "prof","professor","principal","headmaster","headmistress"
+]);
+function accountEmailBase(fullName:unknown){
+  const parts=String(fullName??"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().split(/\s+/)
+    .map(part=>part.replace(/[^a-z0-9]/g,"")).filter(Boolean);
+  return parts.find(part=>!ACCOUNT_EMAIL_TITLES.has(part))||parts[0]||"user";
+}
 
 async function ensureWritable(sql:TenantSql,ctx:SessionContext){
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.license_snapshot_for_role('system_admin') result`]);
@@ -31,8 +40,9 @@ function normalizeAccess(value:unknown){
   }));
 }
 async function generateEmail(sql:TenantSql,ctx:SessionContext,fullName:string,targetUserId:string|null){
+  const requestedBase=accountEmailBase(fullName);
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
-    txn`select public.generate_nip_user_email(${ctx.userId}::uuid,${fullName},${targetUserId}::uuid) email`
+    txn`select public.generate_nip_user_email(${ctx.userId}::uuid,${requestedBase},${targetUserId}::uuid) email`
   ]);
   const email=String((rows[0] as any)?.email||"").trim().toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail("Generated account email is invalid");
