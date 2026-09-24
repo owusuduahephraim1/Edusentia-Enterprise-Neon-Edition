@@ -1,6 +1,6 @@
 name: Deploy GitHub Pages
 on:
-  push: {branches: [main], paths: ["frontend/**","scripts/**","package.json","package-lock.json",".github/workflows/deploy-pages.yml"]}
+  push: {branches: [main]}
   workflow_dispatch:
 permissions: {contents: read, pages: write, id-token: write}
 concurrency: {group: pages, cancel-in-progress: true}
@@ -9,8 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: {name: github-pages, url: "${{ steps.deployment.outputs.page_url }}"}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v5
         with: {node-version: 22}
       - run: npm install --ignore-scripts
       - run: npm run verify:no-supabase
@@ -33,6 +34,37 @@ jobs:
           test -f frontend/assets/edusentia-auth-learning.webp
           echo "916a25b9c34991f05318ab2f7306cf854adb6b03ca6d4416bb16ce90f0976de1  frontend/assets/edusentia-auth-learning.webp" | sha256sum --check --status
       - if: steps.api.outputs.configured == 'true'
+        name: Refuse stale branch deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+      - if: steps.api.outputs.configured == 'true'
+        name: Stamp deployment identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const sha=process.env.GITHUB_SHA;
+          const short=sha.slice(0,12);
+          const swPath='frontend/service-worker.js';
+          let sw=fs.readFileSync(swPath,'utf8');
+          const match=sw.match(/const CACHE = "([^"]+)";/);
+          if(!match) throw new Error('service worker cache declaration not found');
+          const base=match[1].replace(/-[0-9a-f]{12}$/i,'');
+          const cache=`${base}-${short}`;
+          sw=sw.replace(match[0],`const CACHE = "${cache}";`);
+          sw=`// Deployment commit: ${sha}\n${sw}`;
+          fs.writeFileSync(swPath,sw);
+          const meta={commit_sha:sha,short_sha:short,cache_name:cache,deployed_at:new Date().toISOString()};
+          fs.writeFileSync('frontend/deployment-meta.json',JSON.stringify(meta,null,2)+'\n');
+          NODE
+          grep -F "Deployment commit: $GITHUB_SHA" frontend/service-worker.js
+          grep -F "${GITHUB_SHA:0:12}" frontend/service-worker.js
+          grep -F "\"commit_sha\": \"$GITHUB_SHA\"" frontend/deployment-meta.json
+      - if: steps.api.outputs.configured == 'true'
         uses: actions/configure-pages@v5
         with:
           enablement: true
@@ -42,3 +74,34 @@ jobs:
       - id: deployment
         if: steps.api.outputs.configured == 'true'
         uses: actions/deploy-pages@v4
+      - if: steps.api.outputs.configured == 'true'
+        name: Verify live deployment consistency
+        shell: bash
+        env:
+          PAGE_URL: "${{ steps.deployment.outputs.page_url }}"
+        run: |
+          set -euo pipefail
+          case "$PAGE_URL" in */) ;; *) PAGE_URL="$PAGE_URL/" ;; esac
+          local_sw_sha="$(sha256sum frontend/service-worker.js | awk '{print $1}')"
+          local_css_sha="$(sha256sum frontend/style.css | awk '{print $1}')"
+          local_app_sha="$(sha256sum frontend/app.js | awk '{print $1}')"
+          verified=false
+          for attempt in $(seq 1 30); do
+            nonce="$GITHUB_SHA-$attempt"
+            if curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}deployment-meta.json?verify=${nonce}" -o /tmp/live-meta.json \
+              && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}service-worker.js?verify=${nonce}" -o /tmp/live-sw.js \
+              && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}style.css?verify=${nonce}" -o /tmp/live-style.css \
+              && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}app.js?verify=${nonce}" -o /tmp/live-app.js; then
+              live_commit="$(node --input-type=module -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/live-meta.json','utf8'));process.stdout.write(String(x.commit_sha||''))")" || true
+              live_sw_sha="$(sha256sum /tmp/live-sw.js | awk '{print $1}')"
+              live_css_sha="$(sha256sum /tmp/live-style.css | awk '{print $1}')"
+              live_app_sha="$(sha256sum /tmp/live-app.js | awk '{print $1}')"
+              if [ "$live_commit" = "$GITHUB_SHA" ] && [ "$live_sw_sha" = "$local_sw_sha" ] && [ "$live_css_sha" = "$local_css_sha" ] && [ "$live_app_sha" = "$local_app_sha" ]; then
+                verified=true
+                break
+              fi
+            fi
+            sleep 4
+          done
+          test "$verified" = true
+          echo "Live GitHub Pages deployment matches commit $GITHUB_SHA and critical PWA assets."
