@@ -6,10 +6,17 @@
   async function renderTimetable(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>Timetable</h3><p>Certified class timetable console with collision and assignment enforcement.</p></div></div>${loading("Loading timetable controls")}`;
     try{
-      const config=await academicConfig(),years=Array.isArray(config?.academic_years)?config.academic_years:[],classes=Array.isArray(config?.classes)?config.classes:[];
-      byId("content").innerHTML=`<div class="page-head"><div><h3>Timetable</h3><p>Certified class timetable console with collision and assignment enforcement.</p></div></div>
-        <section class="panel"><form id="timetableSelector" class="toolbar"><select id="timetableYear" required>${optionRows(years,"id","name")}</select><select id="timetableClass" required>${optionRows(classes,"id","name")}</select><button class="button secondary" type="submit">Load timetable</button></form><div id="timetableResults">${empty("Select an academic year and class.")}</div></section>`;
+      const config=await academicConfig(),years=Array.isArray(config?.academic_years)?config.academic_years:[],classes=Array.isArray(config?.classes)?config.classes:[],defaultYear=years.find(x=>x.is_active)?.id||years[0]?.id||"",defaultClass=classes[0]?.id||"";
+      if(!defaultYear||!defaultClass){
+        byId("content").innerHTML=`<div class="page-head"><div><h3>Timetable</h3><p>Class teaching schedule</p></div></div><section class="panel pad">${empty("No accessible class is available for the timetable.")}</section>`;
+        return;
+      }
+      byId("content").innerHTML=`<div class="page-head"><div><h3>Class Timetable</h3><p>View the timetable for your accessible classes.</p></div></div>
+        <section class="panel"><form id="timetableSelector" class="toolbar"><select id="timetableYear" required>${optionRows(years,"id","name",defaultYear)}</select><select id="timetableClass" required>${optionRows(classes,"id","name",defaultClass)}</select><button class="button secondary" type="submit">Load timetable</button></form><div id="timetableResults">${loading("Loading timetable")}</div></section>`;
       byId("timetableSelector").onsubmit=e=>{e.preventDefault();loadTimetable();};
+      byId("timetableYear").onchange=loadTimetable;
+      byId("timetableClass").onchange=loadTimetable;
+      await loadTimetable();
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
   async function loadTimetable(){
