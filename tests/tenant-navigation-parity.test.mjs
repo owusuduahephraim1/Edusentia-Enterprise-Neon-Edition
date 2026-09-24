@@ -8,6 +8,8 @@ test("tenant shell follows reference role, permission and feature navigation con
   const app=read("frontend/app.js");
   assert.match(app,/const ROLE_NAV_IDS=Object\.freeze\(/);
   assert.match(app,/system_admin:\["dashboard","operations","students","student_services","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
+  assert.match(app,/class_teacher:\["dashboard","teacher_profile","my_class","attendance","my_subjects","students","history","timetable","reports","insights","notifications"\]/);
+  assert.match(app,/subject_teacher:\["dashboard","teacher_profile","my_subjects","students","history","timetable","reports","insights","notifications"\]/);
   assert.match(app,/permissionEnabled\(code\)/);
   assert.match(app,/featureEnabled\(code\)/);
   assert.match(app,/item\.permission&&!permissionEnabled\(item\.permission\)&&r!=="system_admin"/);
@@ -155,4 +157,6 @@ test("Class Teacher navigation uses role-scoped bootstrap data and parity worksp
   assert.match(teacher,/academic_analytics/);
   assert.match(teacher,/set_teacher_photo/);
   assert.match(index,/tenant-class-teacher-workspace-parity-v1\.js/);
+  assert.match(read("frontend/app.js"),/Class and Subject Teacher Dashboard/);
+  assert.match(read("frontend/app.js"),/Home-class responsibilities and subject teaching assignments/);
 });
