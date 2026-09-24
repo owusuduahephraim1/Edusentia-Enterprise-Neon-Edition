@@ -253,7 +253,8 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const archive=textArg(args,"archive_filter",{max:16})??"active";
       if(!["active","archived","all"].includes(archive))throw Object.assign(new Error("archive_filter is invalid"),{code:"invalid_rpc_arguments",status:422});
       const page=intArg(args,"page_number",{required:false,min:1,max:100000})??1;
-      const pageSize=intArg(args,"page_size",{required:false,min:1,max:100})??20;
+      const requestedPageSize=intArg(args,"page_size",{required:false,min:1,max:500})??20;
+      const pageSize=Math.min(100,requestedPageSize);
       return singleResult(sql,ctx,txn=>txn`select public.search_students_v5(${search},${classId}::uuid,${status}::public.student_status,${archive},${page}::integer,${pageSize}::integer) result`);
     }
     case "mark_notifications_read":{
