@@ -21,14 +21,11 @@ const TABLES=[
   "report_correction_requests","report_correction_events","student_lifecycle_events","transcript_issuances",
   "data_retention_policies","privacy_requests","security_events","security_verification_runs","recovery_test_runs",
   "certificate_templates","teacher_award_categories","certificate_batches","certificates","certificate_events",
-  "report_workflow_events","report_revisions","report_publications","report_card_templates","license_plans",
-  "school_licenses","platform_access_locks","license_events","license_verification_logs","license_feature_catalog",
-  "license_plan_revisions","license_entitlement_overrides","license_binding_sessions","platform_distribution_authorities",
-  "platform_audit_archives","platform_package_templates","platform_package_artifacts","platform_package_events",
-  "platform_package_reconciliation","notifications","notification_outbox","import_batches","import_errors","audit_log",
-  "audit_log_archives","audit_log_archive_entries","client_error_events","system_maintenance_log","backup_exports",
-  "backup_storage_objects"
+  "report_workflow_events","report_revisions","report_publications","report_card_templates",
+  "notifications","notification_outbox","import_batches","import_errors","audit_log",
+  "audit_log_archives","audit_log_archive_entries","client_error_events","system_maintenance_log"
 ] as const;
+const DATABASE_BATCH_SIZE=12;
 
 type BackupRow={
   id:string;backup_key:string;status:string;manifest_path:string;database_path:string;storage_path:string;
@@ -102,27 +99,37 @@ async function licence(sql:TenantSql,ctx:SessionContext,feature:string,write:boo
   if((featureRows[0] as any)?.enabled!==true)fail(`Licence feature not included: ${feature}`,"licence_feature_not_included",403);
 }
 
-async function readTable(sql:TenantSql,ctx:SessionContext,table:string){
-  const rows:any[]=[];
-  for(let offset=0;;offset+=1000){
-    const [pageRows]=await tenantTx<any[]>(sql,ctx,txn=>[
-      txn`select public.backup_worker_read_table(${table},${offset},1000) rows`
-    ]);
-    const page=asArray((pageRows[0] as any)?.rows);
-    rows.push(...page);
-    if(page.length<1000)break;
-    if(offset>=1_000_000)fail(`Backup table ${table} exceeded the safe export limit`,"backup_row_limit",413);
-  }
-  return rows;
+type BackupReadRequest={table:string;offset:number;limit:number};
+
+async function readBatch(sql:TenantSql,ctx:SessionContext,backupId:string,requests:BackupReadRequest[]){
+  const [pageRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select public.backup_worker_read_batch(${backupId}::uuid,${JSON.stringify(requests)}::jsonb) rows`
+  ]);
+  const result=(pageRows[0] as any)?.rows;
+  return result&&typeof result==="object"&&!Array.isArray(result)?result as Record<string,unknown[]>:{};
 }
+
 async function buildDatabaseSnapshot(sql:TenantSql,ctx:SessionContext,backup:BackupRow){
   const tables:Record<string,unknown[]>={},rowCounts:Record<string,number>={};
-  for(const table of TABLES){
-    let rows=await readTable(sql,ctx,table);
-    if(table==="backup_exports")rows=rows.filter((r:any)=>String(r.id||"")!==backup.id);
-    if(table==="backup_storage_objects")rows=rows.filter((r:any)=>String(r.backup_export_id||"")!==backup.id);
-    tables[table]=rows;rowCounts[table]=rows.length;
+  const pending:BackupReadRequest[]=TABLES.map(table=>({table,offset:0,limit:1000}));
+
+  while(pending.length){
+    const requests=pending.splice(0,DATABASE_BATCH_SIZE);
+    const batch=await readBatch(sql,ctx,backup.id,requests);
+    for(const request of requests){
+      const page=asArray(batch[request.table]);
+      const accumulated=tables[request.table]||[];
+      accumulated.push(...page);
+      tables[request.table]=accumulated;
+      if(page.length===request.limit){
+        const nextOffset=request.offset+request.limit;
+        if(nextOffset>1_000_000)fail(`Backup table ${request.table} exceeded the safe export limit`,"backup_row_limit",413);
+        pending.push({...request,offset:nextOffset});
+      }
+    }
   }
+
+  for(const table of TABLES)rowCounts[table]=(tables[table]||[]).length;
   const [authRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_auth_users() users`]);
   const authUsers=asArray((authRows[0] as any)?.users);
   rowCounts.auth_users=authUsers.length;
@@ -230,8 +237,10 @@ export async function performFullBackup(env:Env,sql:TenantSql,ctx:SessionContext
     return (completedRows[0] as any)?.result||{...backup,status:"completed"};
   }catch(e:any){
     const message=String(e?.message||e);
-    await removeBackupPrefix(env,sql,ctx,prefix).catch(()=>undefined);
+    // Persist failure state before best-effort R2 cleanup so an interrupted
+    // cleanup cannot leave the tenant blocked behind a phantom processing job.
     await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_fail(${backup.id}::uuid,${message})`]).catch(()=>undefined);
+    await removeBackupPrefix(env,sql,ctx,prefix).catch(()=>undefined);
     throw e;
   }
 }
