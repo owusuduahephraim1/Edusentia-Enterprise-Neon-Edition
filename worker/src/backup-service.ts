@@ -1,3 +1,4 @@
+// Backup scheduling release: manual backup for all licensed schools; weekly/monthly automation for eligible plans.
 import type { Env, SessionContext } from "./types";
 import { tenantDb, type TenantSql } from "./tenant-db";
 import { db, tenantTx } from "./db";
