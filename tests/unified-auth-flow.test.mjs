@@ -118,6 +118,26 @@ test("Tenant-managed users are synchronized into the master login directory",()=
   assert.match(upgrade,/tenant_login_count/);
 });
 
+test("Generated tenant user emails use the first usable name and can repair legacy addresses",()=>{
+  const identity=read("worker/src/identity-admin.ts");
+  const credentials=read("frontend/tenant-user-credential-actions-v3.js");
+
+  assert.match(identity,/const ACCOUNT_EMAIL_TITLES=new Set\(/);
+  assert.match(identity,/function accountEmailBase\(fullName:unknown\)/);
+  assert.match(identity,/parts\.find\(part=>!ACCOUNT_EMAIL_TITLES\.has\(part\)\)\|\|parts\[0\]\|\|"user"/);
+  assert.match(identity,/const requestedBase=accountEmailBase\(fullName\);/);
+  assert.match(identity,/generate_nip_user_email\(\$\{ctx\.userId\}::uuid,\$\{requestedBase\},\$\{targetUserId\}::uuid\)/);
+  assert.match(identity,/action==="refresh_generated_email"/);
+  assert.match(identity,/async function refreshGeneratedEmail\(/);
+  assert.match(identity,/syncLoginRoute\(env,ctx,newEmail/);
+  assert.match(identity,/removeLoginRoute\(env,ctx,oldEmail\)/);
+
+  assert.match(credentials,/function accountEmailBase\(value\)/);
+  assert.match(credentials,/function generatedEmailNeedsRepair\(profile\)/);
+  assert.match(credentials,/Correct email/);
+  assert.match(credentials,/adminUserManagement\("refresh_generated_email"/);
+});
+
 test("Required password changes block workspace entry until completed",()=>{
   const app=read("frontend/app.js");
   const routes=read("worker/src/routes.ts");
