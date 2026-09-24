@@ -4,7 +4,7 @@
   const {registerView,api,certified,certifiedAllRows,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   const shellState=()=>window.EdusentiaShell?.state||{};
   // ---------- Reports ----------
-  let reportConfig=null;
+  let reportConfig=null,reportPage=1;
   async function renderReports(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>Report Cards</h3><p>Transactional assessment, review, approval, and publication</p></div></div>${loading("Loading report cards")}`;
     try{
@@ -13,16 +13,18 @@
       if(!requestedClass)shellState().reportClassFilter="";
       byId("content").innerHTML=`
         <div class="page-head"><div><h3>Report Cards</h3><p>Transactional assessment, review, approval, and publication</p></div>
-          <div class="page-actions">${isSystemAdmin()?'<button id="reportTemplate" class="button outline" type="button">Manage template</button>':""}<button id="reportExport" class="button outline" type="button">Export list</button><button id="reportBulkDownload" class="button secondary" type="button">Bulk class PDFs</button>${["system_admin","class_teacher"].includes(currentRole())?'<button id="reportBulkPublish" class="button success" type="button">Publish class reports</button>':""}${["system_admin","class_teacher","subject_teacher"].includes(currentRole())?'<button id="reportNew" class="button primary" type="button">New report</button>':""}</div></div>
+          <div class="page-actions">${isSystemAdmin()?'<button id="reportTemplate" class="button outline" type="button">Manage template</button>':currentRole()==="principal"?'<button id="reportManualTemplate" class="button outline" type="button">Manual template</button>':""}<button id="reportExport" class="button outline" type="button">Export list</button>${currentRole()==="principal"?'<button id="reportBulkApprove" class="button success" type="button">Approve class reports</button>':'<button id="reportBulkDownload" class="button secondary" type="button">Bulk class PDFs</button>'}${["system_admin","class_teacher"].includes(currentRole())?'<button id="reportBulkPublish" class="button success" type="button">Publish class reports</button>':""}${["system_admin","class_teacher","subject_teacher"].includes(currentRole())?'<button id="reportNew" class="button primary" type="button">New report</button>':""}</div></div>
         <section class="panel"><div class="toolbar"><label class="search"><input id="reportSearch" type="search" placeholder="Search student or report number"></label><select id="reportTerm"><option value="">All terms</option>${terms.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(activeTerm)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportClass"><option value="">${["class_teacher","subject_teacher"].includes(currentRole())?"All assigned classes":"All classes"}</option>${classes.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(requestedClass)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportStatus"><option value="">All statuses</option>${["draft","submitted","class_reviewed","approved","published","returned","withdrawn"].map(v=>`<option value="${v}">${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></div><div id="reportResults">${loading("Loading report cards")}</div></section>
         <section class="panel" id="reportWorkspace" style="margin-top:18px">${empty("Select a report card to open the assessment workspace.")}</section>`;
       byId("reportTemplate")?.addEventListener("click",()=>window.EdusentiaShell?.navigate?.("settings"));
+      byId("reportManualTemplate")?.addEventListener("click",openManualReportTemplate);
       byId("reportExport").onclick=exportReportList;
-      byId("reportBulkDownload").onclick=bulkDownloadPublishedReports;
+      byId("reportBulkDownload")?.addEventListener("click",bulkDownloadPublishedReports);
+      byId("reportBulkApprove")?.addEventListener("click",()=>bulkTransitionReports("approved"));
       byId("reportBulkPublish")?.addEventListener("click",()=>bulkTransitionReports("published"));
       byId("reportNew")?.addEventListener("click",openNewReportPicker);
-      let timer;byId("reportSearch").oninput=()=>{clearTimeout(timer);timer=setTimeout(loadReportList,250);};
-      ["reportTerm","reportStatus"].forEach(id=>byId(id).onchange=loadReportList);byId("reportClass").onchange=()=>{shellState().reportClassFilter=byId("reportClass").value;loadReportList();};
+      let timer;byId("reportSearch").oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{reportPage=1;loadReportList();},250);};
+      ["reportTerm","reportStatus"].forEach(id=>byId(id).onchange=()=>{reportPage=1;loadReportList();});byId("reportClass").onchange=()=>{reportPage=1;shellState().reportClassFilter=byId("reportClass").value;loadReportList();};
       await loadReportList();
       const pendingReportId=String(shellState().pendingReportId||""),pendingEnrollmentId=String(shellState().pendingReportEnrollmentId||"");
       delete shellState().pendingReportId;delete shellState().pendingReportEnrollmentId;
@@ -33,12 +35,35 @@
   async function loadReportList(){
     const box=byId("reportResults");if(!box)return;box.innerHTML=loading("Loading report cards");
     try{
-      const data=await certified("list_report_cards_v6",{target_term_id:byId("reportTerm")?.value||null,target_class_id:byId("reportClass")?.value||null,target_status:byId("reportStatus")?.value||null,search_text:byId("reportSearch")?.value?.trim()||"",archive_filter:"active",page_number:1,page_size:100}),rows=Array.isArray(data?.rows)?data.rows:[];
-      box.innerHTML=rows.length?`<div class="table-wrap"><table><thead><tr><th>Student</th><th>Class</th><th>Term</th><th>Average</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-copy"><strong>${esc(row.student_name||"Student")}</strong><small>${esc(row.report_number||row.admission_no||"")}</small></div></td><td>${esc(row.class_name||"—")}</td><td>${esc(row.term_name||"—")}</td><td><strong>${Number(row.average||0).toFixed(1)}%</strong></td><td>${status(row.status||"draft")}</td><td>${formatDateTime(row.updated_at)}</td><td><button class="button secondary small" data-report-open="${esc(row.id)}">Open</button>${["draft","returned"].includes(String(row.status||""))?'<button class="button danger small" data-report-delete="'+esc(row.id)+'">Delete</button>':""}</td></tr>`).join("")}</tbody></table></div>`:empty("No report cards match the current filters.");
+      const data=await certified("list_report_cards_v6",{target_term_id:byId("reportTerm")?.value||null,target_class_id:byId("reportClass")?.value||null,target_status:byId("reportStatus")?.value||null,search_text:byId("reportSearch")?.value?.trim()||"",archive_filter:"active",page_number:reportPage,page_size:50}),rows=Array.isArray(data?.rows)?data.rows:[],total=Number(data?.total??rows.length),start=total?(reportPage-1)*50+1:0,end=Math.min(reportPage*50,total);
+      box.innerHTML=(rows.length?`<div class="table-wrap"><table><thead><tr><th>Student</th><th>Class</th><th>Term</th><th>Average</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-copy"><strong>${esc(row.student_name||"Student")}</strong><small>${esc(row.report_number||row.admission_no||"")}</small></div></td><td>${esc(row.class_name||"—")}</td><td>${esc(row.term_name||"—")}</td><td><strong>${Number(row.average||0).toFixed(1)}%</strong></td><td>${status(row.status||"draft")}</td><td>${formatDateTime(row.updated_at)}</td><td><button class="button secondary small" data-report-open="${esc(row.id)}">Open</button>${["draft","returned"].includes(String(row.status||""))&&currentRole()!=="principal"?'<button class="button danger small" data-report-delete="'+esc(row.id)+'">Delete</button>':""}</td></tr>`).join("")}</tbody></table></div>`:empty("No report cards match the current filters."))+`<div class="panel-footer"><span>${start}–${end} of ${total}</span><div class="button-row"><button class="button ghost small" id="reportPrevious" type="button" ${reportPage<=1?"disabled":""}>Previous</button><button class="button ghost small" id="reportNext" type="button" ${end>=total?"disabled":""}>Next</button></div></div>`;
+      byId("reportPrevious")?.addEventListener("click",()=>{if(reportPage>1){reportPage-=1;loadReportList();}});
+      byId("reportNext")?.addEventListener("click",()=>{if(end<total){reportPage+=1;loadReportList();}});
       box.querySelectorAll("[data-report-open]").forEach(b=>b.onclick=()=>openReportEditor(b.dataset.reportOpen,null,null));
       box.querySelectorAll("[data-report-delete]").forEach(b=>b.onclick=async()=>{if(!await window.EdusentiaConfirm("Permanently delete this never-approved draft report?"))return;try{await certified("delete_report_card_permanently",{target_report_id:b.dataset.reportDelete,reason_text:"Draft report deleted by authorised school user"});await loadReportList();}catch(error){alert(friendly(error));}});
     }catch(error){box.innerHTML=pageError(error);}
   }
+  function openManualReportTemplate(){
+    const years=Array.isArray(reportConfig?.academic_years)?reportConfig.academic_years:[],terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[],classes=Array.isArray(reportConfig?.classes)?reportConfig.classes:[],subjects=Array.isArray(reportConfig?.subjects)?reportConfig.subjects.filter(x=>x.active!==false):[];
+    const activeYear=years.find(x=>x.is_active)?.id||years[0]?.id||"",activeTerm=terms.find(x=>x.is_active)?.id||terms[0]?.id||"";
+    openModal("Manual Report Card Template","Prepare a professionally formatted blank report card for manual completion.",`
+      <form id="manualReportTemplateForm" class="form-stack"><div class="form-grid">
+        <label class="field"><span>Academic year</span><select name="academic_year_id"><option value="">Leave blank</option>${optionRows(years,"id","name",activeYear).replace('<option value="">Select</option>',"")}</select></label>
+        <label class="field"><span>Term</span><select name="term_id"><option value="">Leave blank</option>${optionRows(terms,"id","name",activeTerm).replace('<option value="">Select</option>',"")}</select></label>
+        <label class="field full"><span>Class</span><select name="class_id"><option value="">Leave blank</option>${optionRows(classes,"id","name","").replace('<option value="">Select</option>',"")}</select></label>
+      </div><div class="template-information"><strong>${subjects.length} active subject${subjects.length===1?"":"s"} will be included.</strong><span>Student details, scores, grades, positions, comments, attendance and conduct fields remain blank for manual completion.</span></div></form>`,
+      '<button class="button ghost" id="manualTemplateCancel" type="button">Cancel</button><button class="button primary" id="manualTemplateOpen" type="button">Open printable template</button>');
+    byId("manualTemplateCancel").onclick=closeModal;
+    byId("manualTemplateOpen").onclick=()=>{
+      if(!subjects.length){showMessage("reportEditorMessage","At least one active subject is required.");return;}
+      const form=byId("manualReportTemplateForm"),v=formValues(form),year=years.find(x=>String(x.id)===String(v.academic_year_id)),term=terms.find(x=>String(x.id)===String(v.term_id)),clazz=classes.find(x=>String(x.id)===String(v.class_id)),school=window.EdusentiaShell?.state?.boot?.tenant||{},win=window.open("","_blank");
+      if(!win){window.EdusentiaNotify?.("Template preview blocked","Allow pop-ups for this school workspace and try again.","warning");return;}
+      const rows=subjects.map((s,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(s.name||s.subject_name||"Subject")+'</td><td></td><td></td><td></td><td></td></tr>').join("");
+      win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Manual Report Card Template</title><style>@page{size:A4;margin:12mm}body{font:11pt Arial,sans-serif;color:#17233b;margin:0}header{text-align:center;border-bottom:3px solid #123a79;margin-bottom:6mm}h1{font-size:18pt;margin:0}h2{font-size:14pt;color:#123a79}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}.blank{border-bottom:1px solid #334155;min-height:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #b7c2d1;padding:6px;height:22px}th{background:#eef3fa}.notes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}.box{border:1px solid #b7c2d1;min-height:70px;padding:8px}.actions{margin:0 0 15px}@media print{.actions{display:none}}</style></head><body><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div><header><h1>'+esc(school.name||"School")+'</h1><h2>Manual Report Card Template</h2></header><div class="meta"><div><strong>Academic year:</strong> '+esc(year?.name||"________________")+'</div><div><strong>Term:</strong> '+esc(term?.name||"________________")+'</div><div><strong>Class:</strong> '+esc(clazz?.name||"________________")+'</div><div><strong>Admission no.:</strong> ____________________</div><div><strong>Student:</strong> ______________________________</div><div><strong>Attendance:</strong> ______ / ______</div></div><table><thead><tr><th>#</th><th>Subject</th><th>Class score</th><th>Exam</th><th>Total</th><th>Grade</th></tr></thead><tbody>'+rows+'</tbody></table><div class="notes"><div><strong>Class Teacher Comment</strong><div class="box"></div></div><div><strong>Principal Comment</strong><div class="box"></div></div><div><strong>Conduct / Attitude</strong><div class="box"></div></div><div><strong>Promotion / Next Class</strong><div class="box"></div></div></div></body></html>');
+      win.document.close();closeModal();
+    };
+  }
+
   async function openNewReportPicker(preselectedEnrollmentId=""){
     try{
       const students=await certifiedAllRows("search_students_v5",{search_text:"",target_class_id:null,target_status:"active",archive_filter:"active"}),rows=Array.isArray(students?.rows)?students.rows:[],terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[];
@@ -56,7 +81,7 @@
   }
   async function bulkTransitionReports(targetStatus){
     const termId=byId("reportTerm")?.value||"",classId=byId("reportClass")?.value||"";if(!termId||!classId){alert("Select one term and one class before using a bulk workflow action.");return;}
-    const action=targetStatus==="published"?"Publish":"Update";if(!await window.EdusentiaConfirm(action+" every eligible report in the selected class? Incomplete or ineligible reports remain unchanged."))return;
+    const action=targetStatus==="published"?"Publish":targetStatus==="approved"?"Approve":"Update";if(!await window.EdusentiaConfirm(action+" every eligible report in the selected class? Incomplete or ineligible reports remain unchanged."))return;
     try{const result=await certified("bulk_transition_class_reports",{target_term_id:termId,target_class_id:classId,target_status:targetStatus,comment_text:"Bulk "+targetStatus+" from Report Cards workspace"});alert(String(result?.transitioned_reports||0)+" report(s) "+targetStatus+".");await loadReportList();}catch(error){alert(friendly(error));}
   }
   async function bulkDownloadPublishedReports(){
