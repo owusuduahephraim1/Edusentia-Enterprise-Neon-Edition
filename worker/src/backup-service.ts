@@ -182,10 +182,13 @@ export async function performFullBackup(env:Env,sql:TenantSql,ctx:SessionContext
   if(!backup?.id)fail("Backup record could not be created");
   const maxObjects=Math.max(1,Math.min(20000,Number(env.BACKUP_MAX_OBJECTS||5000)));
   const maxBytes=Math.max(1024,Math.min(5*1024*1024*1024,Number(env.BACKUP_MAX_BYTES||536870912)));
-  const material=await encryptionMaterial(env),prefix=`full/${backup.backup_key}`;
+  const prefix=`full/${backup.backup_key}`;
   const databasePath=`${prefix}/database/database.json.gz.nisb`,manifestPath=`${prefix}/manifest.json.nisb`,indexPath=`${prefix}/index.json`;
   const storedObjects:StoredObject[]=[],objectCounts:Record<string,number>={};let totalBytes=0,discovered=0;
   try{
+    // Resolve encryption inside the guarded section so a configuration problem
+    // is recorded as a failed backup instead of leaving a phantom processing row.
+    const material=await encryptionMaterial(env);
     const database=await buildDatabaseSnapshot(sql,ctx,backup);
     const compressed=await gzip(database.bytes),encrypted=await encryptPayload(compressed,material.key);
     await putBackupObject(env,sql,ctx,databasePath,encrypted,"application/octet-stream");
