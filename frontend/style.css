@@ -128,7 +128,7 @@ textarea{min-height:92px;resize:vertical}
 .stat-icon.gold{background:#fff3d3;color:#a66b00}
 .stat-icon.green{background:#e2f6ee;color:var(--green)}
 .stat-icon.purple{background:#efeafd;color:var(--purple)}
-.stat-card span{display:block;font-size:12px;color:var(--muted);font-weight:650}
+.stat-card>div>span{display:block;font-size:12px;color:var(--muted);font-weight:650}
 .stat-card strong{display:block;font-size:27px;color:#142545;line-height:1.15;margin-top:2px}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 7px 25px rgba(22,46,89,.045);overflow:hidden}
 .panel.pad{padding:19px}
