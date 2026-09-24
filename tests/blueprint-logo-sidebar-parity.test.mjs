@@ -55,7 +55,7 @@ test("tenant sidebar inherits blueprint alignment and hides native scrollbar tra
 
 test("PWA carries the canonical blueprint school logo asset",()=>{
   const sw=read("frontend/service-worker.js");
-  assert.match(sw,/edusentia-neon-v26/);
+  assert.match(sw,/edusentia-neon-v27/);
   assert.match(sw,/assets\/school-logo\.png/);
   assert.ok(fs.statSync("frontend/assets/school-logo.png").size>10000);
 });
