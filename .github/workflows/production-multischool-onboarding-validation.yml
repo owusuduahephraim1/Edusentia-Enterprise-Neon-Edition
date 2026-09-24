@@ -1,0 +1,55 @@
+name: Production Multi-School Onboarding Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "database/production-multischool-onboarding-validation.sh"
+      - ".github/workflows/production-multischool-onboarding-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edusentia-production-multischool-onboarding
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+      TENANT_TEMPLATE_DATABASE: edusentia_tenant_template
+      EDUSENTIA_API_BASE: https://edusentia-enterprise-neon-api.edusentia-enterprise-neon.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require production database credential
+        run: test -n "$SOURCE_DATABASE_URL"
+
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Build production master URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          BOOTSTRAP_DATABASE_URL="$(SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.SOURCE_DATABASE_URL);
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$BOOTSTRAP_DATABASE_URL"
+          echo "BOOTSTRAP_DATABASE_URL=$BOOTSTRAP_DATABASE_URL" >> "$GITHUB_ENV"
+
+      - name: Create and validate isolated Starter school
+        shell: bash
+        run: bash database/production-multischool-onboarding-validation.sh
