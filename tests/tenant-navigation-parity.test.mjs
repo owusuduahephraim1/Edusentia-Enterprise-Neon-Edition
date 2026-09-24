@@ -157,6 +157,14 @@ test("Class Teacher navigation uses role-scoped bootstrap data and parity worksp
   assert.match(teacher,/academic_analytics/);
   assert.match(teacher,/set_teacher_photo/);
   assert.match(index,/tenant-class-teacher-workspace-parity-v1\.js/);
+  assert.match(teacher,/Student Academic History/);
+  assert.match(teacher,/Official transcript history is read-only in the teacher workspace/);
+  const reports=read("frontend/parity-reports.js");
+  assert.match(reports,/id="reportWorkspace"/);
+  assert.match(reports,/scrollIntoView\(\{behavior:"smooth",block:"start"\}\)/);
+  const timetable=read("frontend/parity-timetable.js");
+  assert.match(timetable,/await loadTimetable\(\)/);
+  assert.match(timetable,/View the timetable for your accessible classes/);
   assert.match(read("frontend/app.js"),/Class and Subject Teacher Dashboard/);
   assert.match(read("frontend/app.js"),/Home-class responsibilities and subject teaching assignments/);
 });
