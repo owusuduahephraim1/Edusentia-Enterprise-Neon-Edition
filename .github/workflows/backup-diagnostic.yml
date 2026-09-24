@@ -38,6 +38,8 @@ jobs:
           psql "$TENANT_URL" -X -P pager=off -c "select id,backup_key,status,verification_status,started_at,completed_at,left(coalesce(error_message,''),1000) error_message from public.backup_exports order by created_at desc limit 8;"
           echo "Processing backup object progress:"
           psql "$TENANT_URL" -X -P pager=off -c "select b.id,b.status,count(o.id) object_rows,coalesce(sum(o.encrypted_size),0) encrypted_bytes,min(o.created_at) first_object,max(o.created_at) last_object from public.backup_exports b left join public.backup_storage_objects o on o.backup_export_id=b.id where b.status='processing' group by b.id,b.status order by max(b.created_at) desc limit 5;"
+          echo "Processing backup R2 metadata:"
+          psql "$TENANT_URL" -X -P pager=off -c "select b.id,b.backup_key,m.object_key,m.size_bytes,m.stored_at from public.backup_exports b left join storage.object_metadata m on m.object_key like 'tenants/'||(select id::text from app.tenants order by created_at limit 1)||'/system-backups/full/'||b.backup_key||'/%' where b.status='processing' order by m.stored_at desc nulls last limit 20;"
           echo "Latest processing backup object paths:"
           psql "$TENANT_URL" -X -P pager=off -c "select o.source_bucket,left(o.source_path,120) source_path,left(o.backup_path,160) backup_path,o.original_size,o.encrypted_size,o.created_at from public.backup_storage_objects o join public.backup_exports b on b.id=o.backup_export_id where b.status='processing' order by o.created_at desc limit 12;"
           echo "Required backup worker functions:"
