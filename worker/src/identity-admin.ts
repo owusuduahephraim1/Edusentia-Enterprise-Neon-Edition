@@ -181,10 +181,6 @@ async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,us
       ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${newEmail},
       ${clean(profile.full_name,200)},${clean(profile.phone,50)||null},${profile.active!==false}::boolean,${String(profile.role)},
       ${profile.mfa_required===true}::boolean,${profile.must_change_password===true}::boolean
-    ) result`,
-    txn`select audit.record_auth_event(
-      ${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.user.generated_email_corrected',
-      jsonb_build_object('target_user_id',${userId}::uuid,'old_email',${oldEmail},'new_email',${newEmail})
     ) result`
   ]);
   await syncLoginRoute(env,ctx,newEmail,String(profile.role),profile.active!==false);
