@@ -134,9 +134,30 @@ test("Staff & HR uses native shell routing only for Principal and System Adminis
   assert.match(hr,/@media\(max-width:700px\)/);
 
   assert.doesNotMatch(finance,/S\.role==="system_admin"&&hasFeature\("finance_fees"\)/);
-  assert.match(accountantRoles,/currentRole\(\) === "system_admin"[\s\S]*existing\?\.remove\(\)[\s\S]*setDirectoryActive\(false\)/);
+  assert.match(accountantRoles,/currentRole\(\) !== "system_admin"[\s\S]*button\?\.remove\(\)[\s\S]*setDirectoryActive\(false\)/);
+  assert.match(accountantRoles,/className = "nav-item accounts-directory-nav-item"/);
+  assert.match(accountantRoles,/Accounts Office Staff/);
+  assert.match(accountantRoles,/admin_accounts_staff_directory/);
+  assert.match(accountantRoles,/admin_save_accounts_staff/);
+  assert.match(accountantRoles,/admin_deactivate_accounts_staff/);
+  assert.match(accountantRoles,/data-accountant-restore/);
+  assert.match(accountantRoles,/Archive \/ Remove/);
 });
 
+
+test("Settings separates uploaded report-card design files from class-range summaries",()=>{
+  const enterprise=read("frontend/parity-enterprise-workspaces.js");
+  assert.match(enterprise,/Uploaded Report Card Designs/);
+  assert.match(enterprise,/data-template-design-library="1"/);
+  assert.match(enterprise,/reportTemplateDesignRange/);
+  assert.match(enterprise,/reportTemplateDesignFile/);
+  assert.match(enterprise,/reportTemplateDesignUpload/);
+  assert.match(enterprise,/data-template-range-summary="1"/);
+  assert.match(enterprise,/Report Card Templates by Class Range/);
+  assert.match(enterprise,/Manage this file in Uploaded Report Card Designs above/);
+  assert.match(enterprise,/save_report_card_template/);
+  assert.match(enterprise,/remove_report_card_template/);
+});
 
 test("System Administrator operational workspaces preserve blueprint UI actions",()=>{
   const shell=read("frontend/app.js");
