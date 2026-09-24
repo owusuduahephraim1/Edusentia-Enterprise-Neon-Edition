@@ -9,15 +9,15 @@
   <title>Edusentia Platform Administration</title>
   <link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
   <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="platform-saas-admin.css">
-  <link rel="stylesheet" href="platform-r40-mobile.css">
+  <link rel="stylesheet" href="platform-saas-admin.css?v=platform-login-r43">
+  <link rel="stylesheet" href="platform-r40-mobile.css?v=platform-login-r43">
   <link rel="stylesheet" href="workspace-canvas.css">
   <link rel="stylesheet" href="r40-v9.css">
   <link rel="stylesheet" href="platform-r40-v9-mfa-resilience.css">
   <link rel="stylesheet" href="platform-r40-v9-list-resilience.css">
 </head>
 <body class="pa-page">
-  <section id="paAuthView" class="pa-auth-view hidden" aria-hidden="true">
+  <section id="paAuthView" class="pa-auth-view" aria-hidden="false">
     <img class="pa-auth-scene" src="assets/edusentia-auth-learning.webp" alt="" aria-hidden="true" decoding="async" fetchpriority="high">
     <div class="pa-auth-panel">
       <div class="pa-brand">
@@ -91,8 +91,9 @@
   <div id="qrScratch" class="qr-scratch" aria-hidden="true"></div>
   <script src="config.js"></script>
   <script src="api-client.js"></script>
-  <script src="platform-api-client.js"></script>
+  <script src="platform-api-client.js?v=platform-login-r43"></script>
   <script src="assets/vendor/qrcode-1.0.0.min.js"></script>
-  <script src="platform-saas-admin.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onPlatformTurnstileLoad&render=explicit" async defer></script>
+  <script src="platform-saas-admin.js?v=platform-login-r43"></script>
 </body>
 </html>
