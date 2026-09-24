@@ -172,16 +172,31 @@ test("Class Teacher navigation uses role-scoped bootstrap data and parity worksp
 
 test("Class Teacher history and notifications retain Supabase operational behavior",()=>{
   const teacher=read("frontend/tenant-class-teacher-workspace-parity-v1.js");
+  const students=read("frontend/parity-students.js");
+  const reports=read("frontend/parity-reports.js");
+  const common=read("frontend/parity-common.js");
   const app=read("frontend/app.js");
   const rpc=read("worker/src/certified-rpc.ts");
+  assert.match(common,/async function certifiedAllRows\(/);
+  assert.match(common,/page_number:page,page_size:100/);
+  assert.match(teacher,/certifiedAllRows\("search_students_v5"/);
   assert.doesNotMatch(teacher,/search_students_v5"[^\n]*page_size:200/);
-  assert.match(teacher,/search_students_v5"[^\n]*page_size:100/);
   for(const label of ["Admission number","Academic periods","Transcript issuances","Preview transcript","Download transcript preview","Export CSV","Transcript rule: latest currently valid published report per term only"]){
     assert.ok(teacher.includes(label),label);
   }
+  assert.match(students,/data-student-report=/);
+  assert.match(students,/pendingReportEnrollmentId/);
+  assert.doesNotMatch(students,/search_students_v5"[^\n]*page_size:500/);
+  assert.match(reports,/certifiedAllRows\("search_students_v5"/);
+  assert.match(reports,/certifiedAllRows\("list_report_cards_v6"/);
+  assert.match(reports,/pendingReportId/);
+  assert.match(reports,/pendingReportEnrollmentId/);
+  assert.doesNotMatch(reports,/page_size:500/);
   for(const label of ["Mark all read","Clear notifications","Delete"]){
     assert.ok(app.includes(label),label);
   }
+  assert.match(app,/data-notification-report/);
+  assert.match(app,/state\.pendingReportId=/);
   assert.match(app,/certified\("delete_notifications",\{notification_ids:null\}\)/);
   assert.match(app,/data-notification-delete/);
   assert.match(rpc,/const requestedPageSize=intArg\(args,"page_size",\{required:false,min:1,max:500\}\)\?\?20;/);
