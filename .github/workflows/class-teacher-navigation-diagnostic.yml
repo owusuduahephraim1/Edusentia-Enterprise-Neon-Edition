@@ -1,0 +1,133 @@
+name: Class Teacher Navigation Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/class-teacher-navigation-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      RAW_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Inspect remaining Class Teacher navigation RPCs
+        shell: bash
+        run: |
+          set -euo pipefail
+          TENANT_DATABASE_URL="$(RAW_DATABASE_URL="$RAW_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.RAW_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia_nis_000001";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$TENANT_DATABASE_URL"
+
+          psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 -At <<'SQL'
+          begin;
+
+          select set_config('diag.user_id',coalesce((
+            select p.id::text from public.profiles p
+            where public.current_app_role_for(p.role)::text='class_teacher' and p.active
+            order by p.created_at desc limit 1
+          ),''),true);
+          select set_config('diag.tenant_id',(select id::text from app.tenants order by created_at limit 1),true);
+          select set_config('diag.term_id',coalesce((
+            select id::text from public.terms where is_active and deleted_at is null
+            order by start_date desc nulls last limit 1
+          ),''),true);
+          select set_config('diag.year_id',coalesce((
+            select academic_year_id::text from public.terms
+            where id=nullif(current_setting('diag.term_id'),'')::uuid
+          ),''),true);
+          select set_config('diag.class_id',coalesce((
+            select c.id::text from public.classes c
+            where c.class_teacher_id=nullif(current_setting('diag.user_id'),'')::uuid
+              and c.active and c.deleted_at is null
+            order by c.level_order,c.name limit 1
+          ),''),true);
+          select set_config('diag.student_id',coalesce((
+            select s.id::text
+            from public.enrollments e
+            join public.students s on s.id=e.student_id and s.deleted_at is null
+            where e.class_id=nullif(current_setting('diag.class_id'),'')::uuid
+              and e.deleted_at is null
+            order by s.created_at limit 1
+          ),''),true);
+
+          set local role edusentia_worker_runtime;
+          select app.set_request_context(
+            current_setting('diag.tenant_id')::uuid,
+            nullif(current_setting('diag.user_id'),'')::uuid,
+            'class_teacher',
+            1::smallint
+          );
+
+          do $diag$
+          declare
+            termid uuid:=nullif(current_setting('diag.term_id'),'')::uuid;
+            yearid uuid:=nullif(current_setting('diag.year_id'),'')::uuid;
+            classid uuid:=nullif(current_setting('diag.class_id'),'')::uuid;
+            studentid uuid:=nullif(current_setting('diag.student_id'),'')::uuid;
+            v jsonb;
+          begin
+            begin
+              v:=public.get_role_dashboard(termid);
+              raise notice 'NAV_DASHBOARD_OK assigned_classes=% assigned_subjects=% students=%',
+                coalesce(v->>'assigned_classes','0'),
+                coalesce(v->>'assigned_subjects','0'),
+                coalesce(v->>'active_students','0');
+            exception when others then
+              raise notice 'NAV_DASHBOARD_ERROR state=% message=%',SQLSTATE,SQLERRM;
+            end;
+
+            begin
+              v:=public.list_report_cards_v6(termid,classid,null,'','active',1,20);
+              raise notice 'NAV_REPORTS_OK total=% rows=%',coalesce(v->>'total','0'),jsonb_array_length(coalesce(v->'rows','[]'::jsonb));
+            exception when others then
+              raise notice 'NAV_REPORTS_ERROR state=% message=%',SQLSTATE,SQLERRM;
+            end;
+
+            if yearid is not null and classid is not null then
+              begin
+                v:=public.get_class_timetable_console(yearid,classid);
+                raise notice 'NAV_TIMETABLE_OK entries=% subjects=%',jsonb_array_length(coalesce(v->'entries','[]'::jsonb)),jsonb_array_length(coalesce(v->'subjects','[]'::jsonb));
+              exception when others then
+                raise notice 'NAV_TIMETABLE_ERROR state=% message=%',SQLSTATE,SQLERRM;
+              end;
+            end if;
+
+            if studentid is not null then
+              begin
+                v:=public.get_student_academic_history(studentid);
+                raise notice 'NAV_HISTORY_OK student=% records=%',coalesce(v#>>'{transcript,student,full_name}',''),jsonb_array_length(coalesce(v#>'{transcript,academic_records}','[]'::jsonb));
+              exception when others then
+                raise notice 'NAV_HISTORY_ERROR state=% message=%',SQLSTATE,SQLERRM;
+              end;
+            end if;
+
+            begin
+              v:=public.list_notifications(1,20);
+              raise notice 'NAV_NOTIFICATIONS_OK total=% rows=%',coalesce(v->>'total','0'),jsonb_array_length(coalesce(v->'rows','[]'::jsonb));
+            exception when others then
+              raise notice 'NAV_NOTIFICATIONS_ERROR state=% message=%',SQLSTATE,SQLERRM;
+            end;
+          end
+          $diag$;
+
+          rollback;
+          SQL
