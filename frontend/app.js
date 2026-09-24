@@ -27,8 +27,8 @@
   const ROLE_NAV_IDS=Object.freeze({
     system_admin:["dashboard","operations","students","student_services","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"],
     principal:["dashboard","operations","student_services","staff","history","timetable","delegations","reports","certificates","insights","notifications","compliance"],
-    class_teacher:["dashboard","teacher_profile","my_class","attendance","my_subjects","students","history","timetable","reports","insights","notifications"],
-    subject_teacher:["dashboard","teacher_profile","my_subjects","students","history","timetable","reports","insights","notifications"],
+    class_teacher:["dashboard","teacher_profile","my_class","attendance","my_subjects","students","student_services","history","timetable","reports","insights","notifications"],
+    subject_teacher:["dashboard","teacher_profile","my_subjects","students","student_services","history","timetable","reports","insights","notifications"],
     parent_guardian:["dashboard","children","student_services","finance","notifications"],
     accountant:["finance","notifications"],
     accounts_office:["finance","notifications"],
