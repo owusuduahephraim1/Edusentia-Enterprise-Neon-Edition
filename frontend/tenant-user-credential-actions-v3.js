@@ -63,6 +63,23 @@
       .replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
+  const ACCOUNT_EMAIL_TITLES = new Set([
+    "mr","mrs","ms","miss","madam","master","dr","doctor","rev","reverend",
+    "prof","professor","principal","headmaster","headmistress",
+  ]);
+  function accountEmailBase(value) {
+    const parts = String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/\s+/)
+      .map((part) => part.replace(/[^a-z0-9]/g, "")).filter(Boolean);
+    return parts.find((part) => !ACCOUNT_EMAIL_TITLES.has(part)) || parts[0] || "";
+  }
+  function generatedEmailNeedsRepair(profile) {
+    const base = accountEmailBase(profile?.full_name);
+    const local = String(profile?.email || "").split("@")[0].toLowerCase();
+    if (!base || !local || !local.startsWith(base)) return Boolean(base && local);
+    const suffix = local.slice(base.length);
+    return Boolean(suffix && !/^\d+$/.test(suffix));
+  }
+
   function normalizeProfiles(data) {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.profiles)) return data.profiles;
@@ -381,6 +398,8 @@
     const phone = String(profile.phone || "").trim();
     const whatsappPhone = normalizePhoneForWhatsApp(phone);
     const hasSecret = Boolean(secret?.password);
+    const emailNeedsRepair = generatedEmailNeedsRepair(profile);
+    const expectedBase = accountEmailBase(profile.full_name);
     const status = hasSecret
       ? "A temporary password is available in this browser session for up to 30 minutes."
       : "The current password cannot be retrieved. Issue a new temporary password before copying or sending complete credentials.";
@@ -389,6 +408,7 @@
       <div class="eds-cred-status-v3 ${hasSecret ? "success" : "warning"}">
         <div><strong>${hasSecret ? "Temporary password available" : "Password protected"}</strong><span>${esc(status)}</span></div>
       </div>
+      ${emailNeedsRepair ? `<div class="eds-cred-status-v3 warning"><div><strong>Generated email does not match the first usable name</strong><span>This account should use an address beginning with ${esc(expectedBase)}. The correction keeps the school domain and updates sign-in routing.</span></div><button class="button secondary small" id="edsCredentialsRepairEmailV3" type="button">Correct email</button></div>` : ""}
       <div class="eds-credential-grid-v3">
         <div class="eds-credential-card-v3"><small>User</small><strong>${esc(profile.full_name || "—")}</strong></div>
         <div class="eds-credential-card-v3"><small>Role</small><strong>${esc(roleLabel(profile.role))}</strong></div>
@@ -447,6 +467,27 @@
         "noopener,noreferrer",
       );
     };
+    byId("edsCredentialsRepairEmailV3")?.addEventListener("click", async () => {
+      const button = byId("edsCredentialsRepairEmailV3");
+      if (!window.EdusentiaApi?.adminUserManagement) {
+        notify("Email not corrected", "The user-management service is unavailable.", "error");
+        return;
+      }
+      button.disabled = true;
+      try {
+        const result = await window.EdusentiaApi.adminUserManagement("refresh_generated_email", { user_id: profile.id });
+        profileCache = null;
+        profileLoadedAt = 0;
+        await loadProfiles(true);
+        notify("Generated email corrected", result?.email ? `New sign-in email: ${result.email}` : "The account email now matches the user's first usable name.");
+        renderDirectory();
+      } catch (error) {
+        notify("Email not corrected", F()?.friendly?.(error) || String(error), "error");
+      } finally {
+        const current = byId("edsCredentialsRepairEmailV3");
+        if (current) current.disabled = false;
+      }
+    });
     byId("edsCredentialsIssuePasswordV3").onclick = async () => {
       const button = byId("edsCredentialsIssuePasswordV3");
       button.disabled = true;
