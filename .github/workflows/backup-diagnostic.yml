@@ -55,7 +55,11 @@ jobs:
           echo "Latest processing backup object paths:"
           psql "$TENANT_URL" -X -P pager=off -c "select o.source_bucket,left(o.source_path,120) source_path,left(o.backup_path,160) backup_path,o.original_size,o.encrypted_size,o.created_at from public.backup_storage_objects o join public.backup_exports b on b.id=o.backup_export_id where b.status='processing' order by o.created_at desc limit 12;"
           echo "Required backup worker functions:"
-          psql "$TENANT_URL" -X -P pager=off -c "select p.proname,count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('backup_worker_create','backup_worker_read_table','backup_worker_complete','backup_worker_fail','backup_worker_register_r2_object','backup_worker_schedule_policy','backup_worker_set_schedule_policy') group by p.proname order by p.proname;"
+          psql "$TENANT_URL" -X -P pager=off -c "select p.proname,count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('backup_worker_create','backup_worker_read_table','backup_worker_complete','backup_worker_fail','backup_worker_register_r2_object','backup_worker_purge_backup','backup_worker_schedule_policy','backup_worker_set_schedule_policy') group by p.proname order by p.proname;"
+          echo "Backup R2 repair migration:"
+          psql "$TENANT_URL" -X -P pager=off -c "select version from app.schema_migrations where version='0071_backup_r2_tenant_upsert_fix';"
+          echo "Backup R2 conflict target:"
+          psql "$TENANT_URL" -X -P pager=off -c "select position('on conflict (tenant_id, object_key)' in lower(pg_get_functiondef('public.backup_worker_register_r2_object(uuid,text,text,text,bigint,uuid)'::regprocedure)))>0 as tenant_scoped_conflict_target;"
           echo "Missing backup source tables:"
           psql "$TENANT_URL" -X -qAtc "with names(name) as (values
             ('school_settings'),('id_card_settings'),('id_card_deletion_tombstones'),('profiles'),('teachers'),('headteachers'),
