@@ -14,6 +14,7 @@
 
   const NAV = [
     {id:"dashboard",label:"Dashboard",icon:"▦",subtitle:"Academic performance overview",render:renderDashboard},
+    {id:"student_services",label:"Student Services",icon:"◎",subtitle:"Admissions, wellbeing, health, communication, boarding and alumni",roles:["principal","class_teacher","subject_teacher"],render:renderStudentServices},
     {id:"academics",label:"Academics",icon:"⌘",subtitle:"Academic structure and assessment",permission:"manage_academics",render:renderAcademics},
     {id:"students",label:"Students",icon:"◉",subtitle:"Student records and enrolment",roles:["system_admin","class_teacher","subject_teacher"],render:renderStudents},
     {id:"staff",label:"Staff & HR",icon:"♙",subtitle:"Staff directory, employment records and leave",roles:["system_admin","principal"],nav:false,render:renderStaff},
@@ -347,6 +348,12 @@
     loading,empty,pageError,fullName,friendly,byId,featureEnabled,permissionEnabled,orderedNavItems,
     confirmAction,promptAction,notifyAction,applyTenantBrandLogo,resolveTenantLogoSource,packageSchoolLogo
   });
+
+  async function renderStudentServices(){
+    const runtime=window.EdusentiaStudentServices;
+    if(!runtime?.openFromShell)throw new Error("Student Services workspace is not ready. Refresh the page and try again.");
+    await runtime.openFromShell();
+  }
 
   async function renderDashboard(){
     state.boot=await api().bootstrap();
