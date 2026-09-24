@@ -92,7 +92,7 @@ jobs:
               && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}service-worker.js?verify=${nonce}" -o /tmp/live-sw.js \
               && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}style.css?verify=${nonce}" -o /tmp/live-style.css \
               && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}app.js?verify=${nonce}" -o /tmp/live-app.js; then
-              live_commit="$(node --input-type=module -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/live-meta.json','utf8'));process.stdout.write(String(x.commit_sha||''))")" || true
+              live_commit="$(node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/live-meta.json','utf8'));process.stdout.write(String(x.commit_sha||''))")" || true
               live_sw_sha="$(sha256sum /tmp/live-sw.js | awk '{print $1}')"
               live_css_sha="$(sha256sum /tmp/live-style.css | awk '{print $1}')"
               live_app_sha="$(sha256sum /tmp/live-app.js | awk '{print $1}')"
