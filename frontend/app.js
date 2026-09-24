@@ -591,14 +591,21 @@
     }catch{}
   }
 
+  async function notificationConfirm(message){
+    if(typeof window.EdusentiaConfirm==="function")return Boolean(await window.EdusentiaConfirm(message));
+    return window.confirm(message);
+  }
+
   async function renderNotifications(){
     const data=await certified("list_notifications",{page_number:1,page_size:100});
     const rows=Array.isArray(data?.rows)?data.rows:[],unread=Number(data?.unread||0),total=Number(data?.total??rows.length);
     byId("content").innerHTML=`
-      <div class="page-head"><div><h3>Notifications</h3><p>${escapeHtml(unread)} unread • ${escapeHtml(total)} total</p></div><div class="page-actions">${unread?'<button id="markAllRead" class="button secondary" type="button">Mark all read</button>':""}</div></div>
-      <section class="panel"><div class="managed-card-list">${rows.length?rows.map(item=>`<article class="panel-header" data-notification-id="${escapeHtml(item.id)}" style="${item.read_at?"opacity:.72":""}"><div><h4>${escapeHtml(item.title||"Notification")}</h4><p>${escapeHtml(item.body||"")} • ${formatDateTime(item.created_at)}</p></div>${item.read_at?"":`<button class="button ghost small" type="button" data-notification-read="${escapeHtml(item.id)}">Mark read</button>`}</article>`).join(""):'<div class="panel-body"><p class="muted">No notifications.</p></div>'}</div></section>`;
+      <div class="page-head"><div><h3>Notifications</h3><p>${escapeHtml(unread)} unread • ${escapeHtml(total)} total</p></div><div class="page-actions">${unread?'<button id="markAllRead" class="button secondary" type="button">Mark all read</button>':""}${rows.length?'<button id="clearNotifications" class="button danger" type="button">Clear notifications</button>':""}</div></div>
+      <section class="panel"><div class="managed-card-list">${rows.length?rows.map(item=>`<article class="panel-header" data-notification-id="${escapeHtml(item.id)}" style="${item.read_at?"opacity:.72":""}"><div><h4>${escapeHtml(item.title||"Notification")}</h4><p>${escapeHtml(item.body||"")} • ${formatDateTime(item.created_at)}</p></div><div class="button-row">${item.read_at?"":`<button class="button ghost small" type="button" data-notification-read="${escapeHtml(item.id)}">Mark read</button>`}<button class="button danger small" type="button" data-notification-delete="${escapeHtml(item.id)}">Delete</button></div></article>`).join(""):'<div class="panel-body"><p class="muted">No notifications.</p></div>'}</div></section>`;
     byId("markAllRead")?.addEventListener("click",async()=>{await certified("mark_notifications_read",{notification_ids:null});await loadNotificationCount();await renderNotifications();});
+    byId("clearNotifications")?.addEventListener("click",async()=>{if(!await notificationConfirm("Delete all notifications for this account?"))return;try{await certified("delete_notifications",{notification_ids:null});await loadNotificationCount();await renderNotifications();}catch(error){notifyAction("Notifications not cleared",friendly(error),"error");}});
     byId("content").querySelectorAll("[data-notification-read]").forEach(button=>button.addEventListener("click",async()=>{button.disabled=true;try{await certified("mark_notifications_read",{notification_ids:[button.dataset.notificationRead]});await loadNotificationCount();await renderNotifications();}finally{button.disabled=false;}}));
+    byId("content").querySelectorAll("[data-notification-delete]").forEach(button=>button.addEventListener("click",async()=>{if(!await notificationConfirm("Remove this notification?"))return;button.disabled=true;try{await certified("delete_notifications",{notification_ids:[button.dataset.notificationDelete]});await loadNotificationCount();await renderNotifications();}catch(error){notifyAction("Notification not deleted",friendly(error),"error");}finally{button.disabled=false;}}));
   }
 
   function beginMfa(result,scope=state.authScope){
