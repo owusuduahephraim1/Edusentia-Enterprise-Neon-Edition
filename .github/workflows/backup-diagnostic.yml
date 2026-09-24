@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Install PostgreSQL client
         run: |
@@ -21,6 +23,15 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y postgresql-client
           fi
+
+      - name: Inspect Worker secret binding names
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/edusentia-enterprise-neon-api/settings" >/tmp/worker-settings.json
+          node -e 'const x=require("/tmp/worker-settings.json"); const names=(x.result?.bindings||[]).filter(b=>b.type==="secret_text").map(b=>b.name).sort(); console.log("Worker secret bindings:",names.join(",")); for(const n of ["BACKUP_ENCRYPTION_KEY","BACKUP_SIGNING_SECRET"]){console.log(n+":"+(names.includes(n)?"configured":"MISSING"));}'
 
       - name: Inspect Nipe backup failure
         shell: bash
