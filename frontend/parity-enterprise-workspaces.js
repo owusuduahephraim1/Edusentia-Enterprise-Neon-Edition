@@ -482,13 +482,112 @@
     }catch(e){byId("content").innerHTML=sectionHead("Privacy and Security","Data retention, rights requests, security incidents, and formal verification")+pageError(e);}
   }
 
-  async function renderBackup(){
-    byId("content").innerHTML=sectionHead("Backup and Recovery","Backup history, off-site status, recovery tests, and restore readiness")+loading("Loading backup and recovery");
+  function backupBytes(value){
+    const bytes=Math.max(0,Number(value||0));if(!Number.isFinite(bytes)||bytes<=0)return "—";
+    const units=["B","KB","MB","GB","TB"];let n=bytes,i=0;while(n>=1024&&i<units.length-1){n/=1024;i++;}
+    return (i===0?Math.round(n):n>=10?n.toFixed(1):n.toFixed(2))+" "+units[i];
+  }
+  function backupTriggerLabel(row){
+    const mode=String(row?.trigger_mode||"").toLowerCase();
+    if(mode==="scheduled")return "Automatic";
+    if(mode==="pre_restore")return "Pre-restore";
+    if(String(row?.verification_notes||"").toLowerCase().includes("scheduled full backup"))return "Automatic";
+    return "Manual";
+  }
+  async function backupNow(){
+    const button=byId("backupNow");if(!button)return;button.disabled=true;const previous=button.textContent;button.textContent="Backing up…";
     try{
-      const [backups,recovery]=await Promise.all([certified("backup_dashboard",{}),certified("get_recovery_console",{})]);
-      byId("content").innerHTML=sectionHead("Backup and Recovery","Backup history, off-site status, recovery tests, and restore readiness")+
-        '<div class="section-title"><h4>Backup</h4></div>'+objectPanels(backups)+'<div class="section-title"><h4>Recovery</h4></div>'+objectPanels(recovery);
-    }catch(e){byId("content").innerHTML=sectionHead("Backup and Recovery","Backup history, off-site status, recovery tests, and restore readiness")+pageError(e);}
+      const backup=await api().scheduledBackup("create");
+      if(!backup?.id)throw new Error("The backup did not return a backup record.");
+      button.textContent="Verifying…";
+      await api().scheduledBackup("verify",{backup_id:backup.id});
+      notify("Backup complete","The encrypted school backup was created and verified. Use Download ZIP to keep an off-site copy.","success");
+      await renderBackup();
+    }catch(e){notify("Backup unsuccessful",friendly(e),"error");}
+    finally{if(byId("backupNow")){byId("backupNow").disabled=false;byId("backupNow").textContent=previous;}}
+  }
+  async function changeBackupSchedule(mode,input){
+    const all=[...byId("content").querySelectorAll('input[name="backup_schedule_mode"]')];all.forEach(node=>node.disabled=true);
+    try{
+      await api().scheduledBackup("set_schedule",{mode});
+      notify("Automatic backup updated",mode==="off"?"Automatic backup is off.":title(mode)+" automatic backup is active.","success");
+      await renderBackup();
+    }catch(e){notify("Backup schedule not changed",friendly(e),"error");await renderBackup();}
+    finally{if(input)input.blur();}
+  }
+  async function verifyBackupAction(id,button){
+    button.disabled=true;const previous=button.textContent;button.textContent="Verifying…";
+    try{await api().scheduledBackup("verify",{backup_id:id});notify("Backup verified","The encrypted database and protected file inventory passed checksum verification.");await renderBackup();}
+    catch(e){notify("Backup verification failed",friendly(e),"error");button.disabled=false;button.textContent=previous;}
+  }
+  async function recoveryTestAction(id,button){
+    button.disabled=true;const previous=button.textContent;button.textContent="Testing…";
+    try{await api().scheduledBackup("recovery_test",{backup_id:id});notify("Recovery test passed","The backup was reconstructed and checksum-verified without changing live school data.");await renderBackup();}
+    catch(e){notify("Recovery test failed",friendly(e),"error");button.disabled=false;button.textContent=previous;}
+  }
+  function openRestoreZip(file){
+    if(!file){notify("Choose a backup ZIP","Select an Edusentia encrypted backup ZIP first.","warning");return;}
+    if(!/\.zip$/i.test(String(file.name||""))){notify("Invalid restore file","Only Edusentia ZIP backup packages can be restored.","error");return;}
+    if(Number(file.size||0)<=0||file.size>500*1024*1024){notify("Invalid restore file","The ZIP must be between 1 byte and 500 MB.","error");return;}
+    openModal("Restore school from backup","Protected full-school disaster recovery",
+      '<form id="restoreZipConfirmForm" class="form-stack"><div class="template-information warning"><strong>Production data will be replaced</strong><span>Edusentia first creates an automatic pre-restore safety backup, validates the uploaded ZIP, verifies checksums and tenant compatibility, then restores the school database and protected files.</span></div><div class="detail-grid"><div><span>Backup file</span><strong>'+esc(file.name)+'</strong></div><div><span>Package size</span><strong>'+esc(backupBytes(file.size))+'</strong></div></div><label class="field"><span>Type RESTORE SCHOOL to continue</span><input name="confirmation" autocomplete="off" required pattern="RESTORE SCHOOL" placeholder="RESTORE SCHOOL"></label><p id="restoreZipMessage" class="form-message hidden"></p></form>',
+      '<button class="button ghost" id="restoreZipCancel" type="button">Cancel</button><button class="button danger" id="restoreZipExecute" type="button">Verify & restore</button>'
+    );
+    byId("restoreZipCancel").onclick=closeModal;
+    byId("restoreZipExecute").onclick=async()=>{
+      const form=byId("restoreZipConfirmForm"),button=byId("restoreZipExecute");if(!form.reportValidity())return;
+      const confirmation=String(formValues(form).confirmation||"");button.disabled=true;button.textContent="Checking package…";let prepared=null;
+      try{
+        const checksum=await sha256(file);
+        prepared=await api().scheduledBackup("prepare_restore_import",{file_name:file.name,file_size:file.size,checksum});
+        if(!prepared?.job_id||!prepared?.token)throw new Error("Restore upload authorization was not created.");
+        button.textContent="Uploading backup…";
+        const upload=await fetch(prepared.token,{method:"PUT",headers:{"content-type":"application/zip"},body:file,cache:"no-store"});
+        if(!upload.ok)throw new Error("Backup ZIP upload failed ("+upload.status+").");
+        button.textContent="Restoring school…";
+        const result=await api().scheduledBackup("execute_restore_import",{job_id:prepared.job_id,confirmation});
+        if(String(result?.status||"")!=="completed")throw new Error("The restore did not complete.");
+        closeModal();notify("School restore completed","The selected backup was restored successfully. A pre-restore safety backup was retained.","success");
+        const input=byId("restoreZipFile");if(input)input.value="";await renderBackup();
+      }catch(e){
+        if(prepared?.job_id)await api().scheduledBackup("cancel_restore_import",{job_id:prepared.job_id}).catch(()=>null);
+        showMessage("restoreZipMessage",friendly(e));button.disabled=false;button.textContent="Verify & restore";
+      }
+    };
+  }
+  async function renderBackup(){
+    byId("content").innerHTML=sectionHead("Backup & Restore","One-tap encrypted backups, automatic scheduling, downloadable ZIP recovery, and protected restore")+loading("Loading backup and restore");
+    try{
+      const [dashboard,recovery,restoreConsole,policy]=await Promise.all([
+        certified("backup_dashboard",{}),
+        certified("get_recovery_console",{}),
+        certified("school_restore_dashboard",{}).catch(()=>({})),
+        api().scheduledBackup("policy")
+      ]);
+      const backups=arr(dashboard?.backups),completed=backups.filter(row=>String(row.status)==="completed"),last=completed[0]||null,mode=String(policy?.mode||"off"),scheduledAvailable=policy?.scheduled_available===true;
+      const restoreJobs=arr(restoreConsole?.jobs||restoreConsole?.restores||restoreConsole?.restore_jobs);
+      const scheduleNotice=scheduledAvailable
+        ?'<div class="template-information success"><strong>Professional / Enterprise automation available</strong><span>Select Weekly or Monthly and Edusentia will create and verify encrypted backups automatically.</span></div>'
+        :'<div class="template-information warning"><strong>PLAN UPGRADE REQUIRED FOR AUTOMATIC BACKUP</strong><span>Starter includes Back up now and downloadable ZIP restore. Weekly and Monthly automatic backup require Professional or Enterprise.</span></div>';
+      const scheduleOption=(value,label,description,locked=false)=>'<label class="check-field"><input type="radio" name="backup_schedule_mode" value="'+value+'" '+(mode===value?"checked":"")+' '+(locked?"disabled":"")+'><span><strong>'+label+'</strong><small>'+description+'</small></span></label>';
+      const rows=backups.length?backups.map(row=>{
+        const canDownload=String(row.status)==="completed",verified=String(row.verification_status||"not_tested"),trigger=backupTriggerLabel(row);
+        return '<tr><td><div class="cell-copy"><strong>'+esc(row.backup_key||"School backup")+'</strong><small>'+formatDateTime(row.completed_at||row.created_at)+'</small></div></td><td>'+esc(trigger)+'</td><td>'+backupBytes(row.storage_bytes)+'</td><td>'+status(row.status||"unknown")+'</td><td>'+status(verified==="passed"?"verified":verified==="failed"?"failed":"not tested")+'</td><td><div class="table-actions">'+
+          (canDownload?'<button class="button primary small" type="button" data-backup-download="'+esc(row.id)+'">Download ZIP</button><button class="button ghost small" type="button" data-backup-verify="'+esc(row.id)+'">Verify</button><button class="button outline small" type="button" data-backup-recovery-test="'+esc(row.id)+'">Recovery test</button>':"")+
+          '</div></td></tr>';
+      }).join(""):'<tr><td colspan="6"><div class="empty"><strong>No backups yet</strong><span>Press Back up now to create the first encrypted full-school backup.</span></div></td></tr>';
+      byId("content").innerHTML=sectionHead("Backup & Restore","One-tap encrypted backups, automatic scheduling, downloadable ZIP recovery, and protected restore",'<button class="button primary" id="backupNow" type="button">Back up now</button>')+
+        '<section class="stat-grid"><article class="stat-card"><span class="stat-icon blue">↻</span><div><span>Last backup</span><strong>'+(last?formatDateTime(last.completed_at||last.created_at):"Never")+'</strong><small>'+(last?esc(backupTriggerLabel(last))+" • "+esc(String(last.verification_status||"not tested").replaceAll("_"," ")):"Create a backup now")+'</small></div></article><article class="stat-card"><span class="stat-icon blue">◷</span><div><span>Automatic backup</span><strong>'+esc(title(mode))+'</strong><small>'+(scheduledAvailable?"Professional / Enterprise":"Starter: manual backup")+'</small></div></article><article class="stat-card"><span class="stat-icon blue">→</span><div><span>Next backup</span><strong>'+(mode!=="off"&&policy?.next_scheduled_backup_at?formatDateTime(policy.next_scheduled_backup_at):"Not scheduled")+'</strong><small>'+(mode!=="off"&&!scheduledAvailable?"Paused by current plan":"Daily scheduler checks at 02:00 UTC")+'</small></div></article><article class="stat-card"><span class="stat-icon blue">▣</span><div><span>Retention</span><strong>'+esc(dashboard?.retention_days||30)+' days</strong><small>Minimum '+esc(dashboard?.minimum_copies||7)+' retained copies</small></div></article></section>'+
+        '<section class="panel pad" style="margin-top:18px"><div class="section-title"><div><h4>Automatic backup</h4><p>Choose how often Edusentia should protect this school automatically.</p></div></div>'+scheduleNotice+'<div class="grid three" style="margin-top:14px">'+scheduleOption("off","Off","Only create backups when you tap Back up now.")+scheduleOption("weekly","Weekly","Create a verified encrypted backup every 7 days.",!scheduledAvailable)+scheduleOption("monthly","Monthly","Create a verified encrypted backup every month.",!scheduledAvailable)+'</div></section>'+
+        '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Recent backups</h3><p>Completed backups can be downloaded as encrypted ZIP packages and restored later.</p></div></div><div class="table-wrap"><table><thead><tr><th>Backup</th><th>Type</th><th>Protected files</th><th>Status</th><th>Verification</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+        '<section class="panel pad" style="margin-top:18px"><div class="section-title"><div><h4>Restore from downloaded ZIP</h4><p>Use a ZIP previously downloaded from this school to recover accidentally removed or deleted operational data.</p></div></div><div class="template-information warning"><strong>Protected restore</strong><span>Restore requires a verified System Administrator session. Edusentia automatically creates a pre-restore safety backup before changing live data.</span></div><div class="form-grid" style="margin-top:14px"><label class="field full"><span>Edusentia backup ZIP</span><input id="restoreZipFile" type="file" accept=".zip,application/zip,application/x-zip-compressed"></label><div class="full button-row"><button class="button danger" id="restoreZipOpen" type="button">Verify & restore ZIP</button></div></div></section>'+
+        '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Recovery history</h3><p>Restore jobs and non-destructive recovery rehearsals.</p></div></div>'+(restoreJobs.length?recordTable(restoreJobs,["created_at","source_filename","status","completed_at"]):objectPanels(recovery))+'</section>';
+      byId("backupNow").onclick=backupNow;
+      byId("content").querySelectorAll('input[name="backup_schedule_mode"]').forEach(input=>input.addEventListener("change",()=>changeBackupSchedule(input.value,input)));
+      byId("content").querySelectorAll("[data-backup-verify]").forEach(button=>button.onclick=()=>verifyBackupAction(button.dataset.backupVerify,button));
+      byId("content").querySelectorAll("[data-backup-recovery-test]").forEach(button=>button.onclick=()=>recoveryTestAction(button.dataset.backupRecoveryTest,button));
+      byId("restoreZipOpen").onclick=()=>openRestoreZip(byId("restoreZipFile")?.files?.[0]);
+    }catch(e){byId("content").innerHTML=sectionHead("Backup & Restore","One-tap encrypted backups, automatic scheduling, downloadable ZIP recovery, and protected restore")+pageError(e);}
   }
 
   async function renderLicenseCapacity(){
