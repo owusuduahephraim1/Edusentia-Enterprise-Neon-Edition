@@ -54,9 +54,9 @@
   </section>
 
   <div id="paConsole" class="pa-app hidden">
-    <aside class="pa-sidebar">
+    <aside id="paPlatformSidebar" class="pa-sidebar">
       <div class="pa-side-brand"><img src="assets/edusentia-mark.svg" alt=""><div><strong>Edusentia Platform</strong><small>Administration Console</small></div></div>
-      <nav class="pa-nav" aria-label="Platform administration">
+      <nav id="paPlatformNav" class="pa-nav" aria-label="Platform administration">
         <button type="button" class="active" data-view="overview"><span class="pa-nav-icon">⌂</span><span>Overview</span></button>
         <button type="button" data-view="registrations"><span class="pa-nav-icon">✓</span><span>Registrations</span></button>
         <button type="button" data-view="tenants"><span class="pa-nav-icon">▦</span><span>Tenants</span></button>
@@ -69,8 +69,10 @@
       </nav>
       <div class="pa-side-footer"><span id="paAdminIdentity" class="pa-admin-name">Platform Administrator</span><span class="pa-admin-role">Platform Super Administrator</span><span class="pa-aal">AAL2 verified</span></div>
     </aside>
+    <button id="paMobileDrawerBackdrop" class="pa-mobile-drawer-backdrop" type="button" aria-label="Close platform navigation"></button>
     <section class="pa-workspace">
       <header class="pa-topbar">
+        <button id="paMobileMenuButton" class="pa-mobile-menu-button" type="button" aria-controls="paPlatformNav" aria-expanded="false" aria-label="Open platform navigation"><span aria-hidden="true">☰</span><strong>Menu</strong></button>
         <div class="pa-title"><h2 id="paPageTitle">Platform Overview</h2><p id="paPageSubtitle">Control-plane status and tenant operations</p></div>
         <div class="pa-top-actions"><span id="paConnection" class="pa-connection">Control plane connected</span><button id="paMfaManage" class="pa-btn secondary" type="button">Security &amp; MFA</button><button id="paRefresh" class="pa-btn secondary" type="button">Refresh</button><button id="paSignOut" class="pa-btn ghost" type="button">Sign out</button></div>
       </header>
