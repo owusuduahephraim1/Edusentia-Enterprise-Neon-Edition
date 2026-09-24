@@ -61,7 +61,7 @@ test("Senior High parity is installed for future and existing isolated tenants",
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
   assert.match(install,/0054_shs_operational_parity/);
   assert.match(upgrade,/0054_shs_operational_parity/);
-  assert.match(upgrade,/migration_count\" = \"41/);
+  assert.match(upgrade,/migration_count\" = \"44/);
   assert.match(upgrade,/neon_shs_academic_console/);
   assert.match(upgrade,/neon_shs_academic_insert/);
   assert.match(upgrade,/neon_shs_academic_remove/);
