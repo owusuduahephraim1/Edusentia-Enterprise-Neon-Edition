@@ -59,7 +59,7 @@ jobs:
           echo "Backup R2 repair migration:"
           psql "$TENANT_URL" -X -P pager=off -c "select version from app.schema_migrations where version='0071_backup_r2_tenant_upsert_fix';"
           echo "Backup R2 conflict target:"
-          psql "$TENANT_URL" -X -P pager=off -c "select position('on conflict (tenant_id, object_key)' in lower(pg_get_functiondef('public.backup_worker_register_r2_object(uuid,text,text,text,bigint,uuid)'::regprocedure)))>0 as tenant_scoped_conflict_target;"
+          psql "$TENANT_URL" -X -P pager=off -c "select regexp_replace(lower(pg_get_functiondef('public.backup_worker_register_r2_object(uuid,text,text,text,bigint,uuid)'::regprocedure)),'[[:space:]]+','','g') like '%onconflict(tenant_id,object_key)doupdateset%' as tenant_scoped_conflict_target;"
           echo "Missing backup source tables:"
           psql "$TENANT_URL" -X -qAtc "with names(name) as (values
             ('school_settings'),('id_card_settings'),('id_card_deletion_tombstones'),('profiles'),('teachers'),('headteachers'),
