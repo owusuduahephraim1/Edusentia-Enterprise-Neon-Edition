@@ -93,7 +93,7 @@ test("Staff & HR uses native shell routing only for Principal and System Adminis
   const accountantRoles=read("frontend/tenant-accountant-student-roles-v2.js");
 
   assert.match(app,/id:"staff",label:"Staff & HR"[\s\S]*roles:\["system_admin","principal"\][\s\S]*render:renderStaff/);
-  assert.doesNotMatch(app,/id:"staff"[\s\S]*nav:false/);
+  assert.doesNotMatch(app,/\{id:"staff"[^}]*nav:false/);
   assert.match(app,/const runtime=window\.EdusentiaHrStaff/);
   assert.match(app,/await runtime\.openFromShell\(\)/);
   assert.match(hr,/\["system_admin","principal"\]\.includes\(S\.role\)/);
