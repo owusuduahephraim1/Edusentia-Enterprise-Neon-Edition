@@ -529,6 +529,17 @@
     try{await api().scheduledBackup("recovery_test",{backup_id:id});notify("Recovery test passed","The backup was reconstructed and checksum-verified without changing live school data.");await renderBackup();}
     catch(e){notify("Recovery test failed",friendly(e),"error");button.disabled=false;button.textContent=previous;}
   }
+  async function deleteFailedBackupAction(id,button){
+    if(!id||!button)return;
+    const confirmed=await window.EdusentiaConfirm("Delete this failed backup attempt and any incomplete encrypted backup files? Completed backups are not affected.",{title:"Delete failed backup",confirmLabel:"Delete failed record",kind:"danger"});
+    if(!confirmed)return;
+    button.disabled=true;const previous=button.textContent;button.textContent="Deleting…";
+    try{
+      await api().scheduledBackup("delete_failed",{backup_id:id});
+      notify("Failed backup deleted","The failed backup record and any incomplete backup files were removed.","success");
+      await renderBackup();
+    }catch(e){notify("Failed backup not deleted",friendly(e),"error");button.disabled=false;button.textContent=previous;}
+  }
   function openRestoreZip(file){
     if(!file){notify("Choose a backup ZIP","Select an Edusentia encrypted backup ZIP first.","warning");return;}
     if(!/\.zip$/i.test(String(file.name||""))){notify("Invalid restore file","Only Edusentia ZIP backup packages can be restored.","error");return;}
@@ -575,9 +586,10 @@
         :'<div class="template-information warning"><strong>PLAN UPGRADE REQUIRED FOR AUTOMATIC BACKUP</strong><span>Starter includes Back up now and downloadable ZIP restore. Weekly and Monthly automatic backup require Professional or Enterprise.</span></div>';
       const scheduleOption=(value,label,description,locked=false)=>'<label class="check-field"><input type="radio" name="backup_schedule_mode" value="'+value+'" '+(mode===value?"checked":"")+' '+(locked?"disabled":"")+'><span><strong>'+label+'</strong><small>'+description+'</small></span></label>';
       const rows=backups.length?backups.map(row=>{
-        const canDownload=String(row.status)==="completed",verified=String(row.verification_status||"not_tested"),trigger=backupTriggerLabel(row);
+        const rowStatus=String(row.status||""),canDownload=rowStatus==="completed",canDeleteFailed=rowStatus==="failed",verified=String(row.verification_status||"not_tested"),trigger=backupTriggerLabel(row);
         return '<tr><td><div class="cell-copy"><strong>'+esc(row.backup_key||"School backup")+'</strong><small>'+formatDateTime(row.completed_at||row.created_at)+'</small></div></td><td>'+esc(trigger)+'</td><td>'+backupBytes(row.storage_bytes)+'</td><td>'+status(row.status||"unknown")+'</td><td>'+status(verified==="passed"?"verified":verified==="failed"?"failed":"not tested")+'</td><td><div class="table-actions">'+
           (canDownload?'<button class="button primary small" type="button" data-backup-download="'+esc(row.id)+'">Download ZIP</button><button class="button ghost small" type="button" data-backup-verify="'+esc(row.id)+'">Verify</button><button class="button outline small" type="button" data-backup-recovery-test="'+esc(row.id)+'">Recovery test</button>':"")+
+          (canDeleteFailed?'<button class="button danger small" type="button" data-backup-delete-failed="'+esc(row.id)+'">Delete failed</button>':"")+
           '</div></td></tr>';
       }).join(""):'<tr><td colspan="6"><div class="empty"><strong>No backups yet</strong><span>Press Back up now to create the first encrypted full-school backup.</span></div></td></tr>';
       byId("content").innerHTML=sectionHead("Backup & Restore","One-tap encrypted backups, automatic scheduling, downloadable ZIP recovery, and protected restore",'<button class="button primary" id="backupNow" type="button">Back up now</button>')+
@@ -590,6 +602,7 @@
       byId("content").querySelectorAll('input[name="backup_schedule_mode"]').forEach(input=>input.addEventListener("change",()=>changeBackupSchedule(input.value,input)));
       byId("content").querySelectorAll("[data-backup-verify]").forEach(button=>button.onclick=()=>verifyBackupAction(button.dataset.backupVerify,button));
       byId("content").querySelectorAll("[data-backup-recovery-test]").forEach(button=>button.onclick=()=>recoveryTestAction(button.dataset.backupRecoveryTest,button));
+      byId("content").querySelectorAll("[data-backup-delete-failed]").forEach(button=>button.onclick=()=>deleteFailedBackupAction(button.dataset.backupDeleteFailed,button));
       byId("restoreZipOpen").onclick=()=>openRestoreZip(byId("restoreZipFile")?.files?.[0]);
     }catch(e){byId("content").innerHTML=sectionHead("Backup & Restore","One-tap encrypted backups, automatic scheduling, downloadable ZIP recovery, and protected restore")+pageError(e);}
   }

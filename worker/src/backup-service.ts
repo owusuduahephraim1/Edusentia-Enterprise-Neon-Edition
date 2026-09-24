@@ -372,6 +372,20 @@ async function purgeBackupCandidate(env:Env,sql:TenantSql,ctx:SessionContext,row
   return purged;
 }
 
+async function deleteFailedBackup(env:Env,sql:TenantSql,ctx:SessionContext,id:string){
+  if(ctx.assuranceLevel<2)fail("Multi-factor authentication is required to delete failed backup records","mfa_required",403);
+  if(!/^[0-9a-f-]{36}$/i.test(id))fail("backup_id is required","validation_error",422);
+  const backup=await getBackup(sql,ctx,id);
+  if(!backup||backup.status!=="failed"||backup.backup_type!=="full")fail("Failed full backup not found","backup_not_found",404);
+  const purged=await purgeBackupCandidate(env,sql,ctx,backup);
+  if(!purged)fail("This failed backup is referenced by recovery history and cannot be deleted","backup_delete_conflict",409);
+  await tenantTx<any[]>(sql,ctx,txn=>[txn`select audit.record_auth_event(
+    ${ctx.tenantId}::uuid,${ctx.userId}::uuid,'backup.failed_record_deleted',
+    ${JSON.stringify({backup_id:id,backup_key:backup.backup_key})}::jsonb
+  )`]).catch(()=>undefined);
+  return {ok:true,status:"deleted",backup_id:id};
+}
+
 export async function performStorageMaintenance(env:Env,sql:TenantSql,ctx:SessionContext){
   if(ctx.role!=="system_admin"||ctx.assuranceLevel<2)fail("A verified System Administrator session is required","mfa_required",403);
   const [staleRows,restoreRows]=await tenantTx<any[]>(sql,ctx,txn=>[
@@ -459,6 +473,7 @@ export async function handleScheduledBackupCompat(env:Env,sql:TenantSql,ctx:Sess
   if(action==="verify")return verifyBackup(env,sql,ctx,String(body.backup_id||""));
   if(action==="verify_latest")return verifyBackup(env,sql,ctx,null);
   if(action==="recovery_test")return runRecoveryTest(env,sql,ctx,String(body.backup_id||""));
+  if(action==="delete_failed")return deleteFailedBackup(env,sql,ctx,String(body.backup_id||""));
   if(action==="storage_maintenance")return performStorageMaintenance(env,sql,ctx);
   fail("Unsupported backup action","unsupported_action",400);
 }

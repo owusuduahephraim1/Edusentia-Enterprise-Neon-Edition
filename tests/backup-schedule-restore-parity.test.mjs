@@ -7,6 +7,7 @@ const read=path=>fs.readFileSync(path,"utf8");
 test("backup scheduling is promoted to the tenant template and existing isolated tenants",()=>{
   const migration=read("database/reference-compat/0069_backup_schedule_restore_experience.sql");
   const resilience=read("database/reference-compat/0070_backup_worker_batch_resilience.sql");
+  const r2Repair=read("database/reference-compat/0071_backup_r2_tenant_upsert_fix.sql");
   const installer=read("database/reference-compat/install-operational-parity.sh");
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
   const template=read("database/tenant-template/install.sh");
@@ -19,12 +20,16 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   assert.match(migration,/BACKUP_SCHEDULE_CHANGED/);
   assert.match(installer,/0069_backup_schedule_restore_experience/);
   assert.match(installer,/0070_backup_worker_batch_resilience/);
+  assert.match(installer,/0071_backup_r2_tenant_upsert_fix/);
   assert.match(upgrade,/0069_backup_schedule_restore_experience/);
   assert.match(upgrade,/0070_backup_worker_batch_resilience/);
+  assert.match(upgrade,/0071_backup_r2_tenant_upsert_fix/);
   assert.match(upgrade,/test "\$migration_count" = "46"/);
   assert.match(resilience,/backup_worker_read_batch/);
   assert.match(resilience,/heartbeat_at/);
   assert.match(resilience,/backup_worker_reconcile_stale_backups/);
+  assert.match(r2Repair,/on conflict\(tenant_id,object_key\) do update set/);
+  assert.doesNotMatch(r2Repair,/on conflict\(object_key\)/);
   assert.match(template,/backup_schedule_ok/);
   assert.match(template,/backup_worker_read_batch\(uuid,jsonb\)/);
 });
@@ -39,6 +44,8 @@ test("automatic backups are plan gated and obey weekly or monthly tenant policy"
   assert.match(worker,/\["weekly","monthly"\]\.includes\(mode\)/);
   assert.match(worker,/performFullBackup\(env,sql,ctx,"scheduled"\)/);
   assert.match(worker,/verifyBackup\(env,sql,ctx,String\(backup\.id\)\)/);
+  assert.match(worker,/action==="delete_failed"/);
+  assert.match(worker,/deleteFailedBackup/);
 });
 
 
@@ -67,6 +74,8 @@ test("backup workspace provides one tap backup, encrypted ZIP download and prote
   assert.match(enterprise,/Weekly/);
   assert.match(enterprise,/Monthly/);
   assert.match(enterprise,/data-backup-download/);
+  assert.match(enterprise,/data-backup-delete-failed/);
+  assert.match(enterprise,/scheduledBackup\("delete_failed"/);
   assert.match(enterprise,/Restore from downloaded ZIP/);
   assert.match(enterprise,/prepare_restore_import/);
   assert.match(enterprise,/execute_restore_import/);

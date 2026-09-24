@@ -351,7 +351,7 @@ begin
     coalesce(nullif(target_content_type,''),'application/octet-stream'),
     greatest(target_size,0),target_actor,'active',now()
   )
-  on conflict(object_key) do update set
+  on conflict(tenant_id,object_key) do update set
     original_name=excluded.original_name,
     content_type=excluded.content_type,
     size_bytes=excluded.size_bytes,
