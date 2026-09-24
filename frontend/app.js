@@ -204,6 +204,7 @@
   }
 
   async function boot(){
+    if(platformMode){location.replace("./platform-saas-admin.html");return;}
     show("loader");
     try{
       await prepareLoginContext();
