@@ -6,6 +6,16 @@ const api=()=>window.EdusentiaApi;
 const packageApi=()=>window.EdusentiaPlatformApi;
 const cfg=window.EDS_MASTER_CONFIG||{};
 const state={view:"overview",model:null,session:null,mfaChallenge:"",pendingSession:null,turnstileToken:"",turnstileId:null,loading:false,packageModel:{templates:[],artifacts:[],reconciliation:[],signing_keys:[],signing_configured:false,signing_bootstrap_available:false}};
+function setMobileDrawer(open=false){
+  const drawer=$("#paPlatformSidebar")||$(".pa-sidebar"),backdrop=$("#paMobileDrawerBackdrop"),button=$("#paMobileMenuButton"),active=Boolean(open);
+  drawer?.classList.toggle("pa-drawer-open",active);
+  backdrop?.classList.toggle("open",active);
+  document.body.classList.toggle("pa-mobile-drawer-open",active);
+  button?.setAttribute("aria-expanded",active?"true":"false");
+  button?.setAttribute("aria-label",active?"Close platform navigation":"Open platform navigation");
+}
+function toggleMobileDrawer(){setMobileDrawer(!($("#paPlatformSidebar")||$(".pa-sidebar"))?.classList.contains("pa-drawer-open"));}
+
 const titles={
   overview:["Platform Overview","Control-plane status and tenant operations"],
   registrations:["School Registrations","Review and approve new school onboarding"],
@@ -64,7 +74,7 @@ function setView(view){
   if(!titles[view])view="overview";state.view=view;
   $$(".pa-nav [data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
   const [title,subtitle]=titles[view];$("#paPageTitle").textContent=title;$("#paPageSubtitle").textContent=subtitle;
-  render();if(view==="packages")loadPackages().catch(e=>status(e?.message||"Package service could not be loaded.","error"));$(".pa-sidebar")?.classList.remove("pa-drawer-open");document.body.classList.remove("pa-mobile-drawer-open");
+  render();if(view==="packages")loadPackages().catch(e=>status(e?.message||"Package service could not be loaded.","error"));setMobileDrawer(false);
 }
 function pageHead(title,subtitle,actions=""){return `<div class="pa-page-head"><div><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div><div class="pa-actions">${actions}</div></div>`;}
 function empty(text){return `<div class="pa-empty">${esc(text)}</div>`;}
@@ -303,7 +313,11 @@ function wire(){
   $("#paRecoveryContinue")?.addEventListener("click",async()=>{if(!state.pendingSession)return;const s=state.pendingSession;state.pendingSession=null;$("#paRecoveryCodeList").textContent="";await enter(s);});
   $("#paRefresh")?.addEventListener("click",()=>load(true));$("#paSignOut")?.addEventListener("click",async()=>{try{await api().platformLogout();}finally{location.replace("./?platform=1");}});
   $("#paMfaManage")?.addEventListener("click",openMfaManager);
-  $$(".pa-nav [data-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
+  $("#paMobileMenuButton")?.addEventListener("click",toggleMobileDrawer);
+  $("#paMobileDrawerBackdrop")?.addEventListener("click",()=>setMobileDrawer(false));
+  document.addEventListener("keydown",event=>{if(event.key==="Escape")setMobileDrawer(false);});
+  window.addEventListener("resize",()=>{if(window.innerWidth>820)setMobileDrawer(false);},{passive:true});
+  $(".pa-nav [data-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
   $("#paContent")?.addEventListener("click",action);$("#paModal")?.addEventListener("click",action);$("#paModal")?.addEventListener("close",()=>$("#paModalBody").innerHTML="");
 }
 wire();boot();
