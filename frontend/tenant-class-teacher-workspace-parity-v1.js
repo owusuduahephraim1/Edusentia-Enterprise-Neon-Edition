@@ -165,25 +165,122 @@
       (subjects.length?'<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Score</th><th>Grade</th><th>Remark</th></tr></thead><tbody>'+subjects.map(subject=>'<tr><td>'+esc(subject.subject_name||"Subject")+'</td><td>'+n(subject.total_score,1)+'</td><td>'+esc(subject.grade||"—")+'</td><td>'+esc(subject.remark||"")+'</td></tr>').join("")+'</tbody></table></div>':'<div class="panel-body"><p class="muted">No subject results recorded.</p></div>')+
     '</article>';
   }
+  function safeTranscriptName(value){
+    return String(value||"Student").replace(/[^A-Za-z0-9._-]+/g,"_").replace(/^_+|_+$/g,"").slice(0,100)||"Student";
+  }
+  function transcriptCsvLines(transcript={}){
+    const student=obj(transcript.student),records=arr(transcript.academic_records);
+    const lines=[["student","admission_number","academic_year","term","class","report_number","subject","score","grade","remark"].join(",")];
+    for(const record of records){
+      const subjects=arr(record.subjects);
+      if(!subjects.length){
+        lines.push([student.full_name,student.admission_no,record.academic_year_name,record.term_name,record.class_name,record.report_number,"","","",""].map(csv).join(","));
+        continue;
+      }
+      for(const subject of subjects){
+        lines.push([student.full_name,student.admission_no,record.academic_year_name,record.term_name,record.class_name,record.report_number,subject.subject_name,subject.total_score,subject.grade,subject.remark].map(csv).join(","));
+      }
+    }
+    return lines;
+  }
+  function exportTeacherTranscriptCsv(transcript={}){
+    const student=obj(transcript.student),lines=transcriptCsvLines(transcript);
+    downloadBlob(safeTranscriptName(student.full_name)+"_academic_history.csv",new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"}));
+  }
+  function transcriptPreviewMarkup(transcript={}){
+    const school=obj(transcript.school),student=obj(transcript.student),records=arr(transcript.academic_records);
+    const periods=records.map(record=>{
+      const subjects=arr(record.subjects);
+      return '<section><h3>'+esc((record.academic_year_name||"Academic year")+" • "+(record.term_name||"Term"))+'</h3><p><strong>Class:</strong> '+esc(record.class_name||"—")+' &nbsp; <strong>Report:</strong> '+esc(record.report_number||"—")+' &nbsp; <strong>Average:</strong> '+esc(n(record.average,1))+'%</p>'+
+        (subjects.length?'<table><thead><tr><th>Subject</th><th>Score</th><th>Grade</th><th>Remark</th></tr></thead><tbody>'+subjects.map(subject=>'<tr><td>'+esc(subject.subject_name||"Subject")+'</td><td>'+esc(n(subject.total_score,1))+'</td><td>'+esc(subject.grade||"—")+'</td><td>'+esc(subject.remark||"")+'</td></tr>').join("")+'</tbody></table>':'<p>No subject results recorded.</p>')+'</section>';
+    }).join("");
+    return '<!doctype html><html><head><meta charset="utf-8"><title>Academic Transcript Preview</title><style>body{font-family:Arial,sans-serif;color:#16233d;max-width:900px;margin:32px auto;padding:0 24px}header{border-bottom:4px solid #163b7a;padding-bottom:16px;margin-bottom:20px}h1{margin:0;font-size:26px}h2{font-size:20px;margin:8px 0}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;background:#f6f8fb;padding:16px;border:1px solid #dbe3ee;border-radius:12px}.meta span{display:block;color:#64748b;font-size:12px}.rule{margin:16px 0;padding:12px;background:#f8fafc;border:1px solid #dbe4ef;border-radius:10px;color:#475569}section{margin:24px 0}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #dbe3ee;padding:8px;text-align:left;font-size:13px}.watermark{position:fixed;inset:45% 0 auto;text-align:center;transform:rotate(-25deg);font-size:72px;font-weight:800;color:#0f2f6b0d;pointer-events:none}.actions{margin:0 0 20px}@media print{.actions{display:none}body{margin:0;max-width:none}}</style></head><body><div class="watermark">UNOFFICIAL PREVIEW</div><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div><header><h1>'+esc(school.school_name||state().boot?.tenant?.name||"School")+'</h1><h2>Academic Transcript Preview</h2></header><div class="meta"><div><span>Student</span><strong>'+esc(student.full_name||"Student")+'</strong></div><div><span>Admission number</span><strong>'+esc(student.admission_no||"—")+'</strong></div><div><span>Status</span><strong>'+esc(String(student.status||"active").replaceAll("_"," "))+'</strong></div></div><div class="rule">Transcript rule: latest currently valid published report per term only. Draft, submitted, approved-only, withdrawn, revoked and superseded report versions are excluded.</div>'+periods+'</body></html>';
+  }
+  function previewTeacherTranscript(transcript={}){
+    const win=window.open("","_blank");
+    if(!win){notify("Transcript preview blocked","Allow pop-ups for this site, then try Preview transcript again.","warning");return;}
+    win.document.open();win.document.write(transcriptPreviewMarkup(transcript));win.document.close();
+  }
+  function pdfText(value){
+    return String(value??"").normalize("NFKD").replace(/[^\x20-\x7E]/g,"?").replace(/([\\()])/g,"\\$1");
+  }
+  function wrapPdfText(value,max=88){
+    const words=String(value??"").replace(/\s+/g," ").trim().split(" ").filter(Boolean),out=[];let line="";
+    for(const word of words){const next=line?line+" "+word:word;if(line&&next.length>max){out.push(line);line=word;}else line=next;}
+    if(line)out.push(line);return out.length?out:[""];
+  }
+  function transcriptPdfLines(transcript={}){
+    const school=obj(transcript.school),student=obj(transcript.student),records=arr(transcript.academic_records),lines=[];
+    lines.push(school.school_name||state().boot?.tenant?.name||"School");
+    lines.push("ACADEMIC TRANSCRIPT PREVIEW");
+    lines.push("Student: "+(student.full_name||"Student"));
+    lines.push("Admission number: "+(student.admission_no||"—")+"    Status: "+String(student.status||"active").replaceAll("_"," "));
+    lines.push("");
+    wrapPdfText("Transcript rule: latest currently valid published report per term only. Draft, submitted, approved-only, withdrawn, revoked and superseded report versions are excluded.").forEach(x=>lines.push(x));
+    for(const record of records){
+      lines.push("");
+      lines.push((record.academic_year_name||"Academic year")+" • "+(record.term_name||"Term")+" • "+(record.class_name||"Class"));
+      lines.push("Report: "+(record.report_number||"—")+"    Average: "+n(record.average,1)+"%");
+      const subjects=arr(record.subjects);
+      if(!subjects.length)lines.push("No subject results recorded.");
+      for(const subject of subjects){
+        wrapPdfText((subject.subject_name||"Subject")+" | "+n(subject.total_score,1)+" | "+(subject.grade||"—")+" | "+(subject.remark||""),88).forEach(x=>lines.push(x));
+      }
+    }
+    return lines;
+  }
+  function transcriptPdfBlob(transcript={}){
+    const lines=transcriptPdfLines(transcript),perPage=48,pages=[];
+    for(let i=0;i<lines.length;i+=perPage)pages.push(lines.slice(i,i+perPage));
+    if(!pages.length)pages.push(["ACADEMIC TRANSCRIPT PREVIEW"]);
+    const totalObjects=3+pages.length*2,offsets=new Array(totalObjects+1).fill(0);
+    let pdf="%PDF-1.4\n";
+    const addObject=(id,body)=>{offsets[id]=pdf.length;pdf+=id+" 0 obj\n"+body+"\nendobj\n";};
+    const pageIds=pages.map((_,i)=>4+i*2),contentIds=pages.map((_,i)=>5+i*2);
+    addObject(1,"<< /Type /Catalog /Pages 2 0 R >>");
+    addObject(2,"<< /Type /Pages /Kids ["+pageIds.map(id=>id+" 0 R").join(" ")+"] /Count "+pages.length+" >>");
+    addObject(3,"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    pages.forEach((pageLines,index)=>{
+      const stream=["BT","/F1 10 Tf","50 800 Td","14 TL"];
+      pageLines.forEach((line,i)=>{if(i)stream.push("T*");stream.push("("+pdfText(line)+") Tj");});
+      stream.push("ET","BT","/F1 8 Tf","50 28 Td","(UNOFFICIAL PREVIEW • Page "+(index+1)+" of "+pages.length+") Tj","ET");
+      const content=stream.join("\n");
+      addObject(pageIds[index],"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R >> >> /Contents "+contentIds[index]+" 0 R >>");
+      addObject(contentIds[index],"<< /Length "+content.length+" >>\nstream\n"+content+"\nendstream");
+    });
+    const xref=pdf.length;pdf+="xref\n0 "+(totalObjects+1)+"\n0000000000 65535 f \n";
+    for(let i=1;i<=totalObjects;i++)pdf+=String(offsets[i]).padStart(10,"0")+" 00000 n \n";
+    pdf+="trailer\n<< /Size "+(totalObjects+1)+" /Root 1 0 R >>\nstartxref\n"+xref+"\n%%EOF";
+    return new Blob([pdf],{type:"application/pdf"});
+  }
+  function downloadTeacherTranscriptPdf(transcript={}){
+    const student=obj(transcript.student);
+    downloadBlob(safeTranscriptName(student.full_name)+"_Academic_Transcript_Preview.pdf",transcriptPdfBlob(transcript));
+  }
+
   async function renderTeacherHistory(){
     byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+loading("Loading student history");
     try{
       const search=String(local.history.search||"").trim();
-      const found=await certified("search_students_v5",{search_text:search,target_class_id:null,target_status:null,archive_filter:"active",page_number:1,page_size:200});
+      const found=await certified("search_students_v5",{search_text:search,target_class_id:null,target_status:null,archive_filter:"active",page_number:1,page_size:100});
       const students=arr(found?.rows).map(row=>({...row,full_name:row.full_name||[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ")}));
       if(local.history.studentId&&!students.some(row=>String(row.id)===String(local.history.studentId)))local.history.studentId="";
       const selected=local.history.studentId||students[0]?.id||"";local.history.studentId=selected;
       const data=selected?await certified("get_student_academic_history",{target_student_id:selected}):null;
       const transcript=obj(data?.transcript),student=obj(transcript.student),records=arr(transcript.academic_records),lifecycle=arr(transcript.lifecycle),issuances=arr(data?.issuances);
       const studentOptions='<option value="">'+(students.length?"Select student":"No accessible students")+'</option>'+students.map(row=>'<option value="'+esc(row.id)+'" '+(String(row.id)===String(selected)?"selected":"")+'>'+esc((row.full_name||"Student")+(row.admission_no?" • "+row.admission_no:""))+'</option>').join("");
+      const hasRecords=records.length>0,disabled=hasRecords?"":" disabled";
       byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+
         '<section class="panel pad"><div class="form-grid"><label class="field"><span>Find student</span><input id="teacherHistorySearch" type="search" value="'+esc(search)+'" placeholder="Search name or admission number"></label><label class="field"><span>Student</span><select id="teacherHistoryStudent">'+studentOptions+'</select></label></div></section>'+
-        (student.id?'<div class="grid two maturity-grid" style="margin-top:18px"><section class="panel pad"><div class="section-title"><div><h4>'+esc(student.full_name||"Student")+'</h4><p>'+esc(student.admission_no||"")+'</p></div>'+status(student.status||"active")+'</div><div class="metric-row wrap"><div class="metric"><span>Academic periods</span><strong>'+records.length+'</strong></div><div class="metric"><span>Transcript issuances</span><strong>'+issuances.length+'</strong></div><div class="metric"><span>Current status</span><strong>'+esc(String(student.status||"active").replaceAll("_"," "))+'</strong></div></div></section>'+
-        '<section class="panel pad"><div class="section-title"><h4>Lifecycle</h4></div>'+(lifecycle.length?'<div class="timeline">'+lifecycle.map(item=>'<div class="timeline-item"><span class="timeline-dot"></span><div class="timeline-copy"><strong>'+esc(String(item.event_type||"Update").replaceAll("_"," "))+'</strong><small>'+esc(formatDate(item.effective_date))+(item.from_class_name?" • "+esc(item.from_class_name):"")+(item.to_class_name?" → "+esc(item.to_class_name):"")+(item.reason?" • "+esc(item.reason):"")+'</small></div></div>').join("")+'</div>':'<p class="help-text">No lifecycle events recorded.</p>')+'</section></div>'+
-        '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Cumulative academic record</h3><p>Approved, published, and historically retained report versions</p></div></div><div class="panel-body">'+(records.length?records.map(historyRecordHtml).join(""):empty("No cumulative academic record is available yet."))+'</div></section>'+
+        (student.id?'<section class="panel pad transcript-profile" style="margin-top:18px"><div class="section-title"><h4>'+esc(student.full_name||"Student")+'</h4>'+status(student.status||"active")+'</div><div class="metric-row wrap"><div class="metric"><span>Admission number</span><strong>'+esc(student.admission_no||"—")+'</strong></div><div class="metric"><span>Academic periods</span><strong>'+records.length+'</strong></div><div class="metric"><span>Transcript issuances</span><strong>'+issuances.length+'</strong></div></div><div class="button-row" style="margin-top:15px"><button class="button ghost" id="teacherTranscriptPreview" type="button"'+disabled+'>Preview transcript</button><button class="button outline" id="teacherTranscriptDownload" type="button"'+disabled+'>Download transcript preview</button><button class="button secondary" id="teacherTranscriptCsv" type="button">Export CSV</button></div><div class="eds-tr-rule" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid #dbe4ef;color:#475569;font-size:13px">Transcript rule: latest currently valid published report per term only. Draft, submitted, approved-only, withdrawn, revoked and superseded report versions are excluded.</div></section>'+
+        '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Published Academic Results</h3><p>Official transcript source • currently valid published results organized term by term</p></div></div><div class="panel-body">'+(records.length?records.map(historyRecordHtml).join(""):empty("No cumulative academic record is available yet."))+'</div></section>'+
+        '<section class="panel pad" style="margin-top:18px"><div class="section-title"><h4>Lifecycle</h4></div>'+(lifecycle.length?'<div class="timeline">'+lifecycle.map(item=>'<div class="timeline-item"><span class="timeline-dot"></span><div class="timeline-copy"><strong>'+esc(String(item.event_type||"Update").replaceAll("_"," "))+'</strong><small>'+esc(formatDate(item.effective_date))+(item.from_class_name?" • "+esc(item.from_class_name):"")+(item.to_class_name?" → "+esc(item.to_class_name):"")+(item.reason?" • "+esc(item.reason):"")+'</small></div></div>').join("")+'</div>':'<p class="help-text">No lifecycle events recorded.</p>')+'</section>'+
         '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Transcript issuances</h3><p>Official transcript history is read-only in the teacher workspace.</p></div></div>'+(issuances.length?'<div class="table-wrap"><table><thead><tr><th>Issued</th><th>Purpose</th><th>Status</th></tr></thead><tbody>'+issuances.map(item=>'<tr><td>'+esc(formatDateTime(item.issued_at))+'</td><td>'+esc(item.purpose||"Academic transcript")+'</td><td>'+status(item.status||"valid")+'</td></tr>').join("")+'</tbody></table></div>':'<div class="panel-body"><p class="muted">No official transcript has been issued.</p></div>')+'</section>':
         '<section class="panel pad" style="margin-top:18px">'+empty("Select an accessible student to view academic history.")+'</section>');
       byId("teacherHistoryStudent")?.addEventListener("change",()=>{local.history.studentId=byId("teacherHistoryStudent").value;renderTeacherHistory();});
+      byId("teacherTranscriptPreview")?.addEventListener("click",()=>previewTeacherTranscript(transcript));
+      byId("teacherTranscriptDownload")?.addEventListener("click",()=>downloadTeacherTranscriptPdf(transcript));
+      byId("teacherTranscriptCsv")?.addEventListener("click",()=>exportTeacherTranscriptCsv(transcript));
       let timer;byId("teacherHistorySearch")?.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>{local.history.search=byId("teacherHistorySearch").value.trim();local.history.studentId="";renderTeacherHistory();},250);});
     }catch(error){byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+pageError(error);}
   }
