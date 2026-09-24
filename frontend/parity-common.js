@@ -42,6 +42,20 @@
     return rows.slice(1).map(values=>Object.fromEntries(headers.map((h,i)=>[h,String(values[i]??"").trim()])));
   }
 
+  async function certifiedAllRows(name,args={},maxPages=500){
+    const rows=[];let page=1,last={};
+    while(page<=maxPages){
+      const data=await certified(name,{...args,page_number:page,page_size:100})||{};
+      const batch=Array.isArray(data.rows)?data.rows:[];rows.push(...batch);last=data;
+      const totalRaw=data.total,total=totalRaw===null||totalRaw===undefined||totalRaw===""?Number.NaN:Number(totalRaw);
+      if(!batch.length||(Number.isFinite(total)&&rows.length>=total)||batch.length<100){
+        return {...last,rows,total:Number.isFinite(total)?total:rows.length};
+      }
+      page+=1;
+    }
+    throw new Error("The "+name+" result exceeded the safe pagination limit. Narrow the search and try again.");
+  }
+
   async function academicConfig(){
     if(isSystemAdmin())return certified("get_academic_configuration");
     const boot=window.EdusentiaShell?.state?.boot||await api().bootstrap();
@@ -57,7 +71,7 @@
   }
 
   window.EdusentiaParity=Object.freeze({
-    registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,
+    registerView,api,certified,certifiedAllRows,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,
     currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig
   });
 })();
