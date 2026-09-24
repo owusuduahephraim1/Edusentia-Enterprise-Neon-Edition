@@ -76,6 +76,7 @@
   }
 
   async function openModule(module) {
+    byId("sidebar")?.classList.remove("open");
     if (!MODULES.some(([key]) => key === module)) module = "overview";
     state.module = module;
     setNavActive(); updateHeading();
@@ -187,7 +188,7 @@
   }
 
   async function renderStudentPortal() {
-    if(state.rendering)return; state.rendering=true; installStyles(); ensureNav(); updateHeading();
+    if(state.rendering)return; byId("sidebar")?.classList.remove("open"); state.rendering=true; installStyles(); ensureNav(); updateHeading();
     const runtime=await waitForRuntime(); if(!runtime){state.rendering=false;return} const content=byId("content"); if(!content){state.rendering=false;return}
     content.innerHTML='<section class="panel pad"><div class="skeleton"></div></section>';
     try{const data=await runtime.rpc("get_my_student_portal_v2");state.data=data;state.notifications=null;if(!data.linked){content.innerHTML=`<div class="finance-workspace student-portal-workspace"><section class="student-portal-panel"><div class="student-portal-empty"><strong>No Student Management record is linked to this account</strong><span>Ask the System Administrator to link this login to the correct Student Management record.</span></div></section></div>`;return}content.innerHTML=`<div class="finance-workspace student-portal-workspace">${heroHtml(data)}<main id="studentPortalModuleContent"></main></div>`;await renderActiveModule()}catch(e){content.innerHTML=`<div class="finance-workspace student-portal-workspace"><section class="student-portal-panel"><div class="student-portal-empty"><strong>Student Portal could not be loaded</strong><span>${esc(friendly(e))}</span><button class="button secondary" id="studentPortalRetry" style="margin-top:12px">Retry</button></div></section></div>`;byId("studentPortalRetry")?.addEventListener("click",()=>renderStudentPortal());notify("Student Portal error",friendly(e),"error")}finally{state.rendering=false}
