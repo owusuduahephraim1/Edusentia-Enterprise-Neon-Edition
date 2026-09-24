@@ -14,7 +14,8 @@
       byId("content").innerHTML=`
         <div class="page-head"><div><h3>Report Cards</h3><p>Transactional assessment, review, approval, and publication</p></div>
           <div class="page-actions">${isSystemAdmin()?'<button id="reportTemplate" class="button outline" type="button">Manage template</button>':""}<button id="reportExport" class="button outline" type="button">Export list</button><button id="reportBulkDownload" class="button secondary" type="button">Bulk class PDFs</button>${["system_admin","class_teacher"].includes(currentRole())?'<button id="reportBulkPublish" class="button success" type="button">Publish class reports</button>':""}${["system_admin","class_teacher","subject_teacher"].includes(currentRole())?'<button id="reportNew" class="button primary" type="button">New report</button>':""}</div></div>
-        <section class="panel"><div class="toolbar"><label class="search"><input id="reportSearch" type="search" placeholder="Search student or report number"></label><select id="reportTerm"><option value="">All terms</option>${terms.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(activeTerm)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportClass"><option value="">${["class_teacher","subject_teacher"].includes(currentRole())?"All assigned classes":"All classes"}</option>${classes.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(requestedClass)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportStatus"><option value="">All statuses</option>${["draft","submitted","class_reviewed","approved","published","returned","withdrawn"].map(v=>`<option value="${v}">${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></div><div id="reportResults">${loading("Loading report cards")}</div></section>`;
+        <section class="panel"><div class="toolbar"><label class="search"><input id="reportSearch" type="search" placeholder="Search student or report number"></label><select id="reportTerm"><option value="">All terms</option>${terms.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(activeTerm)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportClass"><option value="">${["class_teacher","subject_teacher"].includes(currentRole())?"All assigned classes":"All classes"}</option>${classes.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(requestedClass)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportStatus"><option value="">All statuses</option>${["draft","submitted","class_reviewed","approved","published","returned","withdrawn"].map(v=>`<option value="${v}">${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></div><div id="reportResults">${loading("Loading report cards")}</div></section>
+        <section class="panel" id="reportWorkspace" style="margin-top:18px">${empty("Select a report card to open the assessment workspace.")}</section>`;
       byId("reportTemplate")?.addEventListener("click",()=>window.EdusentiaShell?.navigate?.("settings"));
       byId("reportExport").onclick=exportReportList;
       byId("reportBulkDownload").onclick=bulkDownloadPublishedReports;
@@ -64,11 +65,13 @@
   }
 
   async function openReportEditor(reportId,enrollmentId,termId){
-    const box=byId("reportWorkspace");if(box)box.innerHTML=loading("Opening report");
+    const box=byId("reportWorkspace");if(!box){window.EdusentiaNotify?.("Report workspace unavailable","Refresh the Report Cards page and try again.","error");return;}
+    box.innerHTML=loading("Opening report");
     try{
       const editor=await certified("get_report_editor",{target_report_id:reportId,target_enrollment_id:enrollmentId,target_term_id:termId});
       renderReportEditor(editor);
-    }catch(error){if(box)box.innerHTML=pageError(error);}
+      box.scrollIntoView({behavior:"smooth",block:"start"});
+    }catch(error){box.innerHTML=pageError(error);}
   }
   function renderReportEditor(editor){
     const box=byId("reportWorkspace");if(!box)return;
