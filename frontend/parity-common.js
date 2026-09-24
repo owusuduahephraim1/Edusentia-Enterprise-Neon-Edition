@@ -42,7 +42,19 @@
     return rows.slice(1).map(values=>Object.fromEntries(headers.map((h,i)=>[h,String(values[i]??"").trim()])));
   }
 
-  async function academicConfig(){return certified("get_academic_configuration");}
+  async function academicConfig(){
+    if(isSystemAdmin())return certified("get_academic_configuration");
+    const boot=window.EdusentiaShell?.state?.boot||await api().bootstrap();
+    return {
+      academic_years:Array.isArray(boot?.academic_years)?boot.academic_years:[],
+      terms:Array.isArray(boot?.terms)?boot.terms:[],
+      classes:Array.isArray(boot?.classes)?boot.classes:[],
+      subjects:Array.isArray(boot?.subjects)?boot.subjects:[],
+      class_subjects:[],
+      grading_scales:[],
+      assessment_schemes:[]
+    };
+  }
 
   window.EdusentiaParity=Object.freeze({
     registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,
