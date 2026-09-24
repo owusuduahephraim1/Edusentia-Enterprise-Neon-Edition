@@ -17,7 +17,7 @@
     {id:"student_services",label:"Student Services",icon:"◎",subtitle:"Admissions, wellbeing, health, communication, boarding and alumni",roles:["principal","class_teacher","subject_teacher"],render:renderStudentServices},
     {id:"academics",label:"Academics",icon:"⌘",subtitle:"Academic structure and assessment",permission:"manage_academics",render:renderAcademics},
     {id:"students",label:"Students",icon:"◉",subtitle:"Student records and enrolment",roles:["system_admin","class_teacher","subject_teacher"],render:renderStudents},
-    {id:"staff",label:"Staff & HR",icon:"♙",subtitle:"Staff directory, employment records and leave",roles:["system_admin","principal"],nav:false,render:renderStaff},
+    {id:"staff",label:"Staff & HR",icon:"♙",subtitle:"Staff directory, employment records and leave",roles:["system_admin","principal"],render:renderStaff},
     {id:"teachers",label:"Teachers",icon:"♜",subtitle:"Teacher records and assignments",permission:"manage_teachers",render:renderTeachers},
     {id:"headteachers",label:"Principals",icon:"★",subtitle:"Principal records and appointments",permission:"manage_headteachers",render:renderPrincipal},
     {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees, statements and payroll operations",feature:"finance_fees",roles:["system_admin","accountant","accounts_office","parent_guardian","student","class_teacher","subject_teacher"],nav:false,render:renderFinance},
@@ -25,7 +25,7 @@
   ];
 
   const ROLE_NAV_IDS=Object.freeze({
-    system_admin:["dashboard","operations","students","student_services","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"],
+    system_admin:["dashboard","operations","students","student_services","staff","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"],
     principal:["dashboard","operations","student_services","staff","history","timetable","delegations","reports","certificates","insights","notifications","compliance"],
     class_teacher:["dashboard","teacher_profile","my_class","attendance","my_subjects","students","student_services","history","timetable","reports","insights","notifications"],
     subject_teacher:["dashboard","teacher_profile","my_subjects","students","student_services","history","timetable","reports","insights","notifications"],
@@ -559,13 +559,9 @@
   }
 
   async function renderStaff(){
-    byId("content").innerHTML='<div class="page-head"><div><h3>Staff</h3><p>Current staff and teacher directory.</p></div></div><section id="staffResults">'+loading("Loading staff")+"</section>";
-    const box=byId("staffResults");
-    try{
-      const result=await api().listStaff();const rows=Array.isArray(result.rows)?result.rows:[];
-      if(!rows.length){box.innerHTML=empty("No active staff records are available yet.");return;}
-      box.innerHTML=`<section class="panel"><div class="table-wrap"><table><thead><tr><th>Staff member</th><th>Staff no.</th><th>Role / title</th><th>Type</th><th>Phone</th><th>Status</th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="cell-main"><span class="avatar">${escapeHtml(String(row.full_name||"S").charAt(0).toUpperCase())}</span><span class="cell-copy"><strong>${escapeHtml(row.full_name||"Unnamed staff")}</strong><small>${escapeHtml(row.email||"No email")}</small></span></div></td><td>${escapeHtml(row.staff_no||"—")}</td><td>${escapeHtml(row.job_title||"—")}</td><td>${escapeHtml(String(row.staff_type||"—").replaceAll("_"," "))}</td><td>${escapeHtml(row.phone||"—")}</td><td>${status(row.active===false?"inactive":"active")}</td></tr>`).join("")}</tbody></table></div></section>`;
-    }catch(error){box.innerHTML=pageError(error);}
+    const runtime=window.EdusentiaHrStaff;
+    if(!runtime?.openFromShell)throw new Error("Staff & HR workspace is not ready. Refresh the page and try again.");
+    await runtime.openFromShell();
   }
 
   async function renderTeachers(){
