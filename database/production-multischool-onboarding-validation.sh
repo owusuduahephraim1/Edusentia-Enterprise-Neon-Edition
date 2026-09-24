@@ -20,13 +20,22 @@ test -n "$ACTOR_ID"
 
 NIPE_BEFORE="$(psql "$MASTER_URL" -Atc "select coalesce(string_agg(concat_ws('|',tenant_id::text,tenant_code,school_name,coalesce(database_name,''),status,plan_code),E'\n' order by tenant_id::text),'') from platform.tenant_control where lower(school_name) like '%nipe%international%school%'")"
 
-REG_ID="$(psql "$MASTER_URL" -Atc "
-insert into platform.school_registrations(
-  school_name,contact_name,contact_email,contact_phone,country,requested_plan_code,institution_type,status,metadata
-) values(
-  '$SCHOOL_NAME','$CONTACT_NAME','$CONTACT_EMAIL','$CONTACT_PHONE','$COUNTRY','starter','basic_jhs','pending',
-  jsonb_build_object('validation_run','$RUN_TOKEN','purpose','multi-school onboarding validation')
-) returning id")"
+REG_ID="$(psql "$MASTER_URL" -X -qAtc "
+select id
+from platform.school_registrations
+where status='pending'
+  and metadata->>'purpose'='multi-school onboarding validation'
+order by created_at desc
+limit 1" | head -n1)"
+if [ -z "$REG_ID" ]; then
+  REG_ID="$(psql "$MASTER_URL" -X -qAtc "
+  insert into platform.school_registrations(
+    school_name,contact_name,contact_email,contact_phone,country,requested_plan_code,institution_type,status,metadata
+  ) values(
+    '$SCHOOL_NAME','$CONTACT_NAME','$CONTACT_EMAIL','$CONTACT_PHONE','$COUNTRY','starter','basic_jhs','pending',
+    jsonb_build_object('validation_run','$RUN_TOKEN','purpose','multi-school onboarding validation')
+  ) returning id" | head -n1)"
+fi
 test -n "$REG_ID"
 
 psql "$MASTER_URL" -v ON_ERROR_STOP=1 -c "
