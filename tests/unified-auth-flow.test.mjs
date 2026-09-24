@@ -66,6 +66,26 @@ test("Canonical platform console preserves Neon-only operations",()=>{
   assert.match(css,/\.hidden\{display:none!important\}/);
 });
 
+test("Platform Administration exposes an accessible mobile navigation drawer",()=>{
+  const html=read("frontend/platform-saas-admin.html");
+  const js=read("frontend/platform-saas-admin.js");
+  const mobile=read("frontend/platform-r40-mobile.css");
+
+  assert.match(html,/id="paMobileMenuButton"/);
+  assert.match(html,/aria-controls="paPlatformNav"/);
+  assert.match(html,/id="paMobileDrawerBackdrop"/);
+  assert.match(html,/id="paPlatformSidebar"/);
+  assert.match(js,/function setMobileDrawer\(open=false\)/);
+  assert.match(js,/function toggleMobileDrawer\(\)/);
+  assert.match(js,/pa-mobile-drawer-open/);
+  assert.match(js,/aria-expanded/);
+  assert.match(js,/event\.key==="Escape"/);
+  assert.match(js,/window\.innerWidth>820/);
+  assert.match(mobile,/\.pa-sidebar\.pa-drawer-open\s*\{\s*transform:\s*translateX\(0\)/);
+  assert.match(mobile,/\.pa-mobile-drawer-backdrop\.open/);
+  assert.match(mobile,/\.pa-mobile-menu-button\s*\{/);
+});
+
 
 test("browser authentication scripts remain syntactically valid",()=>{
   for(const file of [
