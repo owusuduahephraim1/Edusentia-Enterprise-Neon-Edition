@@ -1,6 +1,6 @@
 begin;
 
--- Commercial tiering v2 for isolated Neon tenant databases.
+-- Commercial tiering v2 for isolated Neon tenant databases. Production rollout marker.
 -- The 27-feature catalogue stays stable; only commercial plan entitlements change.
 
 update platform.license_plans
