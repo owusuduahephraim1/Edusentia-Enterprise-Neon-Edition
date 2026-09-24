@@ -98,7 +98,7 @@ test("Staff & HR uses native shell routing only for Principal and System Adminis
   assert.match(app,/await runtime\.openFromShell\(\)/);
   assert.match(hr,/\["system_admin","principal"\]\.includes\(S\.role\)/);
   assert.match(hr,/window\.EdusentiaHrStaff=Object\.freeze\(\{openFromShell:open/);
-  assert.match(hr,/function nav\(\)\{document\.querySelectorAll\("\.hr-nav-item"\)\.forEach\(x=>x\.remove\(\)\)\}/);
+  assert.match(hr,/function nav\(\)\{document\.querySelectorAll\("\.hr-nav-item"\)\.forEach\(x=>x\.remove\(\)\);?\}/);
   assert.match(hr,/function isActiveView\(\)/);
   assert.match(hr,/Loading staff directory/);
   assert.match(hr,/min-width:0/);
