@@ -259,7 +259,7 @@
   }
 
   // ID-card issue/expiry date parity release for production.
-  // Rendered to the same CR80 front/back contract as the certified Supabase edition.
+  // Rendered to the certified reference CR80 front/back contract.
   const ID_CARD_WIDTH=1011,ID_CARD_HEIGHT=638,ID_CARD_A4_WIDTH=2480,ID_CARD_A4_HEIGHT=3508,ID_CARD_BATCH_MAX=50;
   const idCardSignatureCache=new WeakMap();
   function idCardSettingsDefaults(raw={}){return {
