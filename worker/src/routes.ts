@@ -283,18 +283,20 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
       txn`select public.get_bootstrap_data() result`
     ]);
     // Expose certified blueprint permission aliases while retaining Neon-native dotted permissions.\n    // Blueprint System Administrator permission inheritance is intentional and regression-tested.\n    // School-logo parity is reconciled during every isolated-tenant upgrade.\n    // Class-scoped student admission numbering is reconciled through 0049x.\n    // Permanent audit reset parity is reconciled through 0049y.
+    const certifiedBootstrap=((certifiedBootstrapRows[0] as any)?.result||{}) as any;
     const rawPermissions={...((permissionRows[0] as any)?.permissions||{})};
+    const certifiedPermissions={...((certifiedBootstrap?.permissions&&typeof certifiedBootstrap.permissions==="object")?certifiedBootstrap.permissions:{})};
     const isSystemAdmin=ctx.role==="system_admin";
     const permissions={
       ...rawPermissions,
-      manage_academics:isSystemAdmin||Boolean(rawPermissions["academics.write"]),
-      manage_teachers:isSystemAdmin||Boolean(rawPermissions["staff.write"]),
-      manage_headteachers:isSystemAdmin||Boolean(rawPermissions["admin.tenant"]),
-      manage_users:isSystemAdmin||Boolean(rawPermissions["admin.users"]),
-      view_audit:isSystemAdmin||Boolean(rawPermissions["admin.tenant"])
+      ...certifiedPermissions,
+      manage_academics:isSystemAdmin||Boolean(certifiedPermissions.manage_academics)||Boolean(rawPermissions["academics.write"]),
+      manage_teachers:isSystemAdmin||Boolean(certifiedPermissions.manage_teachers)||Boolean(rawPermissions["staff.write"]),
+      manage_headteachers:isSystemAdmin||Boolean(certifiedPermissions.manage_headteachers)||Boolean(rawPermissions["admin.tenant"]),
+      manage_users:isSystemAdmin||Boolean(certifiedPermissions.manage_users)||Boolean(rawPermissions["admin.users"]),
+      view_audit:isSystemAdmin||Boolean(certifiedPermissions.view_audit)||Boolean(rawPermissions["admin.tenant"])
     };
     const tenantRow=(tenant[0]||null) as any;
-    const certifiedBootstrap=((certifiedBootstrapRows[0] as any)?.result||{}) as any;
     const canonicalLogo=String(certifiedBootstrap?.school?.logo_url||tenantRow?.settings?.logo_url||"assets/school-logo.png").trim()||"assets/school-logo.png";
     const tenantPayload=tenantRow?{...tenantRow,settings:{...(tenantRow.settings||{}),logo_url:canonicalLogo}}:null;
     const licenseRow=(licenseRows[0]||{}) as any;
@@ -309,6 +311,10 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({
       tenant:tenantPayload,metrics:metrics[0]||{},
       profile:certifiedBootstrap?.profile||null,
+      academic_years:Array.isArray(certifiedBootstrap?.academic_years)?certifiedBootstrap.academic_years:[],
+      terms:Array.isArray(certifiedBootstrap?.terms)?certifiedBootstrap.terms:[],
+      classes:Array.isArray(certifiedBootstrap?.classes)?certifiedBootstrap.classes:[],
+      subjects:Array.isArray(certifiedBootstrap?.subjects)?certifiedBootstrap.subjects:[],
       permissions,
       license,
       capabilities:{role:ctx.role,assuranceLevel:ctx.assuranceLevel}
