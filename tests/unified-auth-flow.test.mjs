@@ -4,23 +4,25 @@ import fs from "node:fs";
 
 const read=p=>fs.readFileSync(p,"utf8");
 
-test("Platform Super Administrator uses the shared blueprint sign-in",()=>{
+test("Platform Super Administrator uses the dedicated fail-safe sign-in page",()=>{
   const app=read("frontend/app.js");
   const canonical=read("frontend/platform-saas-admin.html");
   const consoleJs=read("frontend/platform-saas-admin.js");
   const legacy=read("frontend/platform-admin.html");
 
   assert.match(app,/platformMode\s*=\s*new URLSearchParams\(location\.search\)\.get\("platform"\)===["']1["']/);
-  assert.match(app,/api\(\)\.platformSession\(\)/);
-  assert.match(app,/api\(\)\.platformLogin/);
-  assert.match(app,/api\(\)\.platformCompleteMfa/);
-  assert.match(app,/platformMode\?["']platform_login["']:["']login["']/);
-  assert.match(app,/location\.replace\(["']\.\/platform-saas-admin\.html["']\)/);
-
-  assert.match(canonical,/id=["']paAuthView["'] class=["']pa-auth-view hidden["']/);
-  assert.match(consoleJs,/location\.replace\(["']\.\/\?platform=1["']\)/);
+  assert.match(app,/if\(platformMode\)\{location\.replace\(["']\.\/platform-saas-admin\.html["']\);return;\}/);
+  assert.match(canonical,/id=["']paAuthView["'] class=["']pa-auth-view["'] aria-hidden=["']false["']/);
+  assert.match(canonical,/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?onload=onPlatformTurnstileLoad&render=explicit/);
+  assert.match(canonical,/platform-saas-admin\.js\?v=platform-login-r43/);
+  assert.match(consoleJs,/function showAuth\(mode=["']login["']\)/);
+  assert.match(consoleJs,/paRecoveryCodes/);
+  assert.match(consoleJs,/platformLogin\(/);
+  assert.match(consoleJs,/platformCompleteMfa\(/);
   assert.match(consoleJs,/platformSession\(\)/);
   assert.match(consoleJs,/platformLogout\(\)/);
+  assert.match(consoleJs,/location\.replace\(["']\.\/platform-saas-admin\.html["']\)/);
+  assert.doesNotMatch(consoleJs,/location\.replace\(["']\.\/\?platform=1["']\)/);
   assert.match(legacy,/location\.replace\(["']\.\/platform-saas-admin\.html["']\)/);
 });
 
