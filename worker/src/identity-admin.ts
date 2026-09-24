@@ -161,6 +161,37 @@ async function updateIdentity(env:Env,sql:TenantSql,ctx:SessionContext,payload:R
   return {ok:true,id:userId,email,full_name:bundle.full_name,role:bundle.role,active:bundle.active,bundle:(results[1] as any)?.[0]?.result??(results[1] as any)?.result};
 }
 
+async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,userId:string){
+  if(!userId)fail("User account is required","validation_error",422);
+  const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
+    select p.full_name,p.phone,p.active,p.mfa_required,p.must_change_password,
+           public.current_app_role_for(p.role)::text role
+    from public.profiles p
+    where p.id=${userId}::uuid
+    limit 1`
+  ]);
+  const profile=(rows[0] as any)?.[0]??(rows[0] as any);
+  if(!profile)fail("User profile not found","not_found",404);
+  const oldEmail=await identityEmail(sql,ctx,userId);
+  const newEmail=await generateEmail(sql,ctx,clean(profile.full_name,200),userId);
+  if(oldEmail===newEmail)return {ok:true,id:userId,email:newEmail,changed:false};
+
+  await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select public.neon_identity_update_auth_user(
+      ${ctx.userId}::uuid,${ctx.tenantId}::uuid,${userId}::uuid,${newEmail},
+      ${clean(profile.full_name,200)},${clean(profile.phone,50)||null},${profile.active!==false}::boolean,${String(profile.role)},
+      ${profile.mfa_required===true}::boolean,${profile.must_change_password===true}::boolean
+    ) result`,
+    txn`select audit.record_auth_event(
+      ${ctx.tenantId}::uuid,${ctx.userId}::uuid,'auth.user.generated_email_corrected',
+      jsonb_build_object('target_user_id',${userId}::uuid,'old_email',${oldEmail},'new_email',${newEmail})
+    ) result`
+  ]);
+  await syncLoginRoute(env,ctx,newEmail,String(profile.role),profile.active!==false);
+  if(oldEmail&&oldEmail!==newEmail)await removeLoginRoute(env,ctx,oldEmail);
+  return {ok:true,id:userId,email:newEmail,changed:true,old_email:oldEmail};
+}
+
 async function ensureDeletable(sql:TenantSql,ctx:SessionContext,userId:string){
   if(userId===ctx.userId)fail("You cannot delete your current account","cannot_delete_current_account",400);
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
@@ -203,6 +234,9 @@ async function genericAdmin(env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
   if(action==="reset_password"){
     const userId=uuid(payload.user_id),password=String(payload.password??"");
     return resetPassword(sql,ctx,userId,password,payload.must_change_password!==false);
+  }
+  if(action==="refresh_generated_email"){
+    return refreshGeneratedEmail(env,sql,ctx,uuid(payload.user_id));
   }
   if(action==="delete"){
     const userId=uuid(payload.user_id);if(!userId)fail("User account is required","validation_error",422);
