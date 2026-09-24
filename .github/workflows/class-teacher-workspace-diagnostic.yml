@@ -181,7 +181,7 @@ jobs:
 
               begin
                 v:=public.search_students_v5('',classid,'active','active',1,20);
-                studentid:=public.safe_uuid(v#>>'{rows,0,id}');
+                studentid:=nullif(v#>>'{rows,0,id}','')::uuid;
                 if studentid is not null then
                   v:=public.get_student_academic_history(studentid);
                   raise notice 'RPC_HISTORY_OK student=%',studentid;
