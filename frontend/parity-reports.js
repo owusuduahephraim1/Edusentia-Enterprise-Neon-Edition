@@ -2,24 +2,26 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
+  const shellState=()=>window.EdusentiaShell?.state||{};
   // ---------- Reports ----------
   let reportConfig=null;
   async function renderReports(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>Report Cards</h3><p>Transactional assessment, review, approval, and publication</p></div></div>${loading("Loading report cards")}`;
     try{
       reportConfig=await academicConfig();
-      const terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[],classes=Array.isArray(reportConfig?.classes)?reportConfig.classes:[],activeTerm=terms.find(x=>x.is_active)?.id||"";
+      const terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[],classes=Array.isArray(reportConfig?.classes)?reportConfig.classes:[],activeTerm=terms.find(x=>x.is_active)?.id||"",requestedClass=classes.some(x=>String(x.id)===String(shellState().reportClassFilter||""))?String(shellState().reportClassFilter):"";
+      if(!requestedClass)shellState().reportClassFilter="";
       byId("content").innerHTML=`
         <div class="page-head"><div><h3>Report Cards</h3><p>Transactional assessment, review, approval, and publication</p></div>
-          <div class="page-actions"><button id="reportTemplate" class="button outline" type="button">Manage template</button><button id="reportExport" class="button outline" type="button">Export list</button><button id="reportBulkDownload" class="button secondary" type="button">Bulk class PDFs</button><button id="reportBulkPublish" class="button success" type="button">Publish class reports</button><button id="reportNew" class="button primary" type="button">New report</button></div></div>
-        <section class="panel"><div class="toolbar"><label class="search"><input id="reportSearch" type="search" placeholder="Search student or report number"></label><select id="reportTerm"><option value="">All terms</option>${terms.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(activeTerm)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportClass"><option value="">All classes</option>${classes.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}</select><select id="reportStatus"><option value="">All statuses</option>${["draft","submitted","class_reviewed","approved","published","returned","withdrawn"].map(v=>`<option value="${v}">${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></div><div id="reportResults">${loading("Loading report cards")}</div></section>`;
-      byId("reportTemplate").onclick=()=>window.EdusentiaShell?.navigate?.("settings");
+          <div class="page-actions">${isSystemAdmin()?'<button id="reportTemplate" class="button outline" type="button">Manage template</button>':""}<button id="reportExport" class="button outline" type="button">Export list</button><button id="reportBulkDownload" class="button secondary" type="button">Bulk class PDFs</button>${["system_admin","class_teacher"].includes(currentRole())?'<button id="reportBulkPublish" class="button success" type="button">Publish class reports</button>':""}${["system_admin","class_teacher","subject_teacher"].includes(currentRole())?'<button id="reportNew" class="button primary" type="button">New report</button>':""}</div></div>
+        <section class="panel"><div class="toolbar"><label class="search"><input id="reportSearch" type="search" placeholder="Search student or report number"></label><select id="reportTerm"><option value="">All terms</option>${terms.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(activeTerm)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportClass"><option value="">${["class_teacher","subject_teacher"].includes(currentRole())?"All assigned classes":"All classes"}</option>${classes.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(requestedClass)?"selected":""}>${esc(x.name)}</option>`).join("")}</select><select id="reportStatus"><option value="">All statuses</option>${["draft","submitted","class_reviewed","approved","published","returned","withdrawn"].map(v=>`<option value="${v}">${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></div><div id="reportResults">${loading("Loading report cards")}</div></section>`;
+      byId("reportTemplate")?.addEventListener("click",()=>window.EdusentiaShell?.navigate?.("settings"));
       byId("reportExport").onclick=exportReportList;
       byId("reportBulkDownload").onclick=bulkDownloadPublishedReports;
-      byId("reportBulkPublish").onclick=()=>bulkTransitionReports("published");
-      byId("reportNew").onclick=openNewReportPicker;
+      byId("reportBulkPublish")?.addEventListener("click",()=>bulkTransitionReports("published"));
+      byId("reportNew")?.addEventListener("click",openNewReportPicker);
       let timer;byId("reportSearch").oninput=()=>{clearTimeout(timer);timer=setTimeout(loadReportList,250);};
-      ["reportTerm","reportClass","reportStatus"].forEach(id=>byId(id).onchange=loadReportList);
+      ["reportTerm","reportStatus"].forEach(id=>byId(id).onchange=loadReportList);byId("reportClass").onchange=()=>{shellState().reportClassFilter=byId("reportClass").value;loadReportList();};
       await loadReportList();
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
