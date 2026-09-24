@@ -160,16 +160,16 @@ async function removeBackupPrefix(env:Env,sql:TenantSql,ctx:SessionContext,prefi
   }while(cursor);
 }
 
-async function createBackupRecord(sql:TenantSql,ctx:SessionContext,mode:"manual"|"scheduled"){
+async function createBackupRecord(sql:TenantSql,ctx:SessionContext,mode:"manual"|"scheduled"|"pre_restore"){
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
     txn`select public.backup_worker_create(${ctx.userId}::uuid,${mode}) result`
   ]);
   return (rows[0] as any)?.result as BackupRow;
 }
 
-export async function performFullBackup(env:Env,sql:TenantSql,ctx:SessionContext,mode:"manual"|"scheduled"="manual"){
+export async function performFullBackup(env:Env,sql:TenantSql,ctx:SessionContext,mode:"manual"|"scheduled"|"pre_restore"="manual"){
   await licence(sql,ctx,mode==="scheduled"?"scheduled_backup":"manual_backup",true);
-  if(mode==="manual"&&ctx.assuranceLevel<2)fail("Multi-factor authentication is required for manual backup","mfa_required",403);
+  if(mode!=="scheduled"&&ctx.assuranceLevel<2)fail("Multi-factor authentication is required for manual backup","mfa_required",403);
   const backup=await createBackupRecord(sql,ctx,mode);
   if(!backup?.id)fail("Backup record could not be created");
   const maxObjects=Math.max(1,Math.min(20000,Number(env.BACKUP_MAX_OBJECTS||5000)));
@@ -397,10 +397,38 @@ async function runRecoveryTest(env:Env,sql:TenantSql,ctx:SessionContext,backupId
   }
 }
 
+async function schedulePolicy(sql:TenantSql,ctx:SessionContext){
+  const [policyRows,featureRows,snapshotRows]=await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select public.backup_worker_schedule_policy() result`,
+    txn`select public.license_feature_enabled('scheduled_backup') enabled`,
+    txn`select public.license_snapshot_for_role('system_admin') result`
+  ]);
+  const policy=(policyRows[0] as any)?.result||{},snapshot=(snapshotRows[0] as any)?.result||{};
+  return {
+    ...policy,
+    scheduled_available:(featureRows[0] as any)?.enabled===true,
+    plan_code:String(snapshot?.plan?.code||snapshot?.plan_code||"")
+  };
+}
+
+async function setSchedulePolicy(sql:TenantSql,ctx:SessionContext,mode:string){
+  if(ctx.assuranceLevel<2)fail("Multi-factor authentication is required to change automatic backup settings","mfa_required",403);
+  const normalized=String(mode||"").trim().toLowerCase();
+  if(!["off","weekly","monthly"].includes(normalized))fail("Backup schedule must be Off, Weekly, or Monthly","validation_error",422);
+  if(normalized!=="off")await licence(sql,ctx,"scheduled_backup",true);
+  const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select public.backup_worker_set_schedule_policy(${normalized},${ctx.userId}::uuid) result`
+  ]);
+  const policy=(rows[0] as any)?.result||{};
+  return {...policy,scheduled_available:normalized!=="off"?true:(await schedulePolicy(sql,ctx)).scheduled_available};
+}
+
 export async function handleScheduledBackupCompat(env:Env,sql:TenantSql,ctx:SessionContext,body:Record<string,unknown>){
   if(ctx.role!=="system_admin")fail("School System Administrator access required","forbidden",403);
   const action=String(body.action||"create");
   if(action==="create")return performFullBackup(env,sql,ctx,"manual");
+  if(action==="policy")return schedulePolicy(sql,ctx);
+  if(action==="set_schedule")return setSchedulePolicy(sql,ctx,String(body.mode||""));
   if(action==="verify")return verifyBackup(env,sql,ctx,String(body.backup_id||""));
   if(action==="verify_latest")return verifyBackup(env,sql,ctx,null);
   if(action==="recovery_test")return runRecoveryTest(env,sql,ctx,String(body.backup_id||""));
@@ -437,8 +465,14 @@ export async function dispatchScheduledBackups(env:Env){
         email:String(raw.email||""),
         displayName:String(raw.display_name||"System Administrator")
       };
+      const policy=await schedulePolicy(sql,ctx);
+      const mode=String(policy.mode||"off");
+      if(!policy.scheduled_available||!["weekly","monthly"].includes(mode)){skipped++;return;}
+      const nextAt=Date.parse(String(policy.next_scheduled_backup_at||""));
+      if(Number.isFinite(nextAt)&&nextAt>Date.now()){skipped++;return;}
       await performStorageMaintenance(env,sql,ctx);
-      await performFullBackup(env,sql,ctx,"scheduled");
+      const backup=await performFullBackup(env,sql,ctx,"scheduled");
+      if(backup?.id)await verifyBackup(env,sql,ctx,String(backup.id));
       completed++;
     }));
     for(const result of results)if(result.status==="rejected"){
