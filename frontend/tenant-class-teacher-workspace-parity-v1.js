@@ -61,7 +61,7 @@
         finally{button.disabled=false;}
       });
       byId("myTeacherPhotoRemove")?.addEventListener("click",async()=>{
-        const ok=window.EdusentiaConfirm?await window.EdusentiaConfirm("Remove your current profile photograph?"):confirm("Remove your current profile photograph?");if(!ok)return;
+        const ok=await window.EdusentiaConfirm("Remove your current profile photograph?");if(!ok)return;
         try{await certified("set_teacher_photo",{target_teacher_id:teacher.id,target_photo_url:"",expected_updated_at:teacher.updated_at||null});notify("Profile photograph removed");await renderTeacherProfile();}
         catch(error){notify("Photograph not removed",friendly(error),"error");}
       });
