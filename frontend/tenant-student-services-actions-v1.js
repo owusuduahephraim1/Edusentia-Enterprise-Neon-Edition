@@ -83,7 +83,7 @@
     const nav=$("mainNav");
     if(!nav)return;
     const operations=nav.querySelector('[data-view="operations"]');
-    const studentServices=$("studentServicesNav");
+    const studentServices=$("studentServicesNav")||nav.querySelector('[data-view="student_services"]');
     if(operations&&studentServices&&studentServices.parentElement===nav)moveAfter(studentServices,operations);
 
     const licence=nav.querySelector('[data-view="license_capacity"]');
@@ -331,7 +331,8 @@
     STATE.sessionAt=0;
     const tab=document.querySelector('[data-sstab="admissions"]');
     if(tab){tab.click();return}
-    $("studentServicesNav")?.click();
+    const navButton=$("studentServicesNav")||document.querySelector('#mainNav [data-view="student_services"]');
+    navButton?.click();
     setTimeout(()=>document.querySelector('[data-sstab="admissions"]')?.click(),120);
   }
 
