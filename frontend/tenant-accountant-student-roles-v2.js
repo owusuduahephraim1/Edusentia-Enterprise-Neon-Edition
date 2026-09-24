@@ -70,8 +70,12 @@
 
   function setExternalNavActive(button) {
     const nav = byId("mainNav");
-    nav?.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
+    nav?.querySelectorAll(".nav-item").forEach((item) => {
+      item.classList.remove("active");
+      item.setAttribute("aria-current", "false");
+    });
     button?.classList.add("active");
+    button?.setAttribute("aria-current", "page");
   }
 
   function ensureAccountantFinance() {
