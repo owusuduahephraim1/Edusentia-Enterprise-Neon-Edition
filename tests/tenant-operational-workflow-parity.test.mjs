@@ -57,6 +57,6 @@ test("backup and teacher refinements are inherited",()=>{
 
 test("PWA caches full tenant workflow parity",()=>{
   const sw=read("frontend/service-worker.js");
-  assert.match(sw,/edusentia-neon-v36/);
+  assert.match(sw,/edusentia-neon-v37/);
   for(const asset of ["assets/vendor/jszip-3.10.1.min.js","tenant-r40-product-fixes.js","tenant-r40-v9-list-resilience.js","tenant-accountant-parent-follow-up-v1.js","tenant-accountant-parent-follow-up-v2.js","tenant-user-credential-actions-v2.js","tenant-user-credential-actions-v3.js","tenant-backup-r2-download-v1.js","tenant-backup-r2-download-core-r42-v18.js","tenant-teacher-subject-summary.js","tenant-teacher-subject-summary-v2.js"])assert.ok(sw.includes(asset),asset);
 });
