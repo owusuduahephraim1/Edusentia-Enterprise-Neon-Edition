@@ -235,6 +235,30 @@ test("PWA shell carries every navigation parity registrar",()=>{
   ]) assert.ok(sw.includes(asset),asset);
 });
 
+test("installed PWA checks for a fresh service worker without browser cache reuse",()=>{
+  const app=read("frontend/app.js");
+  const sw=read("frontend/service-worker.js");
+  assert.match(app,/serviceWorker\.register\("\.\/service-worker\.js",\{updateViaCache:"none"\}\)/);
+  assert.match(app,/await registration\.update\(\)/);
+  assert.match(app,/controllerchange/);
+  assert.match(app,/visibilitychange/);
+  assert.match(app,/setInterval\([^]*60000\)/);
+  assert.match(sw,/cache:"no-store"/);
+  assert.match(sw,/liveCodeAsset/);
+});
+
+test("Pages deployment follows every main commit and verifies the live release identity",()=>{
+  const workflow=read(".github/workflows/deploy-pages.yml");
+  assert.match(workflow,/push: \{branches: \[main\]\}/);
+  assert.doesNotMatch(workflow,/push: \{branches: \[main\], paths:/);
+  assert.match(workflow,/deployment-meta\.json/);
+  assert.match(workflow,/GITHUB_SHA/);
+  assert.match(workflow,/Verify live deployment consistency/);
+  assert.match(workflow,/service-worker\.js\?verify=/);
+  assert.match(workflow,/style\.css\?verify=/);
+  assert.match(workflow,/app\.js\?verify=/);
+});
+
 
 test("Class Teacher navigation uses role-scoped bootstrap data and parity workspaces",()=>{
   const routes=read("worker/src/routes.ts");
