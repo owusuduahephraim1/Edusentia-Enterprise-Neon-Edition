@@ -21,6 +21,7 @@
     {id:"teachers",label:"Teachers",icon:"♜",subtitle:"Teacher records and assignments",permission:"manage_teachers",render:renderTeachers},
     {id:"headteachers",label:"Principals",icon:"★",subtitle:"Principal records and appointments",permission:"manage_headteachers",render:renderPrincipal},
     {id:"finance",label:"Finance",icon:"¤",subtitle:"Fees, statements and payroll operations",feature:"finance_fees",roles:["system_admin","accountant","accounts_office","parent_guardian","student","class_teacher","subject_teacher"],nav:false,render:renderFinance},
+    {id:"children",label:"My Children",icon:"♥",subtitle:"Published academic records",roles:["parent_guardian"],render:renderChildren},
     {id:"notifications",label:"Notifications",icon:"◆",subtitle:"School and workflow alerts",feature:"notifications",render:renderNotifications}
   ];
 
@@ -29,10 +30,10 @@
     principal:["dashboard","operations","student_services","staff","history","timetable","delegations","reports","certificates","insights","notifications","compliance"],
     class_teacher:["dashboard","teacher_profile","my_class","attendance","my_subjects","students","student_services","history","timetable","reports","insights","notifications"],
     subject_teacher:["dashboard","teacher_profile","my_subjects","students","student_services","history","timetable","reports","insights","notifications"],
-    parent_guardian:["dashboard","children","student_services","finance","notifications"],
-    accountant:["finance","notifications"],
-    accounts_office:["finance","notifications"],
-    student:["student_services","finance","notifications"]
+    parent_guardian:["dashboard","children","notifications"],
+    accountant:["dashboard","notifications"],
+    accounts_office:["dashboard","notifications"],
+    student:["dashboard"]
   });
   const LEGACY_LICENSE_FEATURE_FALLBACKS=Object.freeze({id_cards:"core_records",timetable:"core_records",school_prospectus:"core_records"});
   function role(){return String(state.session?.membership?.role || state.boot?.capabilities?.role || "").toLowerCase();}
@@ -98,6 +99,79 @@
     return featureEnabled("payroll")?"Finance & Payroll":"Finance";
   }
   function canCreateStudent(){return ["system_admin","principal","academic_admin","records_officer"].includes(role());}
+
+  const EXTERNAL_NAV_VIEW_PREFIX="extension:";
+  const externalNavRegistry=new Map();
+  let externalNavReplay=false,externalNavScanScheduled=false,externalNavObserver=null;
+  function externalNavKey(value){
+    let hash=2166136261;
+    for(const ch of String(value||"external")){hash^=ch.charCodeAt(0);hash=Math.imul(hash,16777619);}
+    return (hash>>>0).toString(36);
+  }
+  function externalNavIdentity(button){
+    if(!button)return "";
+    if(button.dataset.edusentiaExternalView)return button.dataset.edusentiaExternalView;
+    const datasetIdentity=[
+      button.dataset.studentModule&&`student:${button.dataset.studentModule}`,
+      button.dataset.studentServices&&`student-services:${button.dataset.studentServices}`
+    ].filter(Boolean).join("|");
+    const classIdentity=[...button.classList].filter(name=>!["nav-item","active","hidden"].includes(name)).sort().join(".");
+    const label=String(button.querySelector(".nav-label")?.textContent||button.textContent||"external").trim().replace(/\s+/g," ").slice(0,120);
+    const identity=button.id?`id:${button.id}`:datasetIdentity||`class:${classIdentity}|label:${label}`;
+    return EXTERNAL_NAV_VIEW_PREFIX+externalNavKey(identity);
+  }
+  function externalNavForCurrentSession(view){
+    const item=externalNavRegistry.get(String(view||""));
+    const userId=String(state.session?.user?.id||"");
+    return item&&item.userId===userId?item:null;
+  }
+  function syncExternalNavState(view=state.view){
+    const nav=byId("mainNav");if(!nav)return;
+    nav.querySelectorAll(".nav-item").forEach(button=>{
+      if(!button.dataset.edusentiaExternalView)return;
+      const active=String(button.dataset.edusentiaExternalView)===String(view||"");
+      button.classList.toggle("active",active);
+      button.setAttribute("aria-current",active?"page":"false");
+    });
+  }
+  function registerExternalNavButton(button){
+    if(!button||button.dataset.view||!button.matches?.(".nav-item"))return null;
+    const view=externalNavIdentity(button);if(!view)return null;
+    button.dataset.edusentiaExternalView=view;
+    const item={view,button,userId:String(state.session?.user?.id||""),label:String(button.querySelector(".nav-label")?.textContent||button.textContent||"Workspace").trim()};
+    externalNavRegistry.set(view,item);
+    if(state.view===view)syncExternalNavState(view);
+    return item;
+  }
+  function scanExternalNavigation(){
+    externalNavScanScheduled=false;
+    const nav=byId("mainNav");if(!nav)return;
+    nav.querySelectorAll(".nav-item:not([data-view])").forEach(registerExternalNavButton);
+    syncExternalNavState();
+  }
+  function scheduleExternalNavScan(){
+    if(externalNavScanScheduled)return;
+    externalNavScanScheduled=true;
+    requestAnimationFrame(scanExternalNavigation);
+  }
+  function installExternalNavigationController(){
+    const nav=byId("mainNav");if(!nav||nav.dataset.edusentiaExternalNavController==="1")return;
+    nav.dataset.edusentiaExternalNavController="1";
+    nav.addEventListener("click",event=>{
+      if(externalNavReplay)return;
+      const button=event.target.closest?.(".nav-item:not([data-view])");
+      if(!button||!nav.contains(button))return;
+      const item=registerExternalNavButton(button);if(!item)return;
+      state.view=item.view;
+      byId("sidebar")?.classList.remove("open");
+      nav.querySelectorAll(".nav-item").forEach(node=>{node.classList.remove("active");node.setAttribute("aria-current","false");});
+      button.classList.add("active");button.setAttribute("aria-current","page");
+      requestAnimationFrame(()=>{if(state.view===item.view){syncExternalNavState(item.view);byId("content")?.focus({preventScroll:true});}});
+    },true);
+    externalNavObserver=new MutationObserver(scheduleExternalNavScan);
+    externalNavObserver.observe(nav,{childList:true,subtree:true});
+    scheduleExternalNavScan();
+  }
   function friendly(error){return error?.message || "The requested operation could not be completed.";}
   function notifyAction(title,detail="",kind="success"){
     let root=byId("toastStack");
@@ -316,9 +390,22 @@
     const items=orderedNavItems();
     nav.innerHTML=items.map(item=>`<button class="nav-item ${planUpgradeRequired(item)?"upgrade-required":""}" type="button" data-view="${item.id}" title="${escapeHtml(item.subtitle||item.label)}${planUpgradeRequired(item)?" • Plan upgrade required":""}"><span class="nav-icon" aria-hidden="true">${item.icon}</span><span class="nav-label">${escapeHtml(navLabel(item))}${planUpgradeRequired(item)?'<small class="nav-upgrade-badge">Plan upgrade required</small>':""}</span><span class="nav-active-dot" aria-hidden="true"></span></button>`).join("");
     nav.querySelectorAll("[data-view]").forEach(button=>button.addEventListener("click",()=>navigate(button.dataset.view)));
+    installExternalNavigationController();
+    scheduleExternalNavScan();
   }
 
   async function navigate(id){
+    const external=externalNavForCurrentSession(id);
+    if(external){
+      state.view=external.view;
+      byId("sidebar")?.classList.remove("open");
+      const selector=`[data-edusentia-external-view="${CSS.escape(external.view)}"]`;
+      const live=byId("mainNav")?.querySelector(selector)||external.button;
+      if(live){externalNavReplay=true;try{live.click();}finally{externalNavReplay=false;}}
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+      if(state.view===external.view){syncExternalNavState(external.view);byId("content")?.focus({preventScroll:true});}
+      return;
+    }
     const item=orderedNavItems().find(entry=>entry.id===id)||orderedNavItems()[0]||NAV.find(entry=>entry.id==="dashboard");
     state.view=item.id;
     byId("pageTitle").textContent=item.label;
@@ -354,6 +441,33 @@
     const runtime=window.EdusentiaStudentServices;
     if(!runtime?.openFromShell)throw new Error("Student Services workspace is not ready. Refresh the page and try again.");
     await runtime.openFromShell();
+  }
+
+  async function openParentPublishedReport(reportId){
+    const detail=await certified("finance_portal_report_detail",{target_report_id:reportId});
+    const dialog=byId("modal"),body=byId("modalBody");
+    byId("modalTitle").textContent="Published Academic Result";
+    byId("modalSubtitle").textContent="Read-only published academic record";
+    byId("modalFooter").innerHTML='<button class="button ghost" id="parentReportClose" type="button">Close</button>';
+    if(detail?.locked){
+      body.innerHTML=`<div class="verify-state warning"><strong>Grades are currently restricted</strong><span>${escapeHtml(detail?.hold?.reason||"Contact the Accounts Office for financial clearance.")}</span></div>`;
+    }else{
+      const report=detail?.report||{},subjects=Array.isArray(detail?.subjects)?detail.subjects:[];
+      body.innerHTML=`<div class="detail-grid"><div><span>Student</span><strong>${escapeHtml(report.student||report.student_name||"Student")}</strong></div><div><span>Academic period</span><strong>${escapeHtml([report.academic_year_name,report.term_name].filter(Boolean).join(" • ")||"—")}</strong></div><div><span>Class</span><strong>${escapeHtml(report.class_name||"—")}</strong></div><div><span>Average</span><strong>${Number(detail?.average||0).toFixed(1)}%</strong></div><div><span>Position</span><strong>${escapeHtml(report.position??"—")}</strong></div></div><div class="table-wrap" style="margin-top:16px"><table><thead><tr><th>Subject</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>${subjects.length?subjects.map(row=>`<tr><td>${escapeHtml(row.subject||"")}</td><td>${Number(row.total_score||0).toFixed(1)}</td><td><strong>${escapeHtml(row.grade||"")}</strong></td><td>${escapeHtml(row.remark||"")}</td></tr>`).join(""):'<tr><td colspan="4"><div class="empty"><strong>No subject results recorded</strong></div></td></tr>'}</tbody></table></div>`;
+    }
+    byId("parentReportClose").onclick=()=>dialog.close();
+    if(typeof dialog?.showModal==="function")dialog.showModal();else dialog?.setAttribute("open","");
+  }
+
+  async function renderChildren(){
+    byId("content").innerHTML='<section class="panel pad">'+loading("Loading linked children")+"</section>";
+    const data=await certified("list_my_children_reports",{}),children=Array.isArray(data?.children)?data.children:[];
+    byId("content").innerHTML=`
+      <div class="page-head"><div><h3>My Children</h3><p>Published academic records for students linked to this Parent or Guardian account.</p></div></div>
+      <div class="grid ${children.length>1?"two":""}" id="childrenGrid">
+        ${children.length?children.map(child=>`<section class="panel"><div class="panel-header"><div class="cell-copy"><strong>${escapeHtml(child.full_name||"Student")}</strong><small>${escapeHtml(child.admission_no||"—")} • ${escapeHtml(child.class_name||"")}</small></div></div><div class="panel-body">${Array.isArray(child.reports)&&child.reports.length?child.reports.map(report=>`<div class="diff-row"><span><strong>${escapeHtml(report.term_name||"Term")}</strong><br><small>${escapeHtml(report.academic_year_name||"")} • ${Number(report.average||0).toFixed(1)}%</small></span><div class="button-row"><button class="button outline small" type="button" data-parent-report="${escapeHtml(report.id)}">View report</button></div></div>`).join(""):'<div class="empty"><strong>No published reports</strong><span>Published report cards will appear here.</span></div>'}</div></section>`).join(""):'<section class="panel pad"><div class="empty"><strong>No linked student report records</strong><span>Ask the School System Administrator to verify the parent-student link.</span></div></section>'}
+      </div>`;
+    byId("content").querySelectorAll("[data-parent-report]").forEach(button=>button.onclick=async()=>{button.disabled=true;try{await openParentPublishedReport(button.dataset.parentReport);}catch(error){notifyAction("Report could not be opened",friendly(error),"error");}finally{button.disabled=false;}});
   }
 
   async function renderDashboard(){
@@ -424,6 +538,19 @@
         if(!await confirmAction("Remove the Principal digital signature?",{title:"Remove Digital Signature",confirmLabel:"Remove"}))return;
         try{await certified("set_my_headteacher_signature",{target_signature_path:"",expected_updated_at:signatureRecord?.updated_at||null});notifyAction("Digital signature removed");await renderDashboard();}catch(error){notifyAction("Signature not removed",friendly(error),"error");}
       });
+      return;
+    }
+    if(role()==="parent_guardian"){
+      const terms=Array.isArray(data.terms)?data.terms:[],years=Array.isArray(data.academic_years)?data.academic_years:[],term=terms.find(item=>item.is_active)||terms[0]||null,year=years.find(item=>item.is_active)||years.find(item=>String(item.id)===String(term?.academic_year_id))||years[0]||null;
+      const metrics=await certified("get_role_dashboard",{target_term_id:term?.id||null}).catch(()=>({})),statuses=metrics?.by_status||{},reports=Number(metrics?.reports||0),published=Number(metrics?.published||0),completion=reports?Math.round(published/reports*100):0;
+      const cards=[["My Children",metrics?.children??0,"♥","blue"],["Published Reports",published,"✓","gold"],["Unread Notifications",metrics?.unread_notifications??0,"◆","green"],["Average",Number(metrics?.average||0).toFixed(1)+"%","%","purple"]];
+      byId("content").innerHTML=`
+        <div class="page-head"><div><h3>Parent and Guardian Dashboard</h3><p>Linked children and published academic records</p></div><div class="page-actions"><button class="button primary" type="button" data-dashboard-view="children">My Children</button></div></div>
+        <section class="stat-grid">${cards.map(([label,value,icon,tone])=>`<article class="stat-card"><span class="stat-icon ${tone}" aria-hidden="true">${icon}</span><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div></article>`).join("")}</section>
+        <section class="grid two"><article class="panel"><div class="panel-header"><div><h3>Current Academic Period</h3><p>${escapeHtml(year?.name||"No active academic year")} • ${escapeHtml(term?.name||"No active term")}</p></div></div><div class="panel-body"><div class="metric-row"><div class="metric"><span>Draft</span><strong>${Number(statuses.draft||0)}</strong></div><div class="metric"><span>Submitted</span><strong>${Number(statuses.submitted||0)}</strong></div><div class="metric"><span>Approved</span><strong>${Number(statuses.approved||0)}</strong></div><div class="metric"><span>Completion</span><strong>${completion}%</strong></div></div><div class="progress"><span style="width:${completion}%"></span></div></div></article>
+        <article class="panel"><div class="panel-header"><div><h3>Class Performance</h3><p>Published report averages</p></div></div><div class="panel-body"><div class="bar-list">${Array.isArray(metrics?.class_performance)&&metrics.class_performance.length?metrics.class_performance.map(row=>`<div class="bar-item"><label>${escapeHtml(row.class_name||"Class")}</label><div class="bar-track"><span style="width:${Math.min(100,Number(row.average||0))}%"></span></div><b>${Number(row.average||0).toFixed(1)}</b></div>`).join(""):'<div class="empty"><strong>No published results</strong></div>'}</div></div></article></section>
+        <section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Recent Report Cards</h3><p>Latest published academic records</p></div><button class="button secondary small" type="button" data-dashboard-view="children">View children</button></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>Class</th><th>Term</th><th>Status</th><th>Average</th><th>Updated</th></tr></thead><tbody>${Array.isArray(metrics?.recent)&&metrics.recent.length?metrics.recent.map(row=>`<tr><td>${escapeHtml(row.student_name||row.full_name||"—")}</td><td>${escapeHtml(row.class_name||"—")}</td><td>${escapeHtml(row.term_name||"—")}</td><td>${status(row.status||"published")}</td><td>${row.average==null?"—":escapeHtml(Number(row.average||0).toFixed(1)+"%")}</td><td>${formatDateTime(row.updated_at||row.published_at)}</td></tr>`).join(""):'<tr><td colspan="6"><div class="empty"><strong>No published report cards</strong><span>Published records for linked children will appear here.</span></div></td></tr>'}</tbody></table></div></section>`;
+      byId("content").querySelectorAll("[data-dashboard-view]").forEach(button=>button.onclick=()=>navigate(button.dataset.dashboardView));
       return;
     }
     if(role()!=="system_admin"){
