@@ -539,13 +539,45 @@
   }
 
   async function renderPlanUpgrade(){
-    byId("content").innerHTML=sectionHead("Upgrade Plan","Renew or activate an authorized Edusentia plan")+loading("Loading licence status");
+    byId("content").innerHTML=sectionHead("Upgrade Plan","Compare commercial tiers, then renew or activate an authorized Edusentia plan")+loading("Loading licence status");
     try{
       const [capacity,licence]=await Promise.all([certified("get_school_license_capacity_console",{}),api().licenseStatus().catch(()=>null)]);
-      const plan=obj(capacity?.plan),snapshot=obj(capacity?.snapshot);
-      byId("content").innerHTML=sectionHead("Upgrade Plan","Renew or activate an authorized Edusentia plan")+
+      const plan=obj(capacity?.plan),snapshot=obj(capacity?.snapshot),currentCode=String(plan.code||licence?.plan?.code||"").toLowerCase();
+      const tier=(code,name,capacityText,summary,items)=>{
+        const current=currentCode===code;
+        return '<article class="panel pad"><div class="section-title"><div><h4>'+esc(name)+'</h4><p>'+esc(capacityText)+'</p></div>'+(current?'<span class="chip">Current plan</span>':'')+'</div><p class="muted">'+esc(summary)+'</p><div class="detail-list">'+items.map(item=>'<div class="detail-row"><span>✓</span><strong>'+esc(item)+'</strong></div>').join("")+'</div></article>';
+      };
+      const plans=
+        '<section class="grid three">'+
+        tier("starter","Starter","Up to 300 students • 30 teachers • 2 administrators • 2 GB storage","Essential daily school operations without premium document, automation, or payroll modules.",[
+          "Core school, student, staff, class, term and enrolment records",
+          "Assessment, grading, report cards, attendance and academic history",
+          "Class timetable, notifications, analytics and governance",
+          "Basic finance, receipts, balances and parent/student statements",
+          "Manual encrypted backup"
+        ])+
+        tier("professional","Professional","Up to 1,000 students • 100 teachers • 5 administrators • 10 GB storage","For growing schools that need branded operational documents, automation, stronger finance controls, and continuity.",[
+          "Everything in Starter",
+          "Student and staff ID cards",
+          "Certificates and school prospectus management",
+          "Uploaded PDF/DOCX templates and bulk workflows",
+          "Scheduled backups",
+          "Finance exports and financial-hold controls",
+          "Priority support entitlement"
+        ])+
+        tier("enterprise","Enterprise","Unlimited configured capacity • Custom commercial terms","The complete implemented commercial school feature set for larger or highly automated institutions.",[
+          "Everything in Professional",
+          "Custom school branding",
+          "Payroll and salary history",
+          "Statutory payroll rules and deductions",
+          "Unlimited configured school capacity"
+        ])+
+        '</section>'+
+        '<section class="panel pad"><p class="muted"><strong>Reserved features:</strong> Advanced Analytics and External Integrations remain disabled in all plans until those modules are separately implemented and approved.</p></section>';
+      byId("content").innerHTML=sectionHead("Upgrade Plan","Compare commercial tiers, then renew or activate an authorized Edusentia plan")+
         metrics({plan:plan.name||plan.code||"Current plan",status:snapshot.computed_status||snapshot.status||licence?.status||"active",expires_at:snapshot.expires_at||licence?.expiresAt||"—"})+
-        '<section class="panel pad"><form id="planUpgradeForm" class="form-stack"><label class="field"><span>Activation code</span><input name="code" autocomplete="off" maxlength="512" required></label><p class="muted">Use only a one-time code issued for this school workspace.</p><p id="planUpgradeMessage" class="form-message hidden" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Verify and activate</button></div></form></section>';
+        plans+
+        '<section class="panel pad"><div class="section-title"><h4>Activate or renew</h4></div><form id="planUpgradeForm" class="form-stack"><label class="field"><span>Activation code</span><input name="code" autocomplete="off" maxlength="512" required></label><p class="muted">Use only a one-time code issued for this school workspace.</p><p id="planUpgradeMessage" class="form-message hidden" role="alert"></p><div class="button-row"><button class="button primary" type="submit">Verify and activate</button></div></form></section>';
       byId("planUpgradeForm")?.addEventListener("submit",async event=>{
         event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),msg=byId("planUpgradeMessage"),code=String(new FormData(form).get("code")||"").trim();
         button.disabled=true;msg.classList.add("hidden");
@@ -553,7 +585,7 @@
         catch(e){msg.textContent=e?.message||"Licence activation failed.";msg.dataset.kind="error";msg.classList.remove("hidden");}
         finally{button.disabled=false;}
       });
-    }catch(e){byId("content").innerHTML=sectionHead("Upgrade Plan","Renew or activate an authorized Edusentia plan")+pageError(e);}
+    }catch(e){byId("content").innerHTML=sectionHead("Upgrade Plan","Compare commercial tiers, then renew or activate an authorized Edusentia plan")+pageError(e);}
   }
 
   async function renderSettings(){
