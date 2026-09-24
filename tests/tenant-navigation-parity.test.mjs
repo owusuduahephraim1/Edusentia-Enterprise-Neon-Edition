@@ -65,6 +65,27 @@ test("legacy blueprint modules receive unwrapped Worker RPC results",()=>{
 });
 
 
+test("Principal and teacher Student Services use native shell navigation",()=>{
+  const app=read("frontend/app.js");
+  const studentServices=read("frontend/tenant-student-services-v1.js");
+  const actions=read("frontend/tenant-student-services-actions-v1.js");
+
+  assert.match(app,/id:"student_services",label:"Student Services"/);
+  assert.match(app,/roles:\["principal","class_teacher","subject_teacher"\]/);
+  assert.match(app,/render:renderStudentServices/);
+  assert.match(app,/EdusentiaStudentServices/);
+  assert.match(app,/await runtime\.openFromShell\(\)/);
+
+  assert.match(studentServices,/SHELL_ROLES=new Set\(\["principal","class_teacher","subject_teacher"\]\)/);
+  assert.match(studentServices,/if\(SHELL_ROLES\.has\(role\(\)\)\)\{\$\("studentServicesNav"\)\?\.remove\(\);return\}/);
+  assert.match(studentServices,/async function openFromShell\(\)/);
+  assert.match(studentServices,/\$\("sidebar"\)\?\.classList\.remove\("open"\)/);
+  assert.match(studentServices,/window\.EdusentiaStudentServices=Object\.freeze/);
+
+  assert.match(actions,/\$\("studentServicesNav"\)\|\|nav\.querySelector\('\[data-view="student_services"\]'\)/);
+  assert.match(actions,/document\.querySelector\('#mainNav \[data-view="student_services"\]'\)/);
+});
+
 test("System Administrator sidebar excludes extension-only HR and Finance entries",()=>{
   const hr=read("frontend/tenant-hr-staff-v1.js");
   const finance=read("frontend/finance-core.js");
