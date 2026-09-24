@@ -130,10 +130,10 @@ SQL
       '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
       '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
       '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
-      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering'
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering','0069_backup_schedule_restore_experience'
     )
   ")"
-  test "$migration_count" = "44"
+  test "$migration_count" = "45"
 
   user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
     select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
@@ -305,7 +305,7 @@ select
   'tenant_commercial_plan_tiering_v2_verified',
   jsonb_build_object(
     'database_name',:'database_name',
-    'migration','0068_commercial_plan_tiering',
+    'migration','0069_backup_schedule_restore_experience',
     'feature_count',27,
     'rpc_count',258,
     'verified_at',now()
@@ -315,7 +315,7 @@ where tenant_code=:'tenant_code'
   and database_name=:'database_name';
 SQL
 
-  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 confirmed."
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 and backup schedule/restore experience confirmed."
   upgraded=$((upgraded+1))
 done
 
