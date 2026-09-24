@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
-  const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
+  const {registerView,api,certified,certifiedAllRows,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   const shellState=()=>window.EdusentiaShell?.state||{};
   // ---------- Reports ----------
   let reportConfig=null;
@@ -24,6 +24,10 @@
       let timer;byId("reportSearch").oninput=()=>{clearTimeout(timer);timer=setTimeout(loadReportList,250);};
       ["reportTerm","reportStatus"].forEach(id=>byId(id).onchange=loadReportList);byId("reportClass").onchange=()=>{shellState().reportClassFilter=byId("reportClass").value;loadReportList();};
       await loadReportList();
+      const pendingReportId=String(shellState().pendingReportId||""),pendingEnrollmentId=String(shellState().pendingReportEnrollmentId||"");
+      delete shellState().pendingReportId;delete shellState().pendingReportEnrollmentId;
+      if(pendingReportId)await openReportEditor(pendingReportId,null,null);
+      else if(pendingEnrollmentId)await openNewReportPicker(pendingEnrollmentId);
     }catch(error){byId("content").innerHTML=pageError(error);}
   }
   async function loadReportList(){
@@ -35,17 +39,17 @@
       box.querySelectorAll("[data-report-delete]").forEach(b=>b.onclick=async()=>{if(!await window.EdusentiaConfirm("Permanently delete this never-approved draft report?"))return;try{await certified("delete_report_card_permanently",{target_report_id:b.dataset.reportDelete,reason_text:"Draft report deleted by authorised school user"});await loadReportList();}catch(error){alert(friendly(error));}});
     }catch(error){box.innerHTML=pageError(error);}
   }
-  async function openNewReportPicker(){
+  async function openNewReportPicker(preselectedEnrollmentId=""){
     try{
-      const students=await certified("search_students_v5",{search_text:"",target_class_id:null,target_status:"active",archive_filter:"active",page_number:1,page_size:500}),rows=Array.isArray(students?.rows)?students.rows:[],terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[];
+      const students=await certifiedAllRows("search_students_v5",{search_text:"",target_class_id:null,target_status:"active",archive_filter:"active"}),rows=Array.isArray(students?.rows)?students.rows:[],terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[];
       openModal("New Report Card","Select a current student enrolment and term.",`<form id="newReportForm" class="form-stack"><label class="field"><span>Student</span><select name="enrollment_id" size="10" required><option value="">Select student</option>${rows.filter(x=>x.enrollment_id).map(x=>`<option value="${esc(x.enrollment_id)}" data-year="${esc(x.academic_year_id||"")}">${esc([x.first_name,x.middle_name,x.last_name].filter(Boolean).join(" "))} • ${esc(x.class_name||"No class")}</option>`).join("")}</select></label><label class="field"><span>Term</span><select name="term_id" required>${optionRows(terms,"id","name",terms.find(x=>x.is_active)?.id||"")}</select></label><p id="newReportMessage" class="form-message hidden"></p></form>`,'<button class="button ghost" id="newReportCancel">Cancel</button><button class="button primary" id="newReportOpen">Open report</button>');
-      const form=byId("newReportForm");byId("newReportCancel").onclick=closeModal;form.elements.enrollment_id.onchange=()=>{const year=form.elements.enrollment_id.selectedOptions[0]?.dataset.year||"";form.elements.term_id.innerHTML=optionRows(terms.filter(t=>!year||String(t.academic_year_id)===String(year)),"id","name",terms.find(t=>t.is_active&&(!year||String(t.academic_year_id)===String(year)))?.id||"");};
+      const form=byId("newReportForm");byId("newReportCancel").onclick=closeModal;const syncTerms=()=>{const year=form.elements.enrollment_id.selectedOptions[0]?.dataset.year||"";form.elements.term_id.innerHTML=optionRows(terms.filter(t=>!year||String(t.academic_year_id)===String(year)),"id","name",terms.find(t=>t.is_active&&(!year||String(t.academic_year_id)===String(year)))?.id||"");};form.elements.enrollment_id.onchange=syncTerms;if(preselectedEnrollmentId){form.elements.enrollment_id.value=preselectedEnrollmentId;syncTerms();}
       byId("newReportOpen").onclick=async()=>{if(!form.reportValidity())return;const v=formValues(form);closeModal();await openReportEditor(null,v.enrollment_id,v.term_id);};
     }catch(error){alert(friendly(error));}
   }
   async function exportReportList(){
     try{
-      const data=await certified("list_report_cards_v6",{target_term_id:byId("reportTerm")?.value||null,target_class_id:byId("reportClass")?.value||null,target_status:byId("reportStatus")?.value||null,search_text:byId("reportSearch")?.value?.trim()||"",archive_filter:"active",page_number:1,page_size:500}),rows=Array.isArray(data?.rows)?data.rows:[],cell=v=>'"'+String(v??"").replaceAll('"','""')+'"',lines=["report_number,student,class,term,average,status,updated_at"];
+      const data=await certifiedAllRows("list_report_cards_v6",{target_term_id:byId("reportTerm")?.value||null,target_class_id:byId("reportClass")?.value||null,target_status:byId("reportStatus")?.value||null,search_text:byId("reportSearch")?.value?.trim()||"",archive_filter:"active"}),rows=Array.isArray(data?.rows)?data.rows:[],cell=v=>'"'+String(v??"").replaceAll('"','""')+'"',lines=["report_number,student,class,term,average,status,updated_at"];
       rows.forEach(r=>lines.push([r.report_number,r.student_name,r.class_name,r.term_name,r.average,r.status,r.updated_at].map(cell).join(",")));
       downloadBlob("report-cards.csv",new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"}));
     }catch(error){alert(friendly(error));}
@@ -58,7 +62,7 @@
   async function bulkDownloadPublishedReports(){
     const termId=byId("reportTerm")?.value||"",classId=byId("reportClass")?.value||"";if(!termId||!classId){alert("Select one term and one class before downloading a class package.");return;}
     try{
-      const data=await certified("list_report_cards_v6",{target_term_id:termId,target_class_id:classId,target_status:"published",search_text:"",archive_filter:"active",page_number:1,page_size:100}),rows=Array.isArray(data?.rows)?data.rows:[];
+      const data=await certifiedAllRows("list_report_cards_v6",{target_term_id:termId,target_class_id:classId,target_status:"published",search_text:"",archive_filter:"active"}),rows=Array.isArray(data?.rows)?data.rows:[];
       if(!rows.length){alert("No published reports are available for this class and term.");return;}
       for(const row of rows){try{downloadBlob(`${safeName(row.report_number||row.student_name||"report")}.pdf`,await api().downloadReportPdf(row.id));await new Promise(r=>setTimeout(r,120));}catch{}}
     }catch(error){alert(friendly(error));}
