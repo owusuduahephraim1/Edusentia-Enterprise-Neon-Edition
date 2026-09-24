@@ -495,13 +495,8 @@
     return "Manual";
   }
   function backupStatIcon(kind){
-    const shapes={
-      history:'<path d="M4 8V4m0 0h4M4 4l3.1 3.1A8.5 8.5 0 1 1 3.6 14"/>',
-      automatic:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5l3.5 2"/>',
-      next:'<path d="M5 12h13"/><path d="m14 8 4 4-4 4"/>',
-      retention:'<rect x="4" y="4.5" width="16" height="15" rx="2.2"/><path d="M8 9h8M8 13h8M8 17h5"/>'
-    },tones={history:"blue",automatic:"green",next:"purple",retention:"gold"};
-    return '<span class="stat-icon '+(tones[kind]||"blue")+' backup-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">'+(shapes[kind]||shapes.history)+'</svg></span>';
+    const symbols={history:"↻",automatic:"◷",next:"→",retention:"▣"},tones={history:"blue",automatic:"green",next:"purple",retention:"gold"};
+    return '<span class="stat-icon '+(tones[kind]||"blue")+'" aria-hidden="true">'+(symbols[kind]||symbols.history)+'</span>';
   }
   async function backupNow(){
     const button=byId("backupNow");if(!button)return;button.disabled=true;const previous=button.textContent;button.textContent="Backing up…";
