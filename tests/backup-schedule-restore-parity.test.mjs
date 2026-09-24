@@ -6,6 +6,7 @@ const read=path=>fs.readFileSync(path,"utf8");
 
 test("backup scheduling is promoted to the tenant template and existing isolated tenants",()=>{
   const migration=read("database/reference-compat/0069_backup_schedule_restore_experience.sql");
+  const resilience=read("database/reference-compat/0070_backup_worker_batch_resilience.sql");
   const installer=read("database/reference-compat/install-operational-parity.sh");
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
   const template=read("database/tenant-template/install.sh");
@@ -17,9 +18,15 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   assert.match(migration,/backup_worker_set_schedule_policy/);
   assert.match(migration,/BACKUP_SCHEDULE_CHANGED/);
   assert.match(installer,/0069_backup_schedule_restore_experience/);
+  assert.match(installer,/0070_backup_worker_batch_resilience/);
   assert.match(upgrade,/0069_backup_schedule_restore_experience/);
-  assert.match(upgrade,/test "\$migration_count" = "45"/);
+  assert.match(upgrade,/0070_backup_worker_batch_resilience/);
+  assert.match(upgrade,/test "\$migration_count" = "46"/);
+  assert.match(resilience,/backup_worker_read_batch/);
+  assert.match(resilience,/heartbeat_at/);
+  assert.match(resilience,/backup_worker_reconcile_stale_backups/);
   assert.match(template,/backup_schedule_ok/);
+  assert.match(template,/backup_worker_read_batch\(uuid,jsonb\)/);
 });
 
 test("automatic backups are plan gated and obey weekly or monthly tenant policy",()=>{
@@ -32,6 +39,21 @@ test("automatic backups are plan gated and obey weekly or monthly tenant policy"
   assert.match(worker,/\["weekly","monthly"\]\.includes\(mode\)/);
   assert.match(worker,/performFullBackup\(env,sql,ctx,"scheduled"\)/);
   assert.match(worker,/verifyBackup\(env,sql,ctx,String\(backup\.id\)\)/);
+});
+
+
+test("manual backup snapshots use batched tenant-local reads and fail closed without phantom processing rows",()=>{
+  const worker=read("worker/src/backup-service.ts");
+  const index=read("worker/src/index.ts");
+  const migration=read("database/reference-compat/0070_backup_worker_batch_resilience.sql");
+
+  assert.match(worker,/DATABASE_BATCH_SIZE=12/);
+  assert.match(worker,/backup_worker_read_batch/);
+  assert.match(worker,/Persist failure state before best-effort R2 cleanup/);
+  assert.match(worker,/const material=await encryptionMaterial\(env\)/);
+  assert.doesNotMatch(worker,/\\"license_plans\\",\s*\\"school_licenses\\"/);
+  assert.match(index,/\"55000\":409/);
+  assert.match(migration,/Previous backup worker was interrupted before completion\. Safe retry is allowed\./);
 });
 
 test("backup workspace provides one tap backup, encrypted ZIP download and protected ZIP restore",()=>{
@@ -48,6 +70,8 @@ test("backup workspace provides one tap backup, encrypted ZIP download and prote
   assert.match(enterprise,/prepare_restore_import/);
   assert.match(enterprise,/execute_restore_import/);
   assert.match(enterprise,/RESTORE SCHOOL/);
+  assert.match(enterprise,/function backupStatIcon/);
+  assert.match(enterprise,/backup-stat-icon/);
   assert.match(download,/backup-download-gateway/);
   assert.match(download,/new window\.JSZip/);
   assert.match(download,/AES-256-GCM encrypted database and protected-file payloads/);
