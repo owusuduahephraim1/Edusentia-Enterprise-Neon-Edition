@@ -5,7 +5,7 @@
 
   const P=window.EdusentiaParity,S=window.EdusentiaShell;
   if(!P||!S)return;
-  const {registerView,api,certified,role,esc,formatDate,formatDateTime,status,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig}=P;
+  const {registerView,api,certified,certifiedAllRows,role,esc,formatDate,formatDateTime,status,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig}=P;
   const local={attendance:{},insights:{},history:{}};
   const arr=value=>Array.isArray(value)?value:[];
   const obj=value=>value&&typeof value==="object"&&!Array.isArray(value)?value:{};
@@ -262,7 +262,7 @@
     byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+loading("Loading student history");
     try{
       const search=String(local.history.search||"").trim();
-      const found=await certified("search_students_v5",{search_text:search,target_class_id:null,target_status:null,archive_filter:"active",page_number:1,page_size:100});
+      const found=await certifiedAllRows("search_students_v5",{search_text:search,target_class_id:null,target_status:null,archive_filter:"active"});
       const students=arr(found?.rows).map(row=>({...row,full_name:row.full_name||[row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ")}));
       if(local.history.studentId&&!students.some(row=>String(row.id)===String(local.history.studentId)))local.history.studentId="";
       const selected=local.history.studentId||students[0]?.id||"";local.history.studentId=selected;
