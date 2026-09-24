@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
-  const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
+  const {registerView,api,certified,certifiedAllRows,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   const shellState=()=>window.EdusentiaShell?.state||{};
   // ---------- Students: reusable admission numbering + protected photo parity ----------
   const studentPhotoUrls=new Map();
@@ -77,10 +77,11 @@
       const rows=Array.isArray(data?.rows)?data.rows:[];
       if(!rows.length){box.innerHTML=empty("No student records match the selected filters.");return;}
       box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Student</th><th>Admission no.</th><th>Class</th><th>Academic year</th><th>Roll no.</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        ${rows.map(row=>`<tr><td><div class="cell-main">${studentAvatarHtml(row)}<span class="cell-copy"><strong>${esc([row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.gender||"—")} • ${formatDate(row.date_of_birth)}</small></span></div></td><td>${esc(row.admission_no||"—")}</td><td>${esc(row.class_name||"—")}</td><td>${esc(row.academic_year_name||"—")}</td><td>${esc(row.roll_number||"—")}</td><td>${status(row.archived?"archived":row.status)}</td><td><div class="table-actions"><button class="button ghost small" data-student-view="${esc(row.id)}">View</button>${canManage&&!row.archived?`<button class="button secondary small" data-student-edit="${esc(row.id)}">Edit</button>`:""}${isSystemAdmin()&&!row.archived?`<button class="button danger small" data-student-archive="${esc(row.id)}">Remove</button>`:""}${isSystemAdmin()&&row.archived?`<button class="button success small" data-student-restore="${esc(row.id)}">Restore</button>`:""}</div></td></tr>`).join("")}
+        ${rows.map(row=>`<tr><td><div class="cell-main">${studentAvatarHtml(row)}<span class="cell-copy"><strong>${esc([row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.gender||"—")} • ${formatDate(row.date_of_birth)}</small></span></div></td><td>${esc(row.admission_no||"—")}</td><td>${esc(row.class_name||"—")}</td><td>${esc(row.academic_year_name||"—")}</td><td>${esc(row.roll_number||"—")}</td><td>${status(row.archived?"archived":row.status)}</td><td><div class="table-actions"><button class="button ghost small" data-student-view="${esc(row.id)}">View</button>${row.enrollment_id&&!row.archived&&["class_teacher","subject_teacher"].includes(currentRole())?`<button class="button outline small" data-student-report="${esc(row.enrollment_id)}" data-student-report-class="${esc(row.class_id||"")}">Report</button>`:""}${canManage&&!row.archived?`<button class="button secondary small" data-student-edit="${esc(row.id)}">Edit</button>`:""}${isSystemAdmin()&&!row.archived?`<button class="button danger small" data-student-archive="${esc(row.id)}">Remove</button>`:""}${isSystemAdmin()&&row.archived?`<button class="button success small" data-student-restore="${esc(row.id)}">Restore</button>`:""}</div></td></tr>`).join("")}
       </tbody></table></div>`;
       await hydrateStudentPhotos(box);
       box.querySelectorAll("[data-student-view]").forEach(b=>b.onclick=()=>openStudentRecord(b.dataset.studentView));
+      box.querySelectorAll("[data-student-report]").forEach(b=>b.onclick=()=>{shellState().pendingReportEnrollmentId=b.dataset.studentReport;shellState().reportClassFilter=b.dataset.studentReportClass||"";window.EdusentiaShell?.navigate?.("reports");});
       box.querySelectorAll("[data-student-edit]").forEach(b=>b.onclick=async()=>{const config=await academicConfig();openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},b.dataset.studentEdit);});
       box.querySelectorAll("[data-student-archive]").forEach(b=>b.onclick=()=>archiveStudent(b.dataset.studentArchive));
       box.querySelectorAll("[data-student-restore]").forEach(b=>b.onclick=()=>restoreStudent(b.dataset.studentRestore));
@@ -110,7 +111,7 @@
   }
   async function exportStudentsCsv(){
     try{
-      const data=await certified("search_students_v5",{search_text:byId("studentSearchCertified")?.value?.trim()||"",target_class_id:byId("studentClassFilter")?.value||null,target_status:byId("studentStatusFilter")?.value||null,archive_filter:byId("studentArchiveFilter")?.value||"active",page_number:1,page_size:500});
+      const data=await certifiedAllRows("search_students_v5",{search_text:byId("studentSearchCertified")?.value?.trim()||"",target_class_id:byId("studentClassFilter")?.value||null,target_status:byId("studentStatusFilter")?.value||null,archive_filter:byId("studentArchiveFilter")?.value||"active"});
       const rows=Array.isArray(data?.rows)?data.rows:[],cell=v=>'"'+String(v??"").replaceAll('"','""')+'"',lines=[["admission_no","full_name","gender","date_of_birth","class","academic_year","roll_number","status"].join(",")];
       rows.forEach(r=>lines.push([r.admission_no,[r.first_name,r.middle_name,r.last_name].filter(Boolean).join(" "),r.gender,r.date_of_birth,r.class_name,r.academic_year_name,r.roll_number,r.archived?"archived":r.status].map(cell).join(",")));
       downloadBlob("student-directory.csv",new Blob([lines.join("\n")],{type:"text/csv;charset=utf-8"}));
