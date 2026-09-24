@@ -372,6 +372,7 @@ async function purgeBackupCandidate(env:Env,sql:TenantSql,ctx:SessionContext,row
   return purged;
 }
 
+// Failed backup attempts are user-removable only through a verified System Administrator session.
 async function deleteFailedBackup(env:Env,sql:TenantSql,ctx:SessionContext,id:string){
   if(ctx.assuranceLevel<2)fail("Multi-factor authentication is required to delete failed backup records","mfa_required",403);
   if(!/^[0-9a-f-]{36}$/i.test(id))fail("backup_id is required","validation_error",422);
