@@ -132,6 +132,9 @@ test("Generated tenant user emails use the first usable name and can repair lega
   assert.match(identity,/generate_nip_user_email\(\$\{ctx\.userId\}::uuid,\$\{requestedBase\},\$\{targetUserId\}::uuid\)/);
   assert.match(identity,/action==="refresh_generated_email"/);
   assert.match(identity,/async function refreshGeneratedEmail\(/);
+  assert.match(identity,/public\.list_profiles_with_access\(\)->'profiles'/);
+  assert.match(identity,/profile->>'staff_record_id'/);
+  assert.match(identity,/return refreshGeneratedEmail\(env,sql,ctx,payload\)/);
   assert.match(identity,/syncLoginRoute\(env,ctx,newEmail/);
   assert.match(identity,/removeLoginRoute\(env,ctx,oldEmail\)/);
 
@@ -139,6 +142,7 @@ test("Generated tenant user emails use the first usable name and can repair lega
   assert.match(credentials,/function generatedEmailNeedsRepair\(profile\)/);
   assert.match(credentials,/Correct email/);
   assert.match(credentials,/adminUserManagement\("refresh_generated_email"/);
+  assert.match(credentials,/staff_record_id: profile\.staff_record_id/);
 });
 
 test("Required password changes block workspace entry until completed",()=>{
