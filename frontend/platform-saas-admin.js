@@ -35,9 +35,18 @@ function dateValue(v){const d=v?new Date(v):new Date();if(Number.isNaN(d.getTime
 function plusDays(v,n){const d=v instanceof Date?new Date(v):new Date(v||Date.now());d.setUTCDate(d.getUTCDate()+n);return d;}
 function badge(v){const x=String(v||"unknown");return `<span class="pa-badge ${esc(x)}">${esc(x.replaceAll("_"," "))}</span>`;}
 function money(v,c="USD"){if(v==null||v==="")return"Custom";try{return new Intl.NumberFormat("en",{style:"currency",currency:c,maximumFractionDigits:0}).format(Number(v));}catch{return String(v);}}
-function showAuth(){location.replace("./?platform=1");}
+function showAuth(mode="login"){
+  state.session=null;setMobileDrawer(false);
+  $("#paConsole")?.classList.add("hidden");
+  $("#paAuthView")?.classList.remove("hidden");
+  $("#paAuthView")?.setAttribute("aria-hidden","false");
+  $("#paLogin")?.classList.toggle("hidden",mode!=="login");
+  $("#paMfa")?.classList.toggle("hidden",mode!=="mfa");
+  $("#paRecoveryCodes")?.classList.toggle("hidden",mode!=="recovery");
+  if(mode==="login"){requestAnimationFrame(()=>{renderTurnstile();$("#paEmail")?.focus();});}
+}
 function showConsole(session){
-  state.session=session;$("#paAuthView")?.classList.add("hidden");$("#paConsole")?.classList.remove("hidden");
+  state.session=session;setMobileDrawer(false);$("#paAuthView")?.classList.add("hidden");$("#paAuthView")?.setAttribute("aria-hidden","true");$("#paConsole")?.classList.remove("hidden");
   $("#paAdminIdentity").textContent=session?.user?.displayName||session?.user?.email||"Platform Administrator";
 }
 function renderTurnstile(){
@@ -311,7 +320,7 @@ function wire(){
   $("#paMfaForm")?.addEventListener("submit",async e=>{e.preventDefault();mfaMessage("");const b=e.currentTarget.querySelector('button[type="submit"]');b.disabled=true;try{const r=await api().platformCompleteMfa(state.mfaChallenge,$("#paMfaCode").value.trim());state.mfaChallenge="";if(Array.isArray(r.recoveryCodes)&&r.recoveryCodes.length){state.pendingSession=r;$("#paRecoveryCodeList").textContent=r.recoveryCodes.join("\n");showAuth("recovery");}else await enter(r);}catch(err){mfaMessage(err.message||String(err));}finally{b.disabled=false;}});
   $("#paMfaBack")?.addEventListener("click",()=>{state.mfaChallenge="";showAuth("login");resetTurnstile();renderTurnstile();});
   $("#paRecoveryContinue")?.addEventListener("click",async()=>{if(!state.pendingSession)return;const s=state.pendingSession;state.pendingSession=null;$("#paRecoveryCodeList").textContent="";await enter(s);});
-  $("#paRefresh")?.addEventListener("click",()=>load(true));$("#paSignOut")?.addEventListener("click",async()=>{try{await api().platformLogout();}finally{location.replace("./?platform=1");}});
+  $("#paRefresh")?.addEventListener("click",()=>load(true));$("#paSignOut")?.addEventListener("click",async()=>{try{await api().platformLogout();}finally{location.replace("./platform-saas-admin.html");}});
   $("#paMfaManage")?.addEventListener("click",openMfaManager);
   $("#paMobileMenuButton")?.addEventListener("click",toggleMobileDrawer);
   $("#paMobileDrawerBackdrop")?.addEventListener("click",()=>setMobileDrawer(false));
