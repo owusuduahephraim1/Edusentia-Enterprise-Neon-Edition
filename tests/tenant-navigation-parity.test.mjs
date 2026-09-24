@@ -8,6 +8,7 @@ test("tenant shell follows reference role, permission and feature navigation con
   const app=read("frontend/app.js");
   assert.match(app,/const ROLE_NAV_IDS=Object\.freeze\(/);
   assert.match(app,/system_admin:\["dashboard","operations","students","student_services","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
+  assert.match(app,/principal:\["dashboard","operations","student_services","staff","history","timetable","delegations","reports","certificates","insights","notifications","compliance"\]/);
   assert.match(app,/class_teacher:\["dashboard","teacher_profile","my_class","attendance","my_subjects","students","history","timetable","reports","insights","notifications"\]/);
   assert.match(app,/subject_teacher:\["dashboard","teacher_profile","my_subjects","students","history","timetable","reports","insights","notifications"\]/);
   assert.match(app,/permissionEnabled\(code\)/);
@@ -201,4 +202,48 @@ test("Class Teacher history and notifications retain Supabase operational behavi
   assert.match(app,/data-notification-delete/);
   assert.match(rpc,/const requestedPageSize=intArg\(args,"page_size",\{required:false,min:1,max:500\}\)\?\?20;/);
   assert.match(rpc,/const pageSize=Math\.min\(100,requestedPageSize\);/);
+});
+
+
+test("Principal workspace preserves Supabase operational navigation and AAL2 security",()=>{
+  const app=read("frontend/app.js");
+  const auth=read("worker/src/auth.ts");
+  const operations=read("frontend/parity-operations.js");
+  const reports=read("frontend/parity-reports.js");
+  const enterprise=read("frontend/parity-enterprise-workspaces.js");
+  const hr=read("frontend/tenant-hr-staff-v1.js");
+
+  assert.match(auth,/\["system_admin","principal","platform_super_admin"\]\.includes\(canonicalAppRole\(role\)\)/);
+  for(const label of ["Principal Dashboard","Emergency Delegation","Active Students","Awaiting Action","Published Reports","Published Average","Digital Signature","Current Academic Period","Class Performance","Recent Report Cards"]){
+    assert.ok(app.includes(label),label);
+  }
+  assert.match(app,/get_my_headteacher_signature/);
+  assert.match(app,/set_my_headteacher_signature/);
+  assert.match(app,/uploadFile\(file,"principal-signatures"\)/);
+
+  assert.match(operations,/async function config\(\)\{return academicConfig\(\);\}/);
+  for(const label of ["Production Operations","Academic period control","System health","Class report progress","Published-report correction requests"]){
+    assert.ok(operations.includes(label),label);
+  }
+
+  for(const label of ["Manual template","Export list","Approve class reports","Previous","Next"]){
+    assert.ok(reports.includes(label),label);
+  }
+  assert.match(reports,/bulkTransitionReports\("approved"\)/);
+  assert.match(reports,/openManualReportTemplate/);
+
+  for(const label of ["Student Academic History","Issue transcript","Admission number","Academic periods","Transcript issuances","Preview transcript","Download transcript preview","Export CSV","Published Academic Results"]){
+    assert.ok(enterprise.includes(label),label);
+  }
+  assert.match(enterprise,/certifiedAllRows\("search_students_v5"/);
+  assert.match(enterprise,/const isAdmin=role\(\)==="system_admin",isPrincipal=role\(\)==="principal"/);
+  assert.match(enterprise,/acknowledge_emergency_academic_delegation/);
+  assert.match(enterprise,/const createPanel=isAdmin\?/);
+  for(const label of ["Academic Insights","Export summary","Subject performance","Class overview","Privacy and Security","New privacy request","Data retention policies","Security events","Security verification history"]){
+    assert.ok(enterprise.includes(label),label);
+  }
+  assert.match(enterprise,/create_privacy_request/);
+  assert.match(enterprise,/update_privacy_request/);
+  assert.match(enterprise,/resolve_security_event/);
+  assert.match(hr,/Multi-factor authentication is required for Staff & HR|Sensitive HR access requires an active licence and MFA\/AAL2/);
 });
