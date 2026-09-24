@@ -74,8 +74,11 @@ test("backup workspace provides one tap backup, encrypted ZIP download and prote
   assert.match(enterprise,/function backupStatIcon/);
   assert.match(enterprise,/backup-stat-icon/);
   const css=read("frontend/style.css");
-  assert.match(css,/\.backup-stat-icon\{width:62px;height:62px;min-width:62px;min-height:62px;flex:0 0 62px/);
-  assert.match(css,/width:38px;height:38px/);
+  assert.match(css,/\.stat-icon\{width:48px;height:48px;flex:0 0 48px/);
+  assert.match(css,/\.stat-icon svg\{display:block;width:22px;height:22px/);
+  assert.match(css,/\.stat-icon\{width:39px;height:39px;flex-basis:39px\}/);
+  assert.doesNotMatch(css,/\.backup-stat-icon\{[^}]*width:/);
+  assert.doesNotMatch(enterprise,/stat-card backup-stat-card/);
   assert.match(enterprise,/tones=\{history:"blue",automatic:"green",next:"purple",retention:"gold"\}/);
   assert.match(download,/backup-download-gateway/);
   assert.match(download,/new window\.JSZip/);
