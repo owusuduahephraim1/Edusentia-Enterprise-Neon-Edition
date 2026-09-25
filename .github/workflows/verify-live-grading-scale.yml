@@ -1,0 +1,131 @@
+name: Verify live grading scale repair
+on:
+  workflow_run:
+    workflows: ["Deploy Cloudflare Worker"]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha == 'c89a415977f860ba718473d819ec7ea5d75f7502' }}
+    runs-on: ubuntu-latest
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install PostgreSQL client
+        run: |
+          command -v psql >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
+      - name: Verify live Nipe edit and add grade paths with rollback probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$ADMIN_URL"
+
+          TENANT_ROW="$(psql "$ADMIN_URL" -AtF '|' -c "
+            select tc.tenant_code,tc.database_name
+            from platform.tenant_control tc
+            join app.tenants t on t.id=tc.tenant_id
+            where lower(t.name) like '%nipe%'
+            order by tc.created_at desc nulls last
+            limit 1
+          ")"
+          test -n "$TENANT_ROW"
+          TENANT_CODE="${TENANT_ROW%%|*}"
+          TENANT_DB="${TENANT_ROW#*|}"
+          echo "Tenant route: $TENANT_CODE -> $TENANT_DB"
+
+          TENANT_URL="$(ADMIN_URL="$ADMIN_URL" TENANT_DB="$TENANT_DB" node --input-type=module -e '
+            const u=new URL(process.env.ADMIN_URL);u.pathname="/"+process.env.TENANT_DB;process.stdout.write(u.toString())
+          ')"
+          echo "::add-mask::$TENANT_URL"
+
+          test "$(psql "$TENANT_URL" -Atc "select count(*)=1 from information_schema.columns where table_schema='public' and table_name='grading_scales' and column_name='interpretation' and is_nullable='NO'")" = "t"
+          test "$(psql "$TENANT_URL" -Atc "select exists(select 1 from app.schema_migrations where version='0072_grading_scale_interpretation_parity')")" = "t"
+          echo "0072 grading-scale interpretation schema is live."
+
+          CONTEXT_ROW="$(psql "$TENANT_URL" -AtF '|' -c "
+            select t.id,m.user_id,m.role
+            from app.tenants t
+            join app.tenant_memberships m on m.tenant_id=t.id
+            join authn.users u on u.id=m.user_id
+            where m.role in ('system_admin','admin') and m.status='active' and u.disabled_at is null
+            order by m.created_at
+            limit 1
+          ")"
+          test -n "$CONTEXT_ROW"
+          IFS='|' read -r TENANT_ID USER_ID ROLE <<< "$CONTEXT_ROW"
+
+          echo "Running rollback edit-grade probe."
+          psql "$TENANT_URL" -v ON_ERROR_STOP=1 -v tenant_id="$TENANT_ID" -v user_id="$USER_ID" -v app_role="$ROLE" <<'SQL'
+          begin;
+          select app.set_request_context(:'tenant_id'::uuid,:'user_id'::uuid,:'app_role',2::smallint);
+          select public.save_grading_scale(
+            (
+              select jsonb_build_object(
+                'id',g.id::text,
+                'grade',g.grade,
+                'min_mark',g.min_mark,
+                'max_mark',g.max_mark,
+                'remark',g.remark,
+                'interpretation',g.interpretation,
+                'grade_point',g.grade_point,
+                'display_order',g.display_order,
+                'academic_year_id',g.academic_year_id,
+                'class_id',g.class_id,
+                'subject_id',g.subject_id,
+                'reason','Live diagnostic rollback edit probe'
+              )
+              from public.grading_scales g
+              where g.deleted_at is null
+              order by g.display_order,g.min_mark desc
+              limit 1
+            )
+          );
+          rollback;
+          SQL
+
+          SCOPE_ROW="$(psql "$TENANT_URL" -AtF '|' -c "
+            select c.id,s.id
+            from public.classes c
+            cross join public.subjects s
+            where c.deleted_at is null and s.deleted_at is null
+              and not exists(
+                select 1 from public.grading_scales g
+                where g.deleted_at is null
+                  and g.academic_year_id is null
+                  and g.class_id=c.id
+                  and g.subject_id=s.id
+              )
+            order by c.level_order nulls last,c.created_at,s.display_order nulls last,s.created_at
+            limit 1
+          ")"
+          test -n "$SCOPE_ROW"
+          IFS='|' read -r CLASS_ID SUBJECT_ID <<< "$SCOPE_ROW"
+
+          echo "Running rollback add-grade probe."
+          psql "$TENANT_URL" -v ON_ERROR_STOP=1 -v tenant_id="$TENANT_ID" -v user_id="$USER_ID" -v app_role="$ROLE" -v class_id="$CLASS_ID" -v subject_id="$SUBJECT_ID" <<'SQL'
+          begin;
+          select app.set_request_context(:'tenant_id'::uuid,:'user_id'::uuid,:'app_role',2::smallint);
+          select public.save_grading_scale(jsonb_build_object(
+            'grade','DIAG',
+            'min_mark',0,
+            'max_mark',0,
+            'remark','Diagnostic',
+            'interpretation','Live rollback add-grade verification',
+            'grade_point',0,
+            'display_order',9999,
+            'academic_year_id',null,
+            'class_id',:'class_id',
+            'subject_id',:'subject_id',
+            'reason','Live diagnostic rollback add probe'
+          ));
+          rollback;
+          SQL
+          echo "LIVE_GRADING_SCALE_EDIT_AND_ADD_OK"
