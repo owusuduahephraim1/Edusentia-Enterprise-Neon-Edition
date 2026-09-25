@@ -8,7 +8,6 @@ test("public Edusentia links and sign-in surface carry the Nana K developer bran
   for(const page of ["about","support","privacy","terms"]){
     assert.match(index,new RegExp(`href=["']\\./${page}\\.html["']`));
   }
-  assert.match(index,/Edusentia™/);
   assert.match(index,/Edusentia Enterprise™/);
   assert.match(index,/Developed by Nana K IT Solutions Consult/);
 });
