@@ -167,3 +167,19 @@ test("Tenant logout returns to the branded school sign-in instead of the public 
   assert.match(app,/registerSchoolButton"\)\?\.classList\.toggle\("hidden",tenantMode\)/);
   assert.match(app,/authBrandName"\)\.textContent=tenantMode\?\(tenant\.school_name/);
 });
+
+
+test("Shared public sign-in auto-routes Platform Super Administrator into the master control plane",()=>{
+  const app=read("frontend/app.js");
+  const routes=read("worker/src/routes.ts");
+
+  assert.match(app,/const result=await api\(\)\.login\(fd\.get\("email"\),fd\.get\("password"\),tenantCode,turnstileToken\)/);
+  assert.match(app,/result\?\.authScope==="platform"\?"platform":"tenant"/);
+  assert.match(app,/if\(scope==="platform"\)\{location\.replace\("\.\/platform-saas-admin\.html"\);return;\}/);
+
+  assert.match(routes,/platform\.lookup_admin_login\(\$\{email\}\)/);
+  assert.match(routes,/if\(email&&!tenantCode\)/);
+  assert.match(routes,/platformLogin\(env,email,body\.password\)/);
+  assert.match(routes,/authScope:"platform"/);
+  assert.match(routes,/authScope:"tenant"/);
+});

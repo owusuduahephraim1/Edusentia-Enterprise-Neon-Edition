@@ -811,10 +811,8 @@
     const tenantCode=String(fd.get("tenantCode")||byId("tenantCodeFallback")?.value||"").trim().toUpperCase();
     button.disabled=true;
     try{
-      const scope=platformMode?"platform":"tenant";
-      const result=scope==="platform"
-        ?await api().platformLogin(fd.get("email"),fd.get("password"),turnstileToken)
-        :await api().login(fd.get("email"),fd.get("password"),tenantCode,turnstileToken);
+      const result=await api().login(fd.get("email"),fd.get("password"),tenantCode,turnstileToken);
+      const scope=result?.authScope==="platform"?"platform":"tenant";
       turnstileToken="";state.authScope=scope;
       if(result?.mfaRequired){beginMfa(result,scope);return;}
       if(scope==="platform"){location.replace("./platform-saas-admin.html");return;}

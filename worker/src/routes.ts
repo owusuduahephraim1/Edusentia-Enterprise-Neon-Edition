@@ -2,6 +2,7 @@ import type { Env, SessionContext } from "./types";
 import { db, tenantTx } from "./db";
 import { readJson, json, error } from "./http";
 import { authenticate, login, completeMfa, logout, setCookie, clearCookie } from "./auth";
+import { platformLogin } from "./platform-auth";
 import { verifyTurnstile } from "./turnstile";
 import { platformRoute } from "./platform-routes";
 import { tenantDb } from "./tenant-db";
@@ -56,9 +57,27 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   if(method==="POST"&&p==="/api/auth/login"){
     const body=await readJson<any>(request);
     await verifyTurnstile(env,String(body.turnstileToken||""),request);
-    const result=await login(env,body.email,body.password,body.tenantCode);
-    if(!("session" in result)) return json(result);
-    const r=json(result.session);r.headers.append("set-cookie",setCookie(env,result.token));return r;
+
+    const email=String(body.email||"").trim().toLowerCase();
+    const tenantCode=String(body.tenantCode||"").trim().toUpperCase();
+
+    // The public sign-in is shared by the installed Android/Windows shells and
+    // the browser. With no explicit school code, a registered Platform Super
+    // Administrator must enter the master control plane rather than being sent
+    // through an isolated tenant login route. An explicit school code always
+    // keeps the request on the tenant path.
+    if(email&&!tenantCode){
+      const master=db(env);
+      const platformRows=await master`select role from platform.lookup_admin_login(${email}) limit 1`;
+      if(String((platformRows[0] as any)?.role||"")==="platform_super_admin"){
+        const result=await platformLogin(env,email,body.password);
+        return json({...result,authScope:"platform"});
+      }
+    }
+
+    const result=await login(env,email,body.password,tenantCode);
+    if(!("session" in result)) return json({...result,authScope:"tenant"});
+    const r=json({...result.session,authScope:"tenant"});r.headers.append("set-cookie",setCookie(env,result.token));return r;
   }
   if(method==="POST"&&p==="/api/auth/mfa/complete"){
     const body=await readJson<any>(request);
