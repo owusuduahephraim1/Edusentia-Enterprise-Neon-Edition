@@ -2,6 +2,10 @@
   "use strict";
   const cfg=window.EDS_MASTER_CONFIG||{};
   const apiBase=String(cfg.apiBaseUrl||"").replace(/\/+$/,"");
+  const PLATFORM_SESSION_KEY="edusentia.platform.session.v1";
+  function readPlatformSessionToken(){try{return String(sessionStorage.getItem(PLATFORM_SESSION_KEY)||"").trim();}catch{return "";}}
+  function savePlatformSessionToken(value){const token=String(value||"").trim();try{if(token)sessionStorage.setItem(PLATFORM_SESSION_KEY,token);else sessionStorage.removeItem(PLATFORM_SESSION_KEY);}catch{}return token;}
+  function clearPlatformSessionToken(){try{sessionStorage.removeItem(PLATFORM_SESSION_KEY);}catch{}}
 
   class ApiError extends Error{
     constructor(message,status,code,details){super(message);this.name="ApiError";this.status=status;this.code=code;this.details=details;}
@@ -12,6 +16,10 @@
     const headers=new Headers(options.headers||{});
     if(options.body!=null&&!(options.body instanceof FormData)&&!headers.has("content-type"))headers.set("content-type","application/json");
     headers.set("accept","application/json");
+    if(String(path||"").startsWith("/api/platform/")&&!headers.has("authorization")){
+      const platformToken=readPlatformSessionToken();
+      if(platformToken)headers.set("authorization",`Bearer ${platformToken}`);
+    }
     const response=await fetch(`${apiBase}${path}`,{
       ...options,headers,credentials:"include",
       body:options.body==null||options.body instanceof FormData||typeof options.body==="string"?options.body:JSON.stringify(options.body)
@@ -142,10 +150,10 @@
     downloadReportPdf,
     deleteReportPdfObject,
 
-    platformSession:()=>request("/api/platform/session"),
-    platformLogin:(email,password,turnstileToken="")=>post("/api/platform/auth/login",{email,password,turnstileToken}),
-    platformCompleteMfa:(challengeToken,code)=>post("/api/platform/auth/mfa/complete",{challengeToken,code}),
-    platformLogout:()=>post("/api/platform/auth/logout"),
+    platformSession:async()=>{const result=await request("/api/platform/session");if(result?.authenticated!==true)clearPlatformSessionToken();return result;},
+    platformLogin:async(email,password,turnstileToken="")=>{clearPlatformSessionToken();return post("/api/platform/auth/login",{email,password,turnstileToken});},
+    platformCompleteMfa:async(challengeToken,code)=>{const result=await post("/api/platform/auth/mfa/complete",{challengeToken,code});if(result?.sessionToken)savePlatformSessionToken(result.sessionToken);return result;},
+    platformLogout:async()=>{try{return await post("/api/platform/auth/logout");}finally{clearPlatformSessionToken();}},
     platformOverview:()=>request("/api/platform/overview"),
     platformMfaFactors:()=>request("/api/platform/mfa/factors"),
     platformMfaEnroll:(friendlyName)=>post("/api/platform/mfa/enroll",{friendlyName}),

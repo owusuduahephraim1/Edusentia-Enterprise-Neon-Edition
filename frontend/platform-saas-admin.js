@@ -8,9 +8,16 @@ const cfg=window.EDS_MASTER_CONFIG||{};
 const state={view:"overview",model:null,session:null,mfaChallenge:"",pendingSession:null,turnstileToken:"",turnstileId:null,loading:false,packageModel:{templates:[],artifacts:[],reconciliation:[],signing_keys:[],signing_configured:false,signing_bootstrap_available:false}};
 function setMobileDrawer(open=false){
   const drawer=$("#paPlatformSidebar")||$(".pa-sidebar"),backdrop=$("#paMobileDrawerBackdrop"),button=$("#paMobileMenuButton"),active=Boolean(open);
-  drawer?.classList.toggle("pa-drawer-open",active);
-  backdrop?.classList.toggle("open",active);
-  document.body.classList.toggle("pa-mobile-drawer-open",active);
+  if(active){
+    drawer?.classList.add("pa-drawer-open");
+    backdrop?.classList.add("open");
+    document.body.classList.add("pa-mobile-drawer-open");
+  }else{
+    drawer?.classList.remove("pa-drawer-open");
+    backdrop?.classList.remove("open");
+    document.body.classList.remove("pa-mobile-drawer-open");
+  }
+  backdrop?.setAttribute("aria-hidden",active?"false":"true");
   button?.setAttribute("aria-expanded",active?"true":"false");
   button?.setAttribute("aria-label",active?"Close platform navigation":"Open platform navigation");
 }
@@ -70,6 +77,10 @@ function beginMfa(result){
 }
 async function enter(session){showConsole(session);setView(state.view);await load(true);}
 async function boot(){
+  try{
+    const savedView=String(sessionStorage.getItem("edusentia.platform.view.v1")||"");
+    if(titles[savedView])state.view=savedView;
+  }catch{}
   try{const session=await api().platformSession();if(session?.authenticated){await enter(session);return;}showAuth();}
   catch(e){showAuth();}
 }
@@ -80,10 +91,19 @@ async function load(force=false){
   finally{state.loading=false;}
 }
 function setView(view){
-  if(!titles[view])view="overview";state.view=view;
-  $$(".pa-nav [data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
+  if(!titles[view])view="overview";
+  state.view=view;
+  try{sessionStorage.setItem("edusentia.platform.view.v1",view);}catch{}
+  setMobileDrawer(false);
+  $(".pa-nav [data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
   const [title,subtitle]=titles[view];$("#paPageTitle").textContent=title;$("#paPageSubtitle").textContent=subtitle;
-  render();if(view==="packages")loadPackages().catch(e=>status(e?.message||"Package service could not be loaded.","error"));setMobileDrawer(false);
+  render();
+  if(view==="packages")loadPackages().catch(e=>status(e?.message||"Package service could not be loaded.","error"));
+  requestAnimationFrame(()=>{
+    const content=$("#paContent");
+    try{content?.focus({preventScroll:true});}catch{content?.focus();}
+    window.scrollTo({top:0,left:0,behavior:"auto"});
+  });
 }
 function pageHead(title,subtitle,actions=""){return `<div class="pa-page-head"><div><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div><div class="pa-actions">${actions}</div></div>`;}
 function empty(text){return `<div class="pa-empty">${esc(text)}</div>`;}
@@ -326,7 +346,12 @@ function wire(){
   $("#paMobileDrawerBackdrop")?.addEventListener("click",()=>setMobileDrawer(false));
   document.addEventListener("keydown",event=>{if(event.key==="Escape")setMobileDrawer(false);});
   window.addEventListener("resize",()=>{if(window.innerWidth>820)setMobileDrawer(false);},{passive:true});
-  $(".pa-nav [data-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
+  $("#paPlatformNav")?.addEventListener("click",event=>{
+    const button=event.target.closest("button[data-view]");
+    if(!button)return;
+    event.preventDefault();
+    setView(button.dataset.view);
+  });
   $("#paContent")?.addEventListener("click",action);$("#paModal")?.addEventListener("click",action);$("#paModal")?.addEventListener("close",()=>$("#paModalBody").innerHTML="");
 }
 wire();boot();

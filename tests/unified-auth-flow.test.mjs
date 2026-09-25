@@ -183,3 +183,33 @@ test("Shared public sign-in auto-routes Platform Super Administrator into the ma
   assert.match(routes,/authScope:"platform"/);
   assert.match(routes,/authScope:"tenant"/);
 });
+
+
+test("Platform session survives hosted-page transition and reload without a second sign-in",()=>{
+  const http=read("worker/src/http.ts");
+  const auth=read("worker/src/platform-auth.ts");
+  const routes=read("worker/src/platform-routes.ts");
+  const api=read("frontend/api-client.js");
+  const platformApi=read("frontend/platform-api-client.js");
+
+  assert.match(http,/access-control-allow-headers","content-type,x-request-id,x-csrf-token,authorization"/);
+  assert.match(auth,/authorization\.match\(\/\^Bearer\\s\+\(\.\+\)\$\/i\)/);
+  assert.match(auth,/platformRequestTokens\(request,env\)/);
+  assert.match(routes,/sessionToken:result\.token/);
+  assert.match(api,/edusentia\.platform\.session\.v1/);
+  assert.match(api,/headers\.set\("authorization",`Bearer \$\{platformToken\}`\)/);
+  assert.match(api,/savePlatformSessionToken\(result\.sessionToken\)/);
+  assert.match(platformApi,/edusentia\.platform\.session\.v1/);
+  assert.match(platformApi,/headers\.set\("authorization",`Bearer \$\{platformToken\}`\)/);
+});
+
+test("Platform mobile navigation closes the drawer and renders the selected section",()=>{
+  const js=read("frontend/platform-saas-admin.js");
+  assert.match(js,/drawer\?\.classList\.remove\("pa-drawer-open"\)/);
+  assert.match(js,/backdrop\?\.classList\.remove\("open"\)/);
+  assert.match(js,/sessionStorage\.setItem\("edusentia\.platform\.view\.v1",view\)/);
+  assert.match(js,/#paPlatformNav/);
+  assert.match(js,/event\.target\.closest\("button\[data-view\]"\)/);
+  assert.match(js,/setView\(button\.dataset\.view\)/);
+  assert.match(js,/window\.scrollTo\(\{top:0,left:0,behavior:"auto"\}\)/);
+});

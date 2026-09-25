@@ -134,7 +134,7 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
     const b=await readJson<any>(request);await verifyTurnstile(env,String(b.turnstileToken||""),request,"platform_login");return json(await platformLogin(env,b.email,b.password));
   }
   if(method==="POST"&&p==="/api/platform/auth/mfa/complete"){
-    const b=await readJson<any>(request),result=await completePlatformMfa(env,b.challengeToken,b.code);const r=json({...result.session,recoveryCodes:result.recoveryCodes});r.headers.append("set-cookie",setPlatformCookie(env,result.token));return r;
+    const b=await readJson<any>(request),result=await completePlatformMfa(env,b.challengeToken,b.code);const r=json({...result.session,recoveryCodes:result.recoveryCodes,sessionToken:result.token});r.headers.append("set-cookie",setPlatformCookie(env,result.token));return r;
   }
   if(method==="POST"&&p==="/api/platform/auth/logout"){
     await logoutPlatform(request,env);const r=json({ok:true});r.headers.append("set-cookie",clearPlatformCookie(env));return r;

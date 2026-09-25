@@ -86,22 +86,41 @@ export async function completePlatformMfa(env:Env,challengeTokenRaw:string,codeR
   return {token,recoveryCodes,session:{authenticated:true,user:{id:row.user_id,email:row.email,displayName:row.display_name},platform:{role:"platform_super_admin",roleLabel:"Platform Super Administrator"},session:{id:sessionId,assuranceLevel:2}}};
 }
 
+function platformRequestTokens(request:Request,env:Env){
+  const tokens:string[]=[];
+  const authorization=String(request.headers.get("authorization")||"").trim();
+  const bearer=authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()||"";
+  if(bearer)tokens.push(bearer);
+  const cookie=cookieValue(request,platformCookieName(env));
+  if(cookie&&!tokens.includes(cookie))tokens.push(cookie);
+  return tokens.slice(0,2);
+}
+
 export async function authenticatePlatform(request:Request,env:Env):Promise<PlatformSessionContext|null>{
-  const token=cookieValue(request,platformCookieName(env));if(!token)return null;
-  const hash=await sessionHash(env,token),sql=db(env);
-  const rows=await sql`
-    select s.id session_id,s.user_id,s.assurance_level,u.email,u.display_name,a.role
-      from platform.admin_sessions s
-      join authn.users u on u.id=s.user_id
-      join platform.admins a on a.user_id=s.user_id
-     where s.token_hash=${hash} and s.revoked_at is null and s.expires_at>now()
-       and u.disabled_at is null and a.active=true and a.role='platform_super_admin' and a.mfa_required=true and s.assurance_level>=2
-     limit 1`;
-  const row=rows[0] as any;if(!row)return null;
-  await sql`update platform.admin_sessions set last_seen_at=now() where id=${row.session_id}::uuid`;
-  return {sessionId:row.session_id,userId:row.user_id,role:"platform_super_admin",assuranceLevel:Number(row.assurance_level),email:row.email,displayName:row.display_name};
+  const tokens=platformRequestTokens(request,env);if(!tokens.length)return null;
+  const sql=db(env);
+  for(const token of tokens){
+    const hash=await sessionHash(env,token);
+    const rows=await sql`
+      select s.id session_id,s.user_id,s.assurance_level,u.email,u.display_name,a.role
+        from platform.admin_sessions s
+        join authn.users u on u.id=s.user_id
+        join platform.admins a on a.user_id=s.user_id
+       where s.token_hash=${hash} and s.revoked_at is null and s.expires_at>now()
+         and u.disabled_at is null and a.active=true and a.role='platform_super_admin' and a.mfa_required=true and s.assurance_level>=2
+       limit 1`;
+    const row=rows[0] as any;
+    if(!row)continue;
+    await sql`update platform.admin_sessions set last_seen_at=now() where id=${row.session_id}::uuid`;
+    return {sessionId:row.session_id,userId:row.user_id,role:"platform_super_admin",assuranceLevel:Number(row.assurance_level),email:row.email,displayName:row.display_name};
+  }
+  return null;
 }
 export async function logoutPlatform(request:Request,env:Env){
-  const token=cookieValue(request,platformCookieName(env));if(!token)return;
-  const hash=await sessionHash(env,token);await db(env)`update platform.admin_sessions set revoked_at=coalesce(revoked_at,now()) where token_hash=${hash}`;
+  const tokens=platformRequestTokens(request,env);if(!tokens.length)return;
+  const sql=db(env);
+  for(const token of tokens){
+    const hash=await sessionHash(env,token);
+    await sql`update platform.admin_sessions set revoked_at=coalesce(revoked_at,now()) where token_hash=${hash}`;
+  }
 }
