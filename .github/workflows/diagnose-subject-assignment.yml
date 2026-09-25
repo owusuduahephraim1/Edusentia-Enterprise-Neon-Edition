@@ -66,17 +66,6 @@ jobs:
             limit 20
           "
 
-          echo "=== academic configuration assignment ID JSON types ==="
-          psql "$TENANT_URL" -P pager=off -c "
-            with cfg as (select public.get_academic_configuration() j)
-            select
-              item->>'id' as id_text,
-              jsonb_typeof(item->'id') as id_json_type,
-              public.safe_uuid(item->>'id') as parsed_id
-            from cfg, lateral jsonb_array_elements(cfg.j->'class_subjects') item
-            limit 20
-          "
-
           echo "=== save_class_subject_assignments_batch definition checksum ==="
           psql "$TENANT_URL" -P pager=off -c "
             select md5(pg_get_functiondef('public.save_class_subject_assignments_batch(jsonb)'::regprocedure)) as function_md5
@@ -96,6 +85,20 @@ jobs:
           test -n "$CONTEXT_ROW"
           IFS='|' read -r TENANT_ID USER_ID ROLE <<< "$CONTEXT_ROW"
           echo "Context role: $ROLE"
+
+          echo "=== academic configuration assignment ID JSON types ==="
+          psql "$TENANT_URL" -v ON_ERROR_STOP=1 -v tenant_id="$TENANT_ID" -v user_id="$USER_ID" -v app_role="$ROLE" <<'SQL'
+          begin;
+          select app.set_request_context(:'tenant_id'::uuid,:'user_id'::uuid,:'app_role',2::smallint);
+          with cfg as (select public.get_academic_configuration() j)
+          select
+            item->>'id' as id_text,
+            jsonb_typeof(item->'id') as id_json_type,
+            public.safe_uuid(item->>'id') as parsed_id
+          from cfg, lateral jsonb_array_elements(cfg.j->'class_subjects') item
+          limit 20;
+          rollback;
+          SQL
 
           echo "=== rollback assignment edit probe ==="
           psql "$TENANT_URL" -v ON_ERROR_STOP=1             -v tenant_id="$TENANT_ID" -v user_id="$USER_ID" -v app_role="$ROLE" <<'SQL'
