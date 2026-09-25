@@ -13,8 +13,8 @@ jobs:
     name: Windows MSI and EXE
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: {node-version: '20'}
       - uses: dtolnay/rust-toolchain@stable
       - name: Test adaptive Windows shell
@@ -53,11 +53,11 @@ jobs:
       ANDROID_KEY_ALIAS: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEY_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with: {distribution: temurin, java-version: '17'}
       - uses: gradle/actions/setup-gradle@v4
-        with: {gradle-version: '8.9'}
+        with: {gradle-version: '8.11.1'}
       - name: Build installable APK
         shell: bash
         working-directory: native/android

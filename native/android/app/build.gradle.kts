@@ -8,11 +8,11 @@ val hasReleaseSigning = !releaseStore.isNullOrBlank() && !releaseStorePassword.i
 
 android {
   namespace = "app.edusentia.enterprise.neon"
-  compileSdk = 35
+  compileSdk = 36
   defaultConfig {
     applicationId = "app.edusentia.enterprise.neon"
     minSdk = 23
-    targetSdk = 35
+    targetSdk = 36
     versionCode = 704001
     versionName = "7.4.0-neon-r42"
   }
@@ -35,4 +35,5 @@ android {
 }
 
 dependencies {
+  implementation("com.google.android.play:app-update:2.1.0")
 }

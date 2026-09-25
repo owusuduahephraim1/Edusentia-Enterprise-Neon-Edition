@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Edusentia Enterprise Neon Edition",
+  "version": "__VERSION__",
+  "identifier": "app.edusentia.enterprise.neon",
+  "build": {
+    "frontendDist": "../shell"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Edusentia Enterprise Neon Edition",
+        "url": "https://owusuduahephraim1.github.io/Edusentia-Enterprise-Neon-Edition/",
+        "width": 1200,
+        "height": 760,
+        "minWidth": 760,
+        "minHeight": 520,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "msi",
+      "nsis"
+    ],
+    "publisher": "Ephraim Owusu-Duah",
+    "shortDescription": "Edusentia Enterprise Neon school operations",
+    "longDescription": "Edusentia Enterprise Neon Edition school administration and academic operations platform.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "__TAURI_UPDATER_PUBLIC_KEY__",
+      "endpoints": [
+        "https://github.com/owusuduahephraim1/Edusentia-Enterprise-Neon-Edition/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

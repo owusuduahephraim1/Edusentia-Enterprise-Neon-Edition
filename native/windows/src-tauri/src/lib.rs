@@ -1,4 +1,5 @@
 use tauri::{LogicalPosition, LogicalSize, Manager};
+use tauri_plugin_updater::UpdaterExt;
 
 const PREFERRED_DESKTOP_ZOOM: f64 = 0.67;
 const MIN_SAFE_ZOOM: f64 = 0.55;
@@ -102,10 +103,44 @@ mod tests {
     }
 }
 
+fn configure_native_updater(app: &tauri::App) -> tauri::Result<()> {
+    if option_env!("EDUSENTIA_NEON_ENABLE_NATIVE_UPDATER") != Some("1") {
+        return Ok(());
+    }
+
+    app.handle()
+        .plugin(tauri_plugin_updater::Builder::new().build())?;
+
+    let handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        let updater = match handle.updater() {
+            Ok(updater) => updater,
+            Err(error) => {
+                eprintln!("native_updater_unavailable: {error}");
+                return;
+            }
+        };
+
+        match updater.check().await {
+            Ok(Some(update)) => {
+                let target_version = update.version.clone();
+                if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
+                    eprintln!("native_update_failed version={target_version}: {error}");
+                }
+            }
+            Ok(None) => {}
+            Err(error) => eprintln!("native_update_check_failed: {error}"),
+        }
+    });
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            configure_native_updater(app)?;
             if let Some(window) = app.get_webview_window("main") {
                 // Sizing and workspace zoom are best-effort. The conservative
                 // tauri.conf fallback still opens correctly if an API is unavailable.

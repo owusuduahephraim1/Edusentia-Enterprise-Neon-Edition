@@ -24,3 +24,10 @@ The installer uses Microsoft WebView2. Hosted application updates continue throu
 ## Signing
 
 Unsigned MSI/EXE packages are suitable for internal installation/testing but Windows may show a SmartScreen warning. For public distribution, sign the executable and installers with a long-lived Authenticode certificate and preserve that identity for future updates.
+
+
+## Automatic native-shell updates
+
+Production-signed Windows releases use the Tauri v2 updater. A release build checks the repository's latest `latest.json`, verifies the downloaded installer with the permanent Tauri updater public key, downloads the update, and installs it in passive mode. The private updater key never belongs in the repository.
+
+The first updater-enabled build must be installed once. After that, later signed native Windows releases can update the installed application automatically.

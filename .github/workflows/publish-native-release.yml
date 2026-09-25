@@ -1,0 +1,191 @@
+name: Publish Signed Neon Native Release
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - '.github/workflows/publish-native-release.yml'
+permissions:
+  contents: write
+
+jobs:
+  signing-readiness:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.detect.outputs.ready }}
+    env:
+      TAURI_PRIVATE: ${{ secrets.EDUSENTIA_NEON_TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_PASSWORD: ${{ secrets.EDUSENTIA_NEON_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_PUBLIC: ${{ secrets.EDUSENTIA_NEON_TAURI_UPDATER_PUBLIC_KEY }}
+      ANDROID_STORE: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_ALIAS: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEY_PASSWORD }}
+    steps:
+      - id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=true
+          for name in TAURI_PRIVATE TAURI_PASSWORD TAURI_PUBLIC ANDROID_STORE ANDROID_STORE_PASSWORD ANDROID_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then ready=false; fi
+          done
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != true ]; then
+            echo "Permanent native signing identities are not fully configured. Signed publication is intentionally skipped."
+          fi
+
+  windows:
+    needs: signing-readiness
+    if: needs.signing-readiness.outputs.ready == 'true'
+    runs-on: windows-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.EDUSENTIA_NEON_TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.EDUSENTIA_NEON_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.EDUSENTIA_NEON_TAURI_UPDATER_PUBLIC_KEY }}
+      EDUSENTIA_NEON_ENABLE_NATIVE_UPDATER: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: {node-version: '22'}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Prepare signed updater release identity
+        shell: pwsh
+        run: |
+          $version = "7.4.$env:GITHUB_RUN_NUMBER"
+          "NATIVE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $cargo = Get-Content native/windows/src-tauri/Cargo.toml -Raw
+          $cargo = [regex]::Replace($cargo, '(?m)^version = "[^"]+"$', ('version = "' + $version + '"'), 1)
+          Set-Content native/windows/src-tauri/Cargo.toml $cargo -Encoding utf8
+          $pkg = Get-Content native/windows/package.json -Raw | ConvertFrom-Json
+          $pkg.version = $version
+          $pkg | ConvertTo-Json -Depth 20 | Set-Content native/windows/package.json -Encoding utf8
+          $cfg = Get-Content native/windows/src-tauri/tauri.release.template.json -Raw | ConvertFrom-Json
+          $cfg.version = $version
+          $cfg.plugins.updater.pubkey = $env:TAURI_UPDATER_PUBLIC_KEY
+          $cfg | ConvertTo-Json -Depth 30 | Set-Content native/windows/src-tauri/tauri.conf.json -Encoding utf8
+      - name: Test and build signed Windows updater artifacts
+        working-directory: native/windows
+        shell: pwsh
+        run: |
+          npm install
+          Push-Location src-tauri
+          cargo test --lib
+          Pop-Location
+          npm run build
+      - name: Stage Windows release and updater manifest
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem native/windows/src-tauri/target/release/bundle/nsis -Filter *.exe -File | Select-Object -First 1
+          $msi = Get-ChildItem native/windows/src-tauri/target/release/bundle/msi -Filter *.msi -File | Select-Object -First 1
+          if (!$exe -or !$msi) { throw "Signed Windows installer outputs are missing." }
+          $exeSig = Get-Item ($exe.FullName + ".sig")
+          $msiSig = Get-Item ($msi.FullName + ".sig")
+          New-Item -ItemType Directory -Force release-assets/windows | Out-Null
+          Copy-Item $exe.FullName release-assets/windows/Edusentia-Enterprise-Neon-Setup-x64.exe
+          Copy-Item $exeSig.FullName release-assets/windows/Edusentia-Enterprise-Neon-Setup-x64.exe.sig
+          Copy-Item $msi.FullName release-assets/windows/Edusentia-Enterprise-Neon-Windows-x64.msi
+          Copy-Item $msiSig.FullName release-assets/windows/Edusentia-Enterprise-Neon-Windows-x64.msi.sig
+          $sig = (Get-Content $exeSig.FullName -Raw).Trim()
+          $tag = "native-v$env:NATIVE_VERSION"
+          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/Edusentia-Enterprise-Neon-Setup-x64.exe"
+          $manifest = @{
+            version = $env:NATIVE_VERSION
+            notes = "Automatic Edusentia Enterprise Neon Edition native-shell update."
+            pub_date = (Get-Date).ToUniversalTime().ToString("o")
+            platforms = @{
+              "windows-x86_64" = @{ signature = $sig; url = $url }
+              "windows-x86_64-nsis" = @{ signature = $sig; url = $url }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content release-assets/windows/latest.json -Encoding utf8
+          $items = Get-ChildItem release-assets/windows -File
+          $lines = foreach ($item in $items) {
+            $hash=(Get-FileHash $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($item.Name)"
+          }
+          $lines | Set-Content -Encoding ascii release-assets/windows/SHA256SUMS-WINDOWS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-neon-windows
+          if-no-files-found: error
+          path: release-assets/windows/*
+
+  android:
+    needs: signing-readiness
+    if: needs.signing-readiness.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.EDUSENTIA_NEON_ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.11.1'}
+      - name: Prepare permanent Android release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="7.4.$GITHUB_RUN_NUMBER"
+          VERSION_CODE=$((704000 + GITHUB_RUN_NUMBER))
+          echo "NATIVE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          sed -i -E "s/versionCode = [0-9]+/versionCode = $VERSION_CODE/" native/android/app/build.gradle.kts
+          sed -i -E "s/versionName = \"[^\"]+\"/versionName = \"$VERSION\"/" native/android/app/build.gradle.kts
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/edusentia-neon-release.jks"
+          echo "EDUSENTIA_NEON_ANDROID_KEYSTORE=$RUNNER_TEMP/edusentia-neon-release.jks" >> "$GITHUB_ENV"
+          echo "EDUSENTIA_NEON_ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "EDUSENTIA_NEON_ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "EDUSENTIA_NEON_ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Build signed APK and Play AAB
+        working-directory: native/android
+        run: gradle :app:assembleRelease :app:bundleRelease
+      - name: Verify and stage Android release
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find native/android/app/build/outputs/apk/release -type f -name '*.apk' -print -quit)
+          AAB=$(find native/android/app/build/outputs/bundle/release -type f -name '*.aab' -print -quit)
+          test -n "$APK" && test -f "$APK"
+          test -n "$AAB" && test -f "$AAB"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          jarsigner -verify -strict "$AAB"
+          mkdir -p release-assets/android
+          cp "$APK" release-assets/android/Edusentia-Enterprise-Neon-Android.apk
+          cp "$AAB" release-assets/android/Edusentia-Enterprise-Neon-Android.aab
+          (cd release-assets/android && sha256sum *.apk *.aab > SHA256SUMS-ANDROID.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-neon-android
+          if-no-files-found: error
+          path: release-assets/android/*
+
+  publish:
+    needs: [signing-readiness, windows, android]
+    if: needs.signing-readiness.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: signed-neon-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish immutable signed native release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="7.4.$GITHUB_RUN_NUMBER"
+          TAG="native-v$VERSION"
+          test -f release-assets/latest.json
+          test -f release-assets/Edusentia-Enterprise-Neon-Setup-x64.exe
+          test -f release-assets/Edusentia-Enterprise-Neon-Windows-x64.msi
+          test -f release-assets/Edusentia-Enterprise-Neon-Android.apk
+          test -f release-assets/Edusentia-Enterprise-Neon-Android.aab
+          gh release create "$TAG" release-assets/*             --repo "$GITHUB_REPOSITORY"             --title "Edusentia Enterprise Neon Native $VERSION"             --notes "Signed native release. Windows clients use the cryptographically verified Tauri updater. Android Play installations use Google Play in-app updates; the signed APK remains available for managed/direct distribution."             --latest

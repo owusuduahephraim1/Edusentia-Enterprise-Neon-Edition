@@ -18,18 +18,29 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import com.google.android.play.core.appupdate.AppUpdateInfo;
+import com.google.android.play.core.appupdate.AppUpdateManager;
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory;
+import com.google.android.play.core.appupdate.AppUpdateOptions;
+import com.google.android.play.core.install.model.AppUpdateType;
+import com.google.android.play.core.install.model.UpdateAvailability;
+
 import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final String HOME_URL = "https://owusuduahephraim1.github.io/Edusentia-Enterprise-Neon-Edition/";
     private static final int FILE_CHOOSER_REQUEST = 6040;
+    private static final int PLAY_UPDATE_REQUEST = 6050;
 
     private WebView webView;
+    private AppUpdateManager appUpdateManager;
     private ValueCallback<Uri[]> filePathCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        appUpdateManager = AppUpdateManagerFactory.create(this);
+        checkForPlayUpdate();
 
         getWindow().setStatusBarColor(Color.rgb(7, 40, 99));
         getWindow().setNavigationBarColor(Color.rgb(7, 40, 99));
@@ -135,6 +146,47 @@ public class MainActivity extends Activity {
                 }
             }
         });
+    }
+
+    private void checkForPlayUpdate() {
+        if (appUpdateManager == null) return;
+        appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
+            if (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                    && info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) {
+                startImmediatePlayUpdate(info);
+            }
+        }).addOnFailureListener(error -> {
+            // Sideloaded/internal APKs are allowed to continue normally.
+        });
+    }
+
+    private void resumePlayUpdateIfNeeded() {
+        if (appUpdateManager == null) return;
+        appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
+            if (info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) {
+                startImmediatePlayUpdate(info);
+            }
+        }).addOnFailureListener(error -> {
+            // Google Play update APIs are unavailable for non-Play installs.
+        });
+    }
+
+    private void startImmediatePlayUpdate(AppUpdateInfo info) {
+        try {
+            appUpdateManager.startUpdateFlowForResult(
+                    info,
+                    this,
+                    AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
+                    PLAY_UPDATE_REQUEST);
+        } catch (Exception ignored) {
+            // The hosted Neon application still remains available if the native update flow cannot start.
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumePlayUpdateIfNeeded();
     }
 
     private boolean handleNavigation(Uri uri) {
