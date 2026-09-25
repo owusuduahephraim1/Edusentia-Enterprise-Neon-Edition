@@ -58,7 +58,7 @@ test("0061 is installed and verified for future and existing tenants",()=>{
   assert.match(upgrade,/0063_identity_user_bundle_runtime_grants/);
   assert.match(upgrade,/0062_user_directory_role_workspace_parity/);
   assert.match(upgrade,/0061_discovered_operational_parity_repairs/);
-  assert.match(upgrade,/migration_count" = "47/);
+  assert.match(upgrade,/migration_count" = "48/);
   assert.match(template,/operational_repairs_ok/);
 });
 

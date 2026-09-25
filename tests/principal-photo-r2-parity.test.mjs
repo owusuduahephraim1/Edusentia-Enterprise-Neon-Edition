@@ -49,6 +49,6 @@ test("Principal photo contract is reconciled for future and existing tenants",()
   const template=read("database/tenant-template/install.sh");
   assert.match(install,/reconcile_once_recorded "0060_principal_photo_r2_contract"/);
   assert.match(upgrade,/0060_principal_photo_r2_contract/);
-  assert.match(upgrade,/migration_count" = "47/);
+  assert.match(upgrade,/migration_count" = "48/);
   assert.match(template,/principal_photo_contract_ok/);
 });
