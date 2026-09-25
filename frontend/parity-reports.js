@@ -3,6 +3,77 @@
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,certifiedAllRows,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
   const shellState=()=>window.EdusentiaShell?.state||{};
+
+  // ---------- Report-card student-photo parity ----------
+  const reportStudentPhotoUrls=new Map();
+  function reportStudentInitials(student={}){
+    const words=String(student.full_name||[student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" ")||"Student").trim().split(/\s+/).filter(Boolean);
+    return ((words[0]?.[0]||"S")+(words.length>1?(words.at(-1)?.[0]||""):"")).toUpperCase();
+  }
+  async function reportStudentPhotoUrl(student={}){
+    const id=String(student.id||"").trim(),path=String(student.photo_url||"").trim();
+    if(!id||!path)return "";
+    const key=id+"|"+path;
+    if(reportStudentPhotoUrls.has(key))return reportStudentPhotoUrls.get(key);
+    const blob=await api().downloadStudentPhoto(id,path);
+    const url=URL.createObjectURL(blob);
+    reportStudentPhotoUrls.set(key,url);
+    return url;
+  }
+  async function hydrateReportStudentPhoto(student={}){
+    const img=byId("reportStudentPhoto");if(!img||!student.photo_url)return;
+    try{img.src=await reportStudentPhotoUrl(student);img.onload=()=>img.parentElement?.classList.add("loaded");}
+    catch(error){console.warn("report_student_photo_display_failed",error);}
+  }
+  function blobDataUrl(blob){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(String(reader.result||""));
+      reader.onerror=()=>reject(reader.error||new Error("The photograph could not be prepared for printing."));
+      reader.readAsDataURL(blob);
+    });
+  }
+  async function reportStudentPhotoDataUrl(student={}){
+    const id=String(student.id||"").trim(),path=String(student.photo_url||"").trim();
+    if(!id||!path)return "";
+    try{return await blobDataUrl(await api().downloadStudentPhoto(id,path));}
+    catch(error){console.warn("report_student_photo_print_failed",error);return "";}
+  }
+  function printableReportHtml(editor,photoData=""){
+    const report=editor?.report||{},student=editor?.student||{},subjects=Array.isArray(editor?.subjects)?editor.subjects:[],school=window.EdusentiaShell?.state?.boot?.tenant||window.EdusentiaShell?.state?.boot?.school||{};
+    const studentName=student.full_name||[student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" ")||"Student";
+    const reportNumber=report.report_number||"";
+    const subjectRows=subjects.map((subject,index)=>`<tr><td>${index+1}</td><td>${esc(subject.subject_name||subject.name||"Subject")}</td><td>${esc(subject.total_score??"")}</td><td>${esc(subject.grade||"")}</td><td>${esc(subject.remark||"")}</td></tr>`).join("");
+    const photo=photoData
+      ?`<img src="${photoData}" alt="Student photograph">`
+      :'<span>STUDENT<br>PHOTO</span>';
+    const average=subjects.length?(subjects.reduce((sum,item)=>sum+Number(item.total_score||0),0)/subjects.length).toFixed(1):"";
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(reportNumber||studentName)} Report Card</title><style>
+      @page{size:A4;margin:10mm}*{box-sizing:border-box}body{margin:0;color:#17233b;font:10.5pt Arial,Helvetica,sans-serif;background:#fff}.actions{margin:0 0 12px}.actions button{padding:9px 14px;border:0;border-radius:7px;background:#123a79;color:#fff;font-weight:700;cursor:pointer}.sheet{max-width:190mm;margin:auto;border:1px solid #cbd5e1}.head{min-height:37mm;background:#123a79;color:#fff;padding:8mm 7mm;display:grid;grid-template-columns:1fr 31mm;gap:7mm;align-items:center}.school h1{font-size:18pt;margin:0 0 3px;text-transform:uppercase}.school h2{font-size:11pt;margin:0;font-weight:600}.photo{height:34mm;width:28mm;border:2px solid rgba(255,255,255,.9);background:#fff;color:#64748b;display:flex;align-items:center;justify-content:center;text-align:center;font-size:8pt;overflow:hidden}.photo img{width:100%;height:100%;object-fit:cover;object-position:center 20%}.body{padding:6mm}.meta{display:grid;grid-template-columns:2fr 1fr 1fr;gap:3mm 5mm;margin-bottom:5mm}.meta div{border-bottom:1px solid #94a3b8;padding:2mm 0}.meta b{display:block;font-size:7.8pt;text-transform:uppercase;color:#64748b;margin-bottom:1mm}table{width:100%;border-collapse:collapse;margin:3mm 0 5mm}th,td{border:1px solid #94a3b8;padding:2.2mm 2mm}th{background:#eef4fb;text-transform:uppercase;font-size:8pt;text-align:left}td:nth-child(1),td:nth-child(3),td:nth-child(4){text-align:center}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin:4mm 0}.summary div,.comments section{border:1px solid #cbd5e1;padding:3mm}.summary b{display:block;font-size:8pt;color:#64748b;text-transform:uppercase}.summary strong{font-size:13pt}.comments{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.comments section{min-height:28mm}.comments h3{font-size:9pt;margin:0 0 2mm;text-transform:uppercase;color:#123a79}.footer{margin-top:5mm;border-top:1px solid #cbd5e1;padding-top:3mm;display:flex;justify-content:space-between;color:#64748b;font-size:8pt}@media print{.actions{display:none}.sheet{border:0;max-width:none}}</style></head><body>
+      <div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div>
+      <article class="sheet"><header class="head"><div class="school"><h1>${esc(school.name||"School")}</h1><h2>Student Terminal Report</h2></div><div class="photo">${photo}</div></header><main class="body">
+      <section class="meta"><div><b>Student</b>${esc(studentName)}</div><div><b>Admission No.</b>${esc(student.admission_no||"—")}</div><div><b>Report No.</b>${esc(reportNumber||"—")}</div><div><b>Class</b>${esc(student.class_name||"—")}</div><div><b>Academic Year</b>${esc(student.academic_year_name||"—")}</div><div><b>Term</b>${esc(student.term_name||"—")}</div></section>
+      <table><thead><tr><th>#</th><th>Subject</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>${subjectRows||'<tr><td colspan="5">No subject results available.</td></tr>'}</tbody></table>
+      <section class="summary"><div><b>Average</b><strong>${average?average+"%":"—"}</strong></div><div><b>Days present</b><strong>${esc(report.days_present??"—")}</strong></div><div><b>Days school opened</b><strong>${esc(report.days_school_opened??"—")}</strong></div></section>
+      <section class="comments"><section><h3>Class Teacher Comment</h3>${esc(report.teacher_comment||"")}</section><section><h3>Principal Comment</h3>${esc(report.head_comment||"")}</section><section><h3>Conduct</h3>${esc(report.conduct||"")}</section><section><h3>Attitude / Interest</h3>${esc([report.attitude,report.interest].filter(Boolean).join(" • "))}</section></section>
+      <footer class="footer"><span>Status: ${esc(String(report.status||"draft").replaceAll("_"," "))}</span><span>Generated from the current protected school record</span></footer>
+      </main></article></body></html>`;
+  }
+  async function openPrintableReport(editor){
+    const popup=window.open("","_blank");
+    if(!popup){window.EdusentiaNotify?.("Report preview blocked","Allow pop-ups for this school workspace and try again.","warning");return;}
+    popup.document.write("<!doctype html><title>Preparing report</title><p style='font:16px Arial;padding:30px'>Preparing the latest report and protected student photograph…</p>");
+    try{
+      const reportId=editor?.report?.id;
+      const current=reportId?await certified("get_report_editor",{target_report_id:reportId,target_enrollment_id:null,target_term_id:null}):editor;
+      const photoData=await reportStudentPhotoDataUrl(current?.student||{});
+      popup.document.open();popup.document.write(printableReportHtml(current,photoData));popup.document.close();
+    }catch(error){
+      popup.close();
+      showMessage("reportEditorMessage",friendly(error));
+    }
+  }
+
   // ---------- Reports ----------
   let reportConfig=null,reportPage=1;
   async function renderReports(){
@@ -105,7 +176,8 @@
   function renderReportEditor(editor){
     const box=byId("reportWorkspace");if(!box)return;
     const report=editor?.report||{},student=editor?.student||{},subjects=Array.isArray(editor?.subjects)?editor.subjects:[],publication=(editor?.publications||[]).find(p=>!p.revoked_at);
-    box.innerHTML=`<div class="panel-header"><div><h3>${esc(student.full_name||"Student report")}</h3><p>${esc(student.admission_no||"")} • ${esc(student.class_name||"")} • ${esc(student.term_name||"")} • ${status(report.status||"draft")}</p></div><div class="page-actions">${report.id?'<button id="reportRefresh" class="button ghost small" type="button">Refresh</button>':""}${publication?'<button id="reportPdfDownload" class="button secondary small" type="button">Download PDF</button>':""}${report.id&&report.status==="published"?'<button id="reportPdfUpload" class="button secondary small" type="button">Upload official PDF</button>':""}</div></div>
+    const reportPhoto=student.photo_url?`<span class="staff-avatar-photo"><img id="reportStudentPhoto" alt="Student photograph"><span>${esc(reportStudentInitials(student))}</span></span>`:`<span class="avatar">${esc(reportStudentInitials(student))}</span>`;
+    box.innerHTML=`<div class="panel-header"><div class="cell-main">${reportPhoto}<span class="cell-copy"><h3>${esc(student.full_name||"Student report")}</h3><p>${esc(student.admission_no||"")} • ${esc(student.class_name||"")} • ${esc(student.term_name||"")} • ${status(report.status||"draft")}</p></span></div><div class="page-actions">${report.id?'<button id="reportRefresh" class="button ghost small" type="button">Refresh</button><button id="reportPrintLatest" class="button outline small" type="button">Print / Save PDF</button>':""}${publication?'<button id="reportPdfDownload" class="button secondary small" type="button">Download official PDF</button>':""}${report.id&&report.status==="published"?'<button id="reportPdfUpload" class="button secondary small" type="button">Upload official PDF</button>':""}</div></div>
       <div class="panel-body"><form id="reportEditorForm" class="form-stack"><div class="form-grid">
         <label class="field"><span>Days school opened</span><input name="days_school_opened" type="number" min="0" value="${esc(report.days_school_opened||0)}" ${editor.can_edit_fields?"":"disabled"}></label>
         <label class="field"><span>Days present</span><input name="days_present" type="number" min="0" value="${esc(report.days_present||0)}" ${editor.can_edit_fields?"":"disabled"}></label>
@@ -126,7 +198,9 @@
     };
     byId("reportEditorForm").onsubmit=async e=>{e.preventDefault();const button=byId("reportSaveAdvanced");if(button)button.disabled=true;try{const saved=await certified("save_report_card",{payload:collect(),expected_version:Number(report.version||0)});renderReportEditor(saved);}catch(error){showMessage("reportEditorMessage",friendly(error));}finally{if(button)button.disabled=false;}};
     box.querySelectorAll(".report-transition").forEach(button=>button.onclick=async()=>{button.disabled=true;try{const updated=await certified("transition_report_status",{target_report_id:report.id,target_status:button.dataset.transition,comment_text:"Workflow transition from Neon testing workspace",expected_version:Number(report.version||0)});renderReportEditor(updated);}catch(error){showMessage("reportEditorMessage",friendly(error));}finally{button.disabled=false;}});
+    hydrateReportStudentPhoto(student);
     byId("reportRefresh")?.addEventListener("click",()=>openReportEditor(report.id,null,null));
+    byId("reportPrintLatest")?.addEventListener("click",()=>openPrintableReport(editor));
     byId("reportDeleteDraft")?.addEventListener("click",async()=>{if(!await window.EdusentiaConfirm("Permanently delete this never-approved draft report?"))return;try{await certified("delete_report_card_permanently",{target_report_id:report.id,reason_text:"Draft report deleted from Neon testing workspace"});byId("reportWorkspace").innerHTML=empty("Draft report deleted.");}catch(error){showMessage("reportEditorMessage",friendly(error));}});
     byId("reportPdfDownload")?.addEventListener("click",async()=>{try{downloadBlob(`${safeName(report.report_number||"report")}.pdf`,await api().downloadReportPdf(report.id));}catch(error){showMessage("reportEditorMessage",friendly(error));}});
     byId("reportPdfUpload")?.addEventListener("click",()=>openReportPdfUpload(report,editor));
