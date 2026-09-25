@@ -135,6 +135,16 @@ SQL
   ")"
   test "$migration_count" = "48"
 
+  grading_scale_contract_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='grading_scales' and column_name='interpretation'
+        and is_nullable='NO'
+    )
+    and position('interpretation' in pg_get_functiondef('public.save_grading_scale(jsonb)'::regprocedure))>0
+  ")"
+  test "$grading_scale_contract_ok" = "t"
+
   user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
     select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
       and to_regclass('public.students_profile_id_uidx') is not null
