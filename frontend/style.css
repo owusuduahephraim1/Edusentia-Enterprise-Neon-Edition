@@ -1089,3 +1089,5 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   #auditRows .table-wrap,
   .modal-body .table-wrap{max-height:46vh}
 }
+
+.auth-developer-credit{display:block;margin-top:10px;text-align:center;color:#6b7f99;font-size:12px;font-weight:700;letter-spacing:.015em}

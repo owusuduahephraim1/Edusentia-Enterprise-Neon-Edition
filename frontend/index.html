@@ -3,7 +3,7 @@
   <!-- System Administrator blueprint parity release v13: bounded lists and permanent audit reset controls. -->
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#072863"><meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer">
-<title>Edusentia Enterprise Neon Edition</title>
+<title>Edusentia Enterprise™ Neon Edition</title>
 <link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" as="image" href="assets/loader-education-bg.svg" fetchpriority="high">
@@ -26,7 +26,7 @@
   <aside class="auth-journey" aria-labelledby="authJourneyTitle"><p id="authJourneyTitle" class="auth-journey-heading">From operations to outcomes</p><ol><li><span class="auth-journey-icon" aria-hidden="true">▦</span><strong>Manage</strong></li><li><span class="auth-journey-icon" aria-hidden="true">◇</span><strong>Teach</strong></li><li><span class="auth-journey-icon" aria-hidden="true">✓</span><strong>Assess</strong></li><li><span class="auth-journey-icon" aria-hidden="true">▥</span><strong>Report</strong></li></ol></aside>
   <aside class="auth-story" aria-labelledby="authStoryTitle"><p class="auth-story-kicker">The Edusentia promise</p><h2 id="authStoryTitle">Education, Intelligently Connected.</h2><p class="auth-story-summary">One secure platform connecting school operations, educators, learners, families, and better decisions.</p></aside>
   <section class="auth-card">
-    <div class="brand-lockup"><img id="authBrandLogo" src="assets/edusentia-mark.svg" alt="Edusentia"><div><h1 id="authBrandName">Edusentia</h1><p id="authBrandTagline">The Academic Operations Platform</p></div></div>
+    <div class="brand-lockup"><img id="authBrandLogo" src="assets/edusentia-mark.svg" alt="Edusentia"><div><h1 id="authBrandName">Edusentia™</h1><p id="authBrandTagline">The Academic Operations Platform</p></div></div>
     <form id="loginForm" class="form-stack">
       <input id="tenantCode" name="tenantCode" type="hidden">
       <label id="tenantCodeField" class="field hidden" for="tenantCodeFallback"><span>School / institution code</span><input id="tenantCodeFallback" autocomplete="organization" inputmode="text"></label>
@@ -36,7 +36,7 @@
       <button class="button primary full" type="submit">Sign in</button>
       <button id="forgotPasswordButton" class="auth-link-button" type="button">Forgot password?</button>
       <button id="registerSchoolButton" class="button ghost full auth-register-button" type="button">Register new school</button>
-      <nav class="auth-footer-links" aria-label="Edusentia information"><a href="./about.html">About</a><a href="./support.html">Support</a><a href="./privacy.html">Privacy</a><a href="./terms.html">Terms</a></nav>
+      <nav class="auth-footer-links" aria-label="Edusentia information"><a href="./about.html">About</a><a href="./support.html">Support</a><a href="./privacy.html">Privacy</a><a href="./terms.html">Terms</a></nav><small class="auth-developer-credit">Developed by Nana K IT Solutions Consult</small>
     </form>
     <section id="mfaPanel" class="hidden" aria-labelledby="mfaTitle"><h2 id="mfaTitle">Two-step verification</h2><p id="mfaHelp" class="muted"></p><div id="mfaSetup" class="mfa-setup hidden"><p>Add this account to your authenticator app using the setup key:</p><code id="mfaSecret"></code><p class="auth-note">Use a time-based (TOTP), 6-digit, 30-second account.</p></div><form id="mfaForm" class="form-stack"><label class="field" for="mfaCode"><span>Authenticator or recovery code</span><input id="mfaCode" name="mfaCode" autocomplete="one-time-code" inputmode="numeric" required></label><button class="button primary full" type="submit">Verify and continue</button><button id="mfaBack" class="button ghost full" type="button">Back to sign in</button></form></section>
     <section id="recoveryPanel" class="hidden" aria-labelledby="recoveryTitle"><h2 id="recoveryTitle">Save your recovery codes</h2><p class="muted">Store these one-time codes somewhere secure. They will not be shown again.</p><pre id="recoveryCodes" class="recovery-codes"></pre><button id="recoveryContinue" class="button primary full" type="button">I saved these codes</button></section>
@@ -45,7 +45,7 @@
 </main>
 
 <div id="appShell" class="app-shell hidden">
-  <aside id="sidebar" class="sidebar"><div class="sidebar-brand"><img id="brandLogo" data-school-logo src="assets/school-logo.png" alt="School logo"><div><strong id="brandName">Edusentia Enterprise</strong><small id="brandSubtitle">Academic Service</small></div></div><nav id="mainNav" class="nav-list" aria-label="Primary"></nav><div class="sidebar-foot"><div class="profile-chip"><span id="userAvatar" class="avatar">E</span><span class="profile-copy"><strong id="userName">User</strong><small id="userRole">Member</small></span><button id="logoutButton" class="icon-button inverse" type="button" aria-label="Sign out">↪</button></div></div></aside>
+  <aside id="sidebar" class="sidebar"><div class="sidebar-brand"><img id="brandLogo" data-school-logo src="assets/school-logo.png" alt="School logo"><div><strong id="brandName">Edusentia Enterprise™</strong><small id="brandSubtitle">Academic Service</small></div></div><nav id="mainNav" class="nav-list" aria-label="Primary"></nav><div class="sidebar-foot"><div class="profile-chip"><span id="userAvatar" class="avatar">E</span><span class="profile-copy"><strong id="userName">User</strong><small id="userRole">Member</small></span><button id="logoutButton" class="icon-button inverse" type="button" aria-label="Sign out">↪</button></div></div></aside>
   <section class="workspace"><header class="topbar"><div class="topbar-title"><button id="menuButton" class="icon-button mobile" type="button" aria-label="Open menu">☰</button><div><h2 id="pageTitle">Dashboard</h2><p id="pageSubtitle">Academic performance overview</p></div></div><div class="topbar-actions"><button id="notificationButton" class="icon-button badge-button" type="button" aria-label="Notifications"><span aria-hidden="true">◆</span><b id="notificationBadge" class="badge hidden">0</b></button><div id="syncIndicator" class="sync-pill pending"><span class="sync-dot"></span><span id="syncLabel">Connecting</span></div><button id="refreshButton" class="icon-button" type="button" aria-label="Refresh">↻</button></div></header><main id="content" class="content" tabindex="-1"></main></section>
 </div>
 
