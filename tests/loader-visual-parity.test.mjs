@@ -4,7 +4,7 @@ import fs from "node:fs";
 
 const read=file=>fs.readFileSync(file,"utf8");
 
-test("startup loader follows the Supabase-like centered layout with Windows-style dot motion",()=>{
+test("startup loader uses the current Windows 11 solid donut progress indicator",()=>{
   const index=read("frontend/index.html");
   const css=read("frontend/style.css");
   const sw=read("frontend/service-worker.js");
@@ -12,16 +12,17 @@ test("startup loader follows the Supabase-like centered layout with Windows-styl
 
   assert.match(index,/rel="preload" as="image" href="assets\/loader-education-bg\.svg"/);
   assert.match(index,/class="loader-content"/);
-  assert.match(index,/class="windows-loader-spinner"/);
-  assert.match(index,/<i><\/i><i><\/i><i><\/i><i><\/i><i><\/i><i><\/i>/);
-  assert.doesNotMatch(index,/class="loader-orbit"/);
-  assert.doesNotMatch(index,/Preparing your connected school workspace/);
+  assert.match(index,/class="windows11-progress-ring"/);
+  assert.match(index,/<circle cx="22" cy="22" r="17"><\/circle>/);
+  assert.doesNotMatch(index,/windows-loader-spinner/);
+  assert.doesNotMatch(index,/<i><\/i><i><\/i>/);
 
   assert.match(css,/\.loader-screen img\{width:118px;height:118px/);
-  assert.match(css,/\.windows-loader-spinner\{[^}]*width:40px;height:40px/);
-  assert.match(css,/\.windows-loader-spinner i\{[^}]*animation:windows11-loader 1\.55s/);
-  assert.match(css,/@keyframes windows11-loader\{0%\{transform:rotate\(0deg\)\}45%\{transform:rotate\(210deg\)\}72%\{transform:rotate\(390deg\)\}100%\{transform:rotate\(720deg\)\}\}/);
-  assert.match(css,/@media\(prefers-reduced-motion:reduce\)[\s\S]*?\.windows-loader-spinner i\{animation-duration:1\.55s!important;animation-iteration-count:infinite!important\}/);
+  assert.match(css,/\.windows11-progress-ring\{display:block;width:40px;height:40px\}/);
+  assert.match(css,/\.windows11-progress-ring svg\{[^}]*animation:windows11-progress-spin 1\.05s linear infinite/);
+  assert.match(css,/\.windows11-progress-ring circle\{[^}]*stroke-linecap:round;stroke-dasharray:38 69/);
+  assert.match(css,/@keyframes windows11-progress-spin\{to\{transform:rotate\(360deg\)\}\}/);
+  assert.match(css,/@media\(prefers-reduced-motion:reduce\)[\s\S]*?\.windows11-progress-ring svg\{animation-duration:1\.05s!important;animation-iteration-count:infinite!important\}/);
   assert.match(css,/url\("assets\/loader-education-bg\.svg"\)/);
   assert.match(sw,/\.\/assets\/loader-education-bg\.svg/);
 
