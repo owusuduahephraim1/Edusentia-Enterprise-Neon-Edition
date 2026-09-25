@@ -95,7 +95,7 @@ function setView(view){
   state.view=view;
   try{sessionStorage.setItem("edusentia.platform.view.v1",view);}catch{}
   setMobileDrawer(false);
-  $(".pa-nav [data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
+  document.querySelectorAll(".pa-nav [data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
   const [title,subtitle]=titles[view];$("#paPageTitle").textContent=title;$("#paPageSubtitle").textContent=subtitle;
   render();
   if(view==="packages")loadPackages().catch(e=>status(e?.message||"Package service could not be loaded.","error"));

@@ -217,6 +217,6 @@ test("Platform mobile navigation closes the drawer and renders the selected sect
 
 test("Platform navigator updates every navigation button without throwing on a single Element",()=>{
   const js=read("frontend/platform-saas-admin.js");
-  assert.match(js,/\$\$\("\.pa-nav \[data-view\]"\)\.forEach/);
-  assert.doesNotMatch(js,/[^$]\$\("\.pa-nav \[data-view\]"\)\.forEach/);
+  assert.match(js,/document\.querySelectorAll\("\.pa-nav \[data-view\]"\)\.forEach/);
+  assert.doesNotMatch(js,/\$\("\.pa-nav \[data-view\]"\)\.forEach/);
 });
