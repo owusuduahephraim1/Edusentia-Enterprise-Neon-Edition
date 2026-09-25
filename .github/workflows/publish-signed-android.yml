@@ -116,7 +116,15 @@ jobs:
           grep -F "versionCode='$ANDROID_RELEASE_VERSION_CODE'" "$RUNNER_TEMP/apk-badging.txt"
           grep -F "versionName='$ANDROID_RELEASE_VERSION_NAME'" "$RUNNER_TEMP/apk-badging.txt"
 
-          jarsigner -verify -strict "$AAB"
+          jarsigner -verify "$AAB"
+
+          AAB_FP=$(keytool -printcert -jarfile "$AAB" \
+            | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+
+          test "$AAB_FP" = "$EXPECTED_CERT_SHA256" || {
+            echo "Built AAB is not signed with the permanent Edusentia Neon certificate." >&2
+            exit 1
+          }
 
       - name: Stage permanent-signed release artifacts
         shell: bash
