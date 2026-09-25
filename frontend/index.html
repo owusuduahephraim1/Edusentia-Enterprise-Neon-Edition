@@ -6,10 +6,21 @@
 <title>Edusentia Enterprise Neon Edition</title>
 <link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="preload" as="image" href="assets/loader-education-bg.svg" fetchpriority="high">
 <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="r37-final-ui.css"><link rel="stylesheet" href="registration-form.css"><link rel="stylesheet" href="neon-edition.css"><link rel="stylesheet" href="finance-enterprise.css">
 </head><body>
 <a class="skip-link" href="#content">Skip to main content</a>
-<div id="loader" class="loader-screen" aria-live="polite"><img data-school-logo src="assets/edusentia-mark.svg" alt="Edusentia"><span class="spinner"></span></div>
+<div id="loader" class="loader-screen" aria-live="polite">
+  <div class="loader-shell">
+    <div class="loader-orbit" aria-hidden="true">
+      <div class="loader-orbit-art"></div>
+      <span class="spinner"></span>
+      <span class="loader-inner-glow"></span>
+    </div>
+    <img data-school-logo src="assets/edusentia-mark.svg" alt="Edusentia" decoding="async">
+    <p class="loader-message">Preparing your connected school workspace…</p>
+  </div>
+</div>
 
 <main id="authView" class="auth-view hidden" aria-labelledby="loginTitle">
   <img class="auth-hero-image" src="assets/edusentia-auth-learning.webp" alt="" aria-hidden="true" decoding="async" fetchpriority="high">
