@@ -1,0 +1,16 @@
+[package]
+name = "edusentia-enterprise-neon"
+version = "7.4.0"
+description = "Edusentia Enterprise Neon Edition secure Windows application shell"
+authors = ["Ephraim Owusu-Duah"]
+edition = "2021"
+
+[lib]
+name = "edusentia_enterprise_neon_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
