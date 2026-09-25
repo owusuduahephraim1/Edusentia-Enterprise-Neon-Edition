@@ -1,0 +1,124 @@
+name: Diagnose Neon subject assignment edit
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-subject-assignment.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      BOOTSTRAP_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install PostgreSQL client
+        run: |
+          command -v psql >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
+      - name: Inspect Nipe subject assignment runtime and rollback edit probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" node --input-type=module -e '
+            const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+            u.hostname=u.hostname.replace("-pooler.",".");
+            u.pathname="/edusentia";
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$ADMIN_URL"
+
+          TENANT_ROW="$(psql "$ADMIN_URL" -AtF '|' -c "
+            select tc.tenant_code,tc.database_name
+            from platform.tenant_control tc
+            join app.tenants t on t.id=tc.tenant_id
+            where lower(t.name) like '%nipe%'
+            order by tc.created_at desc nulls last
+            limit 1
+          ")"
+          test -n "$TENANT_ROW"
+          TENANT_CODE="${TENANT_ROW%%|*}"
+          TENANT_DB="${TENANT_ROW#*|}"
+          echo "Tenant route: $TENANT_CODE -> $TENANT_DB"
+
+          TENANT_URL="$(ADMIN_URL="$ADMIN_URL" TENANT_DB="$TENANT_DB" node --input-type=module -e '
+            const u=new URL(process.env.ADMIN_URL);
+            u.pathname="/"+process.env.TENANT_DB;
+            process.stdout.write(u.toString());
+          ')"
+          echo "::add-mask::$TENANT_URL"
+
+          echo "=== class_subjects columns ==="
+          psql "$TENANT_URL" -P pager=off -c "
+            select column_name,data_type,udt_name,is_nullable,column_default
+            from information_schema.columns
+            where table_schema='public' and table_name='class_subjects'
+            order by ordinal_position
+          "
+
+          echo "=== current assignment identifiers ==="
+          psql "$TENANT_URL" -P pager=off -c "
+            select id,pg_typeof(id) as id_type,id::text as id_text,
+                   public.safe_uuid(id::text) as parsed_id,
+                   class_id,subject_id,teacher_id,active
+            from public.class_subjects
+            order by updated_at desc,created_at desc
+            limit 20
+          "
+
+          echo "=== academic configuration assignment ID JSON types ==="
+          psql "$TENANT_URL" -P pager=off -c "
+            with cfg as (select public.get_academic_configuration() j)
+            select
+              item->>'id' as id_text,
+              jsonb_typeof(item->'id') as id_json_type,
+              public.safe_uuid(item->>'id') as parsed_id
+            from cfg, lateral jsonb_array_elements(cfg.j->'class_subjects') item
+            limit 20
+          "
+
+          echo "=== save_class_subject_assignments_batch definition checksum ==="
+          psql "$TENANT_URL" -P pager=off -c "
+            select md5(pg_get_functiondef('public.save_class_subject_assignments_batch(jsonb)'::regprocedure)) as function_md5
+          "
+
+          CONTEXT_ROW="$(psql "$TENANT_URL" -AtF '|' -c "
+            select t.id,m.user_id,m.role
+            from app.tenants t
+            join app.tenant_memberships m on m.tenant_id=t.id
+            join authn.users u on u.id=m.user_id
+            where m.role in ('system_admin','admin')
+              and m.status='active'
+              and u.disabled_at is null
+            order by m.created_at
+            limit 1
+          ")"
+          test -n "$CONTEXT_ROW"
+          IFS='|' read -r TENANT_ID USER_ID ROLE <<< "$CONTEXT_ROW"
+          echo "Context role: $ROLE"
+
+          echo "=== rollback assignment edit probe ==="
+          psql "$TENANT_URL" -v ON_ERROR_STOP=1             -v tenant_id="$TENANT_ID" -v user_id="$USER_ID" -v app_role="$ROLE" <<'SQL'
+          begin;
+          select app.set_request_context(:'tenant_id'::uuid,:'user_id'::uuid,:'app_role',2::smallint);
+          select public.save_class_subject_assignments_batch(
+            (
+              select jsonb_build_object(
+                'id',cs.id::text,
+                'teacher_id',cs.teacher_id::text,
+                'active',cs.active,
+                'selections',jsonb_build_array(jsonb_build_object(
+                  'class_id',cs.class_id::text,
+                  'subject_id',cs.subject_id::text
+                )),
+                'reason','Diagnostic rollback subject assignment edit'
+              )
+              from public.class_subjects cs
+              where cs.teacher_id is not null
+              order by cs.updated_at desc,cs.created_at desc
+              limit 1
+            )
+          );
+          rollback;
+          SQL
+          echo "LIVE_SUBJECT_ASSIGNMENT_EDIT_PROBE_OK"
