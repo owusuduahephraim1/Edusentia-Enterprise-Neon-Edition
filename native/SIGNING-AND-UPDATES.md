@@ -34,3 +34,13 @@ Normal web application changes do not need a native release because the Windows 
 ## Important first production transition
 
 The currently shared test APK is debug-signed. A permanent production-signed APK cannot update that debug package in place. Test installations must be uninstalled once before installing the first permanent production-signed Neon APK. From that point forward, keeping the same permanent Android signing identity allows normal upgrades.
+
+
+## Pinned permanent Android production certificate
+
+The permanent Neon Android application identity is pinned by certificate fingerprint so CI refuses to publish an APK signed by an unexpected key.
+
+- Package: `app.edusentia.enterprise.neon`
+- Certificate SHA-256: `7B:85:FC:22:0A:CF:4C:96:53:2B:90:DE:72:B3:B0:5D:85:26:66:96:ED:B0:E9:E3:BB:BF:52:CE:AF:33:4D:8C`
+
+The dedicated `publish-signed-android.yml` workflow builds the production APK and Play AAB independently of the Windows signing channel. It hard-fails if any Android signing secret is absent or if the supplied keystore certificate does not match this pinned identity.

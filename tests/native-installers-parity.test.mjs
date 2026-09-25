@@ -66,3 +66,17 @@ test("signed native publication is gated by permanent Windows and Android signin
   assert.match(release,/assembleRelease :app:bundleRelease/);
   assert.match(release,/gh release create/);
 });
+
+
+test("permanent Android production build pins the release certificate and never falls back to debug signing",()=>{
+  const workflow=read(".github/workflows/publish-signed-android.yml");
+  assert.match(workflow,/EDUSENTIA_NEON_ANDROID_KEYSTORE_BASE64/);
+  assert.match(workflow,/EDUSENTIA_NEON_ANDROID_KEYSTORE_PASSWORD/);
+  assert.match(workflow,/EDUSENTIA_NEON_ANDROID_KEY_ALIAS/);
+  assert.match(workflow,/EDUSENTIA_NEON_ANDROID_KEY_PASSWORD/);
+  assert.match(workflow,/7B85FC220ACF4C96532B90DE72B3B05D85266696EDB0E9E3BBBF52CEAF334D8C/);
+  assert.match(workflow,/assembleRelease :app:bundleRelease/);
+  assert.match(workflow,/app\.edusentia\.enterprise\.neon/);
+  assert.match(workflow,/Permanent-Signed\.apk/);
+  assert.doesNotMatch(workflow,/assembleDebug/);
+});
