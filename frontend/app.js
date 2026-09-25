@@ -6,6 +6,14 @@
   const byId = id => document.getElementById(id);
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
   const api = () => window.EdusentiaApi;
+  const SYSTEM_QUALIFICATIONS=Object.freeze(["PhD","MSc Degree","Bachelor Degree","HND","Diploma","SHS"]);
+  window.EdusentiaSystemLists=window.EdusentiaSystemLists||{};
+  window.EdusentiaSystemLists.qualifications=SYSTEM_QUALIFICATIONS;
+  function qualificationOptions(value=""){
+    const legacy=String(value||"").trim(),options=[...SYSTEM_QUALIFICATIONS];
+    if(legacy&&!options.includes(legacy))options.unshift(legacy);
+    return `<option value="">Select qualification</option>${options.map(item=>`<option value="${escapeHtml(item)}" ${item===legacy?"selected":""}>${escapeHtml(item)}${!SYSTEM_QUALIFICATIONS.includes(item)?" (legacy)":""}</option>`).join("")}`;
+  }
   const turnstileSiteKey = String(window.EDS_MASTER_CONFIG?.turnstileSiteKey || "").trim();
   const platformMode = new URLSearchParams(location.search).get("platform")==="1";
   const state = {session:null, boot:null, view:"dashboard", loginSchool:null, authScope:platformMode?"platform":"tenant", brandLogoUrl:""};
@@ -714,7 +722,7 @@
     const dialog=byId("modal");
     byId("modalTitle").textContent="Add teacher";
     byId("modalSubtitle").textContent="Create a certified teacher record. A staff number is generated when left blank.";
-    byId("modalBody").innerHTML=`<form id="teacherCreateForm" class="form-stack"><div class="form-grid"><label class="field"><span>Staff number (optional)</span><input name="staff_no" maxlength="60"></label><label class="field"><span>First name</span><input name="first_name" required maxlength="120"></label><label class="field"><span>Middle name</span><input name="middle_name" maxlength="120"></label><label class="field"><span>Last name</span><input name="last_name" required maxlength="120"></label><label class="field"><span>Gender</span><select name="gender"><option value="Other">Other</option><option value="Male">Male</option><option value="Female">Female</option></select></label><label class="field"><span>Email</span><input name="email" type="email" maxlength="254"></label><label class="field"><span>Phone</span><input name="phone" type="tel" maxlength="60"></label><label class="field"><span>Qualification</span><select name="qualification"><option value="">Select</option><option>PhD</option><option>MSc Degree</option><option>Bachelor Degree</option><option>HND</option><option>Diploma</option><option>SHS</option></select></label><label class="field"><span>Specialization</span><input name="specialization" maxlength="180"></label><label class="field"><span>Date joined</span><input name="date_joined" type="date"></label></div><p id="teacherCreateMessage" class="form-message hidden" role="alert"></p></form>`;
+    byId("modalBody").innerHTML=`<form id="teacherCreateForm" class="form-stack"><div class="form-grid"><label class="field"><span>Staff number (optional)</span><input name="staff_no" maxlength="60"></label><label class="field"><span>First name</span><input name="first_name" required maxlength="120"></label><label class="field"><span>Middle name</span><input name="middle_name" maxlength="120"></label><label class="field"><span>Last name</span><input name="last_name" required maxlength="120"></label><label class="field"><span>Gender</span><select name="gender"><option value="Other">Other</option><option value="Male">Male</option><option value="Female">Female</option></select></label><label class="field"><span>Email</span><input name="email" type="email" maxlength="254"></label><label class="field"><span>Phone</span><input name="phone" type="tel" maxlength="60"></label><label class="field"><span>Qualification</span><select name="qualification">${qualificationOptions()}</select></label><label class="field"><span>Specialization</span><input name="specialization" maxlength="180"></label><label class="field"><span>Date joined</span><input name="date_joined" type="date"></label></div><p id="teacherCreateMessage" class="form-message hidden" role="alert"></p></form>`;
     byId("modalFooter").innerHTML='<button id="teacherCancelButton" class="button ghost" type="button">Cancel</button><button id="teacherSaveButton" class="button primary" type="submit" form="teacherCreateForm">Save teacher</button>';
     byId("teacherCancelButton").onclick=()=>dialog.close();
     byId("teacherCreateForm").onsubmit=async event=>{

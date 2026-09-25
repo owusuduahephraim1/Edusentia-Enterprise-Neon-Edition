@@ -2,6 +2,12 @@
   "use strict";
   const P=window.EdusentiaParity;if(!P)return;
   const {registerView,api,certified,role,esc,status,formatDate,formatDateTime,formatAmount,loading,empty,pageError,byId,friendly,currentRole,isSystemAdmin,modal,openModal,closeModal,formValues,optionRows,yesNo,showMessage,downloadBlob,safeName,sha256,csvParse,academicConfig}=P;
+  const SYSTEM_QUALIFICATIONS=Object.freeze([...(window.EdusentiaSystemLists?.qualifications||["PhD","MSc Degree","Bachelor Degree","HND","Diploma","SHS"])]);
+  function qualificationOptions(value=""){
+    const legacy=String(value||"").trim(),options=[...SYSTEM_QUALIFICATIONS];
+    if(legacy&&!options.includes(legacy))options.unshift(legacy);
+    return `<option value="">Select qualification</option>${options.map(item=>`<option value="${esc(item)}" ${item===legacy?"selected":""}>${esc(item)}${!SYSTEM_QUALIFICATIONS.includes(item)?" (legacy)":""}</option>`).join("")}`;
+  }
   // ---------- Teachers ----------
   const teacherPhotoUrls=new Map();
   function teacherInitials(row={}){
@@ -75,7 +81,7 @@
         <label class="field"><span>Date joined</span><input type="date" name="date_joined" value="${esc(row.date_joined||"")}"></label>
         <label class="field"><span>Email</span><input type="email" name="email" value="${esc(row.email||"")}"></label>
         <label class="field"><span>Phone</span><input name="phone" value="${esc(row.phone||"")}"></label>
-        <label class="field"><span>Qualification</span><select name="qualification"><option value="">Select</option>${["PhD","MSc Degree","Bachelor Degree","HND","Diploma","SHS"].map(v=>`<option ${row.qualification===v?"selected":""}>${v}</option>`).join("")}</select></label>
+        <label class="field"><span>Qualification</span><select name="qualification">${qualificationOptions(row.qualification)}</select></label>
         <label class="field"><span>Specialization</span><input name="specialization" value="${esc(row.specialization||"")}"></label>
         <label class="field"><span>Employment status</span><select name="employment_status">${["active","leave","suspended","resigned","retired"].map(v=>`<option value="${v}" ${String(row.employment_status||"active")===v?"selected":""}>${esc(v.replaceAll("_"," "))}</option>`).join("")}</select></label>
         <label class="field"><span>Address</span><input name="address" value="${esc(row.address||"")}"></label>
