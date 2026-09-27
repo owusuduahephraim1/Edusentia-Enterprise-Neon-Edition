@@ -18,7 +18,7 @@ declare
   item jsonb;
   item_count integer;
   recorded integer:=0;
-  object_key text;
+  v_object_key text;
   object_name text;
   object_type text;
   object_size bigint;
@@ -53,13 +53,13 @@ begin
 
   for item in select value from jsonb_array_elements(target_rows)
   loop
-    object_key:=coalesce(item->>'r2_key','');
+    v_object_key:=coalesce(item->>'r2_key','');
     object_name:=left(coalesce(nullif(item->>'r2_name',''),'backup-object'),512);
     object_type:=coalesce(nullif(item->>'r2_content_type',''),'application/octet-stream');
     object_size:=greatest(coalesce(nullif(item->>'r2_size','')::bigint,0),0);
     record_inventory:=coalesce((item->>'record_inventory')::boolean,false);
 
-    if object_key='' or object_key not like 'tenants/'||target_tenant::text||'/system-backups/%' then
+    if v_object_key='' or v_object_key not like 'tenants/'||target_tenant::text||'/system-backups/%' then
       raise exception 'invalid backup R2 tenant scope' using errcode='42501';
     end if;
 
@@ -67,7 +67,7 @@ begin
       tenant_id,object_key,original_name,content_type,size_bytes,created_by,status,stored_at
     )
     values(
-      target_tenant,object_key,object_name,object_type,object_size,target_actor,'active',now()
+      target_tenant,v_object_key,object_name,object_type,object_size,target_actor,'active',now()
     )
     on conflict(tenant_id,object_key) do update set
       original_name=excluded.original_name,
@@ -133,7 +133,7 @@ begin
   if exists(
     select 1
       from jsonb_array_elements_text(target_keys) k(object_key)
-     where object_key not like 'tenants/'||target_tenant::text||'/system-backups/%'
+     where k.object_key not like 'tenants/'||target_tenant::text||'/system-backups/%'
   ) then
     raise exception 'invalid backup R2 tenant scope' using errcode='42501';
   end if;
@@ -141,7 +141,7 @@ begin
   update storage.object_metadata
      set status='deleted',deleted_at=now()
    where tenant_id=target_tenant
-     and object_key in (select jsonb_array_elements_text(target_keys));
+     and storage.object_metadata.object_key in (select jsonb_array_elements_text(target_keys));
 
   get diagnostics changed=row_count;
   return changed;
