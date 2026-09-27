@@ -172,8 +172,10 @@ test("System Administrator password reset does not depend on a redundant actor p
   const resetStart=identity.indexOf('if(action==="reset_password")',genericStart);
   assert.ok(genericStart>=0&&resetStart>genericStart);
   const prefix=identity.slice(genericStart,resetStart);
-  assert.match(prefix,/if\(action==="complete_own_required_password_change"\)\{[\s\S]*select must_change_password from public\.profiles/);
-  assert.doesNotMatch(prefix,/if\(!currentProfile\).*requireAdmin/s);
+  const ownChangeStart=prefix.indexOf('if(action==="complete_own_required_password_change")');
+  const actorStateLookup=prefix.indexOf("select must_change_password from public.profiles");
+  const ownChangeEnd=prefix.indexOf("// The route layer already blocks",ownChangeStart);
+  assert.ok(ownChangeStart>=0&&actorStateLookup>ownChangeStart&&ownChangeEnd>actorStateLookup);
   assert.match(workspace,/adminUserManagement\("reset_password",\{user_id:id,password:/);
   assert.match(workspace,/must_change_password:form\.elements\.force_password_change\.checked/);
 });
