@@ -1,4 +1,5 @@
 name: Backup Diagnostic
+# Final live verification after successful Worker deploy 36313602785.
 # Post-deploy verification for 0074.
 # Live backup retry inspection requested after user-reported failure.
 # Recheck after 'A full backup is already processing' report on 2026-09-27.
