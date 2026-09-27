@@ -73,13 +73,7 @@ jobs:
           ADMIN_ROW="$(psql "$TENANT_URL" -X -qAtF '|' -c "select t.id,m.user_id from app.tenants t join app.tenant_memberships m on m.tenant_id=t.id join authn.users u on u.id=m.user_id where m.role='system_admin' and m.status='active' and u.disabled_at is null order by m.created_at limit 1")"
           test -n "$ADMIN_ROW"
           IFS='|' read -r TENANT_ID ADMIN_USER_ID <<< "$ADMIN_ROW"
-          psql "$TENANT_URL" -X -v ON_ERROR_STOP=1 -v tenant_id="$TENANT_ID" -v user_id="$ADMIN_USER_ID" <<'SQL'
-          begin;
-          select app.set_request_context(:'tenant_id'::uuid,:'user_id'::uuid,'system_admin',2::smallint);
-          select public.license_feature_enabled('manual_backup') as manual_backup_with_context;
-          select public.backup_worker_create(:'user_id'::uuid,'manual') as rollback_backup_record;
-          rollback;
-SQL
+          psql "$TENANT_URL" -X -v ON_ERROR_STOP=1 -v tenant_id="$TENANT_ID" -v user_id="$ADMIN_USER_ID" -c "begin; select app.set_request_context(:'tenant_id'::uuid,:'user_id'::uuid,'system_admin',2::smallint); select public.license_feature_enabled('manual_backup') as manual_backup_with_context; select public.backup_worker_create(:'user_id'::uuid,'manual') as rollback_backup_record; rollback;"
           echo "Missing backup source tables:"
           psql "$TENANT_URL" -X -qAtc "with names(name) as (values
             ('school_settings'),('id_card_settings'),('id_card_deletion_tombstones'),('profiles'),('teachers'),('headteachers'),
