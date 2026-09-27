@@ -1,4 +1,5 @@
 name: Backup Contract Probe
+# Trigger live prerequisite inspection.
 on:
   push:
     branches: [main]
