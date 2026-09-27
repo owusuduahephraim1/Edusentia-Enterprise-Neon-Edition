@@ -178,6 +178,7 @@ test("System Administrator password reset does not depend on a redundant actor p
   assert.ok(ownChangeStart>=0&&actorStateLookup>ownChangeStart&&ownChangeEnd>actorStateLookup);
   assert.match(workspace,/adminUserManagement\("reset_password",\{user_id:id,password:/);
   assert.match(workspace,/must_change_password:form\.elements\.force_password_change\.checked/);
+  assert.match(identity,/payload\.force_password_change!==false/);
 });
 
 test("Tenant logout returns to the branded school sign-in instead of the public registration page",()=>{
