@@ -183,6 +183,11 @@ async function removeBackupPrefix(env:Env,sql:TenantSql,ctx:SessionContext,prefi
 }
 
 async function createBackupRecord(sql:TenantSql,ctx:SessionContext,mode:"manual"|"scheduled"|"pre_restore"){
+  // Release a processing row whose heartbeat stopped before creating another
+  // backup. This keeps one-click backup self-healing after Worker termination.
+  await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select public.backup_worker_reconcile_stale_backups() count`
+  ]);
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
     txn`select public.backup_worker_create(${ctx.userId}::uuid,${mode}) result`
   ]);
