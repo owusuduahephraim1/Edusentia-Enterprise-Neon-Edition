@@ -49,10 +49,10 @@ declare
 begin
   actor:=public.backup_worker_require_restore_context(target_actor);
 
-  if clean_filename='' or clean_filename !~* '\\.zip$' then
+  if clean_filename='' or clean_filename !~* '\.zip$' then
     raise exception 'A valid backup ZIP filename is required' using errcode='22023';
   end if;
-  if clean_path='' or clean_path !~ '^restore-imports/[0-9a-f-]{36}\\.zip$' then
+  if clean_path='' or clean_path !~ '^restore-imports/[0-9a-f-]{36}\.zip$' then
     raise exception 'Restore import path is invalid' using errcode='22023';
   end if;
   if clean_checksum !~ '^[a-f0-9]{64}$' then
