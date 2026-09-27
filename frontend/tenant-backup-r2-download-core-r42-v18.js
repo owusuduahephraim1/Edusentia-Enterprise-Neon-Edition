@@ -34,6 +34,8 @@
       }
       zip.file("RESTORE_README.txt",[
         "Edusentia Enterprise encrypted school backup",
+        `School: ${String(data.tenant_name||"")}`,
+        `Tenant number: ${String(data.tenant_code||"")}`,
         `Backup key: ${String(data.backup_key||"")}`,
         `Created: ${String(data.created_at||"")}`,
         `Verification status at download: ${String(data.verification_status||"unknown")}`,
@@ -45,8 +47,8 @@
       ].join("\n"));
       button.textContent="Finalizing…";
       const blob=await zip.generateAsync({type:"blob",compression:"STORE"});
-      const url=URL.createObjectURL(blob),anchor=document.createElement("a"),tenant=safeName(config().tenantCode||config().schoolShortName||"school");
-      anchor.href=url;anchor.download=`${tenant}-encrypted-backup-${safeName(data.backup_key)}.zip`;document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+      const url=URL.createObjectURL(blob),anchor=document.createElement("a"),school=safeName(data.tenant_name||config().schoolName||config().schoolShortName||"school"),tenant=safeName(data.tenant_code||config().tenantCode||"tenant");
+      anchor.href=url;anchor.download=`${school}-${tenant}-encrypted-backup-${safeName(data.backup_key)}.zip`;document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
       notice("Encrypted backup package ready",`${files.length} protected backup objects were authorized through ${data.storage_provider==="cloudflare-r2"?"Cloudflare R2":"private storage"}. Confirm an off-site copy only after storing the ZIP in a separate protected location.`);
     }catch(error){notice("Backup download unsuccessful",String(error?.message||error).replaceAll("_"," "),"error")}
     finally{busy.delete(button);button.disabled=false;button.textContent=previous}
