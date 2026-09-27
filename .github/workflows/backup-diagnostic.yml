@@ -63,6 +63,12 @@ jobs:
           psql "$TENANT_URL" -X -P pager=off -c "select version from app.schema_migrations where version='0071_backup_r2_tenant_upsert_fix';"
           echo "Backup R2 conflict target:"
           psql "$TENANT_URL" -X -P pager=off -c "select regexp_replace(lower(pg_get_functiondef('public.backup_worker_register_r2_object(uuid,text,text,text,bigint,uuid)'::regprocedure)),'[[:space:]]+','','g') like '%onconflict(tenant_id,object_key)doupdateset%' as tenant_scoped_conflict_target;"
+          echo "Backup interruption/batching migrations:"
+          psql "$TENANT_URL" -X -P pager=off -c "select version from app.schema_migrations where version in ('0073_backup_interruption_recovery','0074_backup_worker_bulk_object_recording') order by version;"
+          echo "Backup batching runtime privileges:"
+          psql "$TENANT_URL" -X -P pager=off -c "select has_function_privilege('edusentia_worker_runtime','public.backup_worker_record_object_batch(uuid,uuid,uuid,jsonb)','EXECUTE') as batch_record_ok, has_function_privilege('edusentia_worker_runtime','public.backup_worker_mark_r2_deleted_batch(uuid,jsonb)','EXECUTE') as batch_delete_ok;"
+          echo "Processing backup count:"
+          psql "$TENANT_URL" -X -P pager=off -c "select count(*) processing_count from public.backup_exports where status='processing';"
           echo "Missing backup source tables:"
           psql "$TENANT_URL" -X -qAtc "with names(name) as (values
             ('school_settings'),('id_card_settings'),('id_card_deletion_tombstones'),('profiles'),('teachers'),('headteachers'),
