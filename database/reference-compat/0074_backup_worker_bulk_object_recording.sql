@@ -22,6 +22,7 @@ declare
   object_name text;
   object_type text;
   object_size bigint;
+  inventory_type text;
   record_inventory boolean;
   source_bucket text;
   source_path text;
@@ -84,6 +85,7 @@ begin
       original_size:=greatest(coalesce(nullif(item->>'original_size','')::bigint,0),0);
       encrypted_size:=greatest(coalesce(nullif(item->>'encrypted_size','')::bigint,0),0);
       checksum:=lower(coalesce(item->>'checksum',''));
+      inventory_type:=coalesce(nullif(item->>'content_type',''),'application/octet-stream');
 
       if source_bucket='' or source_path='' or backup_path='' or checksum='' then
         raise exception 'backup source inventory item is incomplete' using errcode='22023';
@@ -94,7 +96,7 @@ begin
         original_size,encrypted_size,checksum,status,error_message
       )
       values(
-        target_backup,source_bucket,source_path,backup_path,object_type,
+        target_backup,source_bucket,source_path,backup_path,inventory_type,
         original_size,encrypted_size,checksum,'completed',''
       );
     end if;
