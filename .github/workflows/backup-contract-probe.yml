@@ -1,0 +1,40 @@
+name: Backup Contract Probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/backup-contract-probe.yml"
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          command -v psql >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
+      - name: Inspect live backup create prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          MASTER_URL="$(SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" node --input-type=module -e 'const u=new URL(process.env.SOURCE_DATABASE_URL);u.pathname="/edusentia";process.stdout.write(u.toString())')"
+          echo "::add-mask::$MASTER_URL"
+          DB_NAME="$(psql "$MASTER_URL" -X -qAtc "select database_name from platform.tenant_control where lower(school_name) like '%nipe%international%school%' and database_state='isolated_ready' order by created_at desc limit 1")"
+          test -n "$DB_NAME"
+          TENANT_URL="$(MASTER_URL="$MASTER_URL" DB_NAME="$DB_NAME" node --input-type=module -e 'const u=new URL(process.env.MASTER_URL);u.pathname="/"+process.env.DB_NAME;process.stdout.write(u.toString())')"
+          echo "::add-mask::$TENANT_URL"
+          echo "Database: $DB_NAME"
+          echo "Backup export columns:"
+          psql "$TENANT_URL" -X -P pager=off -c "select column_name,data_type,is_nullable,column_default from information_schema.columns where table_schema='public' and table_name='backup_exports' order by ordinal_position;"
+          echo "Backup export foreign keys:"
+          psql "$TENANT_URL" -X -P pager=off -c "select conname,pg_get_constraintdef(oid) definition from pg_constraint where conrelid='public.backup_exports'::regclass and contype='f' order by conname;"
+          echo "System Administrator actor/profile identity:"
+          psql "$TENANT_URL" -X -P pager=off -c "select m.user_id,u.email,exists(select 1 from public.profiles p where p.id=m.user_id) as matching_profile,m.mfa_required from app.tenant_memberships m join authn.users u on u.id=m.user_id where m.role='system_admin' and m.status='active' and u.disabled_at is null order by m.created_at limit 5;"
+          echo "Recent administrator sessions:"
+          psql "$TENANT_URL" -X -P pager=off -c "select s.role,s.assurance_level,count(*) sessions,max(s.expires_at) latest_expiry from authn.sessions s where s.revoked_at is null and s.expires_at>now() group by s.role,s.assurance_level order by s.role,s.assurance_level;"
+          echo "Worker backup privileges:"
+          psql "$TENANT_URL" -X -P pager=off -c "select has_function_privilege('edusentia_worker_runtime','public.backup_worker_create(uuid,text)','EXECUTE') create_ok,has_function_privilege('edusentia_worker_runtime','public.backup_worker_read_batch(uuid,jsonb)','EXECUTE') read_ok,has_function_privilege('edusentia_worker_runtime','public.backup_worker_complete(uuid,text,text,jsonb,text,text,jsonb,bigint,text)','EXECUTE') complete_ok;"
+          echo "Request-context functions:"
+          psql "$TENANT_URL" -X -P pager=off -c "select public.license_feature_enabled('manual_backup') manual_backup_enabled,public.license_feature_enabled('scheduled_backup') scheduled_backup_enabled;"
