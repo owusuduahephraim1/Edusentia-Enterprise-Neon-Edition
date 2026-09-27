@@ -63,7 +63,7 @@ jobs:
             import fs from "node:fs";
             const raw=fs.readFileSync("/tmp/backup-response.json","utf8");
             let body={}; try{ body=JSON.parse(raw); }catch{}
-            console.log("Backup API status:",process.env.HTTP_CODE);
+            console.log("Backup API status:",process.env.HTTP_CODE);\n            console.log("Backup response body:",raw.slice(0,1200));
             console.log("Backup result:",JSON.stringify({
               id:body.id||null,
               status:body.status||null,
