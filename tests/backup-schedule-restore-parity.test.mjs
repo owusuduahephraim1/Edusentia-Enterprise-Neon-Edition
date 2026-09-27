@@ -11,6 +11,7 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   const interruptionRecovery=read("database/reference-compat/0073_backup_interruption_recovery.sql");
   const bulkObjectRecording=read("database/reference-compat/0074_backup_worker_bulk_object_recording.sql");
   const ambiguityFix=read("database/reference-compat/0075_backup_bulk_object_ambiguity_fix.sql");
+  const restoreBridge=read("database/reference-compat/0077_restore_worker_bridge.sql");
   const installer=read("database/reference-compat/install-operational-parity.sh");
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
   const template=read("database/tenant-template/install.sh");
@@ -27,13 +28,15 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   assert.match(installer,/0073_backup_interruption_recovery/);
   assert.match(installer,/0074_backup_worker_bulk_object_recording/);
   assert.match(installer,/0075_backup_bulk_object_ambiguity_fix/);
+  assert.match(installer,/0077_restore_worker_bridge/);
   assert.match(upgrade,/0069_backup_schedule_restore_experience/);
   assert.match(upgrade,/0070_backup_worker_batch_resilience/);
   assert.match(upgrade,/0071_backup_r2_tenant_upsert_fix/);
   assert.match(upgrade,/0072_grading_scale_interpretation_parity/);
   assert.match(upgrade,/0074_backup_worker_bulk_object_recording/);
   assert.match(upgrade,/0075_backup_bulk_object_ambiguity_fix/);
-  assert.match(upgrade,/test "\$migration_count" = "52"/);
+  assert.match(upgrade,/0077_restore_worker_bridge/);
+  assert.match(upgrade,/test "\$migration_count" = "53"/);
   assert.match(resilience,/backup_worker_read_batch/);
   assert.match(resilience,/heartbeat_at/);
   assert.match(resilience,/backup_worker_reconcile_stale_backups/);
@@ -110,6 +113,20 @@ test("backup workspace provides simple one-click backup and protected one-confir
   assert.match(restore,/restore_wrong_tenant/);
   assert.match(restore,/school_restore_clear_operational_data/);
   assert.match(restore,/school_restore_complete/);
+  assert.ok(
+    restore.indexOf('"classes","school_settings"')>=0,
+    "school_settings must restore after classes because it can reference certificate_completion_class_id"
+  );
+  for(const fn of [
+    "school_restore_begin","school_restore_set_status","school_restore_clear_operational_data",
+    "school_restore_apply_table","school_restore_complete"
+  ]) assert.match(restoreBridge,new RegExp("create or replace function public\\."+fn+"\\("));
+  assert.match(restoreBridge,/backup_worker_require_restore_context/);
+  assert.match(restoreBridge,/current_setting\('app\.role',true\)/);
+  assert.match(restoreBridge,/student_admission_sequences/);
+  assert.match(restoreBridge,/jsonb_populate_recordset/);
+  assert.match(restoreBridge,/overriding system value/);
+  assert.match(restoreBridge,/0077_restore_worker_bridge/);
 });
 
 test("commercial backup entitlements preserve manual backups for Starter and schedules for paid tiers",()=>{
