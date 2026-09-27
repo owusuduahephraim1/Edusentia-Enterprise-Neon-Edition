@@ -65,7 +65,7 @@ test("manual backup snapshots use batched tenant-local reads and fail closed wit
   assert.match(worker,/backup_worker_reconcile_stale_backups/);
   assert.match(worker,/OBJECT_METADATA_BATCH_SIZE=200/);
   assert.match(worker,/backup_worker_record_object_batch/);
-  assert.doesNotMatch(worker,/backup_worker_record_object\\(/);
+  assert.doesNotMatch(worker,/backup_worker_record_object\(/);
   assert.match(worker,/async function readTable\(/);
   assert.match(worker,/Persist failure state before best-effort R2 cleanup/);
   assert.match(worker,/const material=await encryptionMaterial\(env\)/);
