@@ -6,9 +6,6 @@
   "observability": {
     "enabled": true
   },
-  "limits": {
-    "cpu_ms": 300000
-  },
   "vars": {
     "APP_ORIGIN": "https://owusuduahephraim1.github.io",
     "APP_BASE_PATH": "/Edusentia-Enterprise-Neon-Edition",
