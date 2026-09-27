@@ -1,5 +1,6 @@
 name: Backup Diagnostic
 # Live backup retry inspection requested after user-reported failure.
+# Recheck after 'A full backup is already processing' report on 2026-09-27.
 # Live recheck after user-reported backup failure at 23:30 UTC.
 # Runtime recheck: backup failure and failed-record cleanup investigation.
 
