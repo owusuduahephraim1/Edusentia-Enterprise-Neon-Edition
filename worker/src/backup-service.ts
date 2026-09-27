@@ -361,7 +361,7 @@ export async function backupDownloadGateway(env:Env,sql:TenantSql,ctx:SessionCon
     ${ctx.tenantId}::uuid,${ctx.userId}::uuid,'backup.package_download_authorized',
     ${JSON.stringify({backup_id:id,backup_key:backup.backup_key,file_count:files.length,expires_in_seconds:600,storage_provider:"cloudflare-r2"})}::jsonb
   )`]).catch(()=>undefined);
-  return {ok:true,backup_id:id,backup_key:backup.backup_key,created_at:backup.created_at,verification_status:backup.verification_status,expires_in_seconds:600,storage_provider:"cloudflare-r2",files};
+  return {ok:true,backup_id:id,backup_key:backup.backup_key,tenant_code:ctx.tenantCode,tenant_name:ctx.tenantName,created_at:backup.created_at,verification_status:backup.verification_status,expires_in_seconds:600,storage_provider:"cloudflare-r2",files};
 }
 
 async function purgeBackupCandidate(env:Env,sql:TenantSql,ctx:SessionContext,row:any){
