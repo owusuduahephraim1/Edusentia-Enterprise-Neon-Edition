@@ -1,5 +1,6 @@
 name: Deploy Cloudflare Worker
 # Owner-bootstrap boundary: deployment verifies owner-established role grants and never replays them as runtime.
+# Deployment trigger: required temporary-password enforcement 0076.
 # Deployment trigger: backup ambiguity repair 0075.
 
 on:
