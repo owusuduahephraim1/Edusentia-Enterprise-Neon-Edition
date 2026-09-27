@@ -30,7 +30,7 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   assert.match(upgrade,/0071_backup_r2_tenant_upsert_fix/);
   assert.match(upgrade,/0072_grading_scale_interpretation_parity/);
   assert.match(upgrade,/0074_backup_worker_bulk_object_recording/);
-  assert.match(upgrade,/test "\$migration_count" = "49"/);
+  assert.match(upgrade,/test "\$migration_count" = "50"/);
   assert.match(resilience,/backup_worker_read_batch/);
   assert.match(resilience,/heartbeat_at/);
   assert.match(resilience,/backup_worker_reconcile_stale_backups/);
@@ -120,7 +120,7 @@ test("commercial backup entitlements preserve manual backups for Starter and sch
 test("production Worker deployment provisions stable backup encryption and transfer secrets",()=>{
   const workflow=read(".github/workflows/deploy-worker.yml");
   const wrangler=read("worker/wrangler.jsonc");
-  assert.match(wrangler,/"cpu_ms"\s*:\s*300000/);
+  assert.doesNotMatch(wrangler,/"cpu_ms"/);
   assert.match(workflow,/ensure_worker_secret BACKUP_ENCRYPTION_KEY/);
   assert.match(workflow,/ensure_worker_secret BACKUP_SIGNING_SECRET/);
   assert.match(workflow,/preserving the existing key/);
