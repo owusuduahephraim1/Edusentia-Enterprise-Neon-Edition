@@ -36,6 +36,13 @@ type StoredObject={
   source_bucket:string;source_path:string;backup_path:string;content_type:string;
   original_size:number;encrypted_size:number;checksum:string;
 };
+type PendingBackupObject={
+  record_inventory:boolean;
+  r2_key:string;r2_name:string;r2_content_type:string;r2_size:number;
+  source_bucket?:string;source_path?:string;backup_path?:string;content_type?:string;
+  original_size?:number;encrypted_size?:number;checksum?:string;
+};
+const OBJECT_METADATA_BATCH_SIZE=200;
 type BackupManifest={
   format_version:number;schema_version:string;backup_id:string;backup_key:string;generated_at:string;
   encryption:{algorithm:string;key_hint:string;payload_format:string};
@@ -158,25 +165,37 @@ async function buildDatabaseSnapshot(sql:TenantSql,ctx:SessionContext,backup:Bac
   }));
   return {bytes,checksum:await sha256Bytes(bytes),rowCounts,authUserCount:authUsers.length};
 }
-async function registerObject(sql:TenantSql,ctx:SessionContext,key:string,name:string,type:string,size:number){
-  await tenantTx<any[]>(sql,ctx,txn=>[
-    txn`select public.backup_worker_register_r2_object(${ctx.tenantId}::uuid,${key},${name},${type},${size}::bigint,${ctx.userId}::uuid)`
-  ]);
-}
-async function putBackupObject(env:Env,sql:TenantSql,ctx:SessionContext,path:string,bytes:Uint8Array,type:string){
+async function putBackupObject(env:Env,ctx:SessionContext,path:string,bytes:Uint8Array,type:string):Promise<PendingBackupObject>{
   const key=backupR2Key(ctx.tenantId,path);
   await env.OBJECTS.put(key,bytes,{httpMetadata:{contentType:type}});
-  await registerObject(sql,ctx,key,path.split("/").pop()||"backup-object",type,bytes.byteLength);
+  return {
+    record_inventory:false,
+    r2_key:key,
+    r2_name:path.split("/").pop()||"backup-object",
+    r2_content_type:type,
+    r2_size:bytes.byteLength
+  };
+}
+async function flushBackupObjectBatch(sql:TenantSql,ctx:SessionContext,backupId:string,pending:PendingBackupObject[]){
+  if(!pending.length)return;
+  const rows=pending.splice(0,pending.length);
+  await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select public.backup_worker_record_object_batch(
+      ${backupId}::uuid,${ctx.tenantId}::uuid,${ctx.userId}::uuid,${JSON.stringify(rows)}::jsonb
+    ) count`
+  ]);
 }
 async function removeBackupPrefix(env:Env,sql:TenantSql,ctx:SessionContext,prefix:string){
   let cursor:string|undefined;
   const fullPrefix=backupR2Key(ctx.tenantId,prefix.endsWith("/")?prefix:prefix+"/");
   do{
-    const listed=await env.OBJECTS.list({prefix:fullPrefix,cursor,limit:1000});
-    for(const object of listed.objects){
-      await env.OBJECTS.delete(object.key);
-      await tenantTx<any[]>(sql,ctx,txn=>[
-        txn`select public.backup_worker_mark_r2_deleted(${ctx.tenantId}::uuid,${object.key})`
+    const listed=await env.OBJECTS.list({prefix:fullPrefix,cursor,limit:400});
+    const keys=listed.objects.map(object=>object.key);
+    for(const object of listed.objects)await env.OBJECTS.delete(object.key);
+    for(let offset=0;offset<keys.length;offset+=500){
+      const batch=keys.slice(offset,offset+500);
+      if(batch.length)await tenantTx<any[]>(sql,ctx,txn=>[
+        txn`select public.backup_worker_mark_r2_deleted_batch(${ctx.tenantId}::uuid,${JSON.stringify(batch)}::jsonb) count`
       ]);
     }
     cursor=listed.truncated?listed.cursor:undefined;
@@ -204,14 +223,18 @@ export async function performFullBackup(env:Env,sql:TenantSql,ctx:SessionContext
   const maxBytes=Math.max(1024,Math.min(5*1024*1024*1024,Number(env.BACKUP_MAX_BYTES||536870912)));
   const prefix=`full/${backup.backup_key}`;
   const databasePath=`${prefix}/database/database.json.gz.nisb`,manifestPath=`${prefix}/manifest.json.nisb`,indexPath=`${prefix}/index.json`;
-  const storedObjects:StoredObject[]=[],objectCounts:Record<string,number>={};let totalBytes=0,discovered=0;
+  const storedObjects:StoredObject[]=[],pendingObjects:PendingBackupObject[]=[],objectCounts:Record<string,number>={};let totalBytes=0,discovered=0;
+  const queueObject=async(row:PendingBackupObject)=>{
+    pendingObjects.push(row);
+    if(pendingObjects.length>=OBJECT_METADATA_BATCH_SIZE)await flushBackupObjectBatch(sql,ctx,backup.id,pendingObjects);
+  };
   try{
     // Resolve encryption inside the guarded section so a configuration problem
     // is recorded as a failed backup instead of leaving a phantom processing row.
     const material=await encryptionMaterial(env);
     const database=await buildDatabaseSnapshot(sql,ctx,backup);
     const compressed=await gzip(database.bytes),encrypted=await encryptPayload(compressed,material.key);
-    await putBackupObject(env,sql,ctx,databasePath,encrypted,"application/octet-stream");
+    await queueObject(await putBackupObject(env,ctx,databasePath,encrypted,"application/octet-stream"));
 
     for(const bucket of SOURCE_BUCKETS){
       const sourcePrefix=`tenants/${ctx.tenantId}/${bucket}/`;let cursor:string|undefined,count=0;
@@ -224,13 +247,10 @@ export async function performFullBackup(env:Env,sql:TenantSql,ctx:SessionContext
           if(totalBytes>maxBytes)fail(`Storage byte limit exceeded (${maxBytes})`,"backup_byte_limit",413);
           const sourcePath=item.key.slice(sourcePrefix.length),checksum=await sha256Bytes(bytes),sealed=await encryptPayload(bytes,material.key);
           const backupPath=`${prefix}/storage/${bucket}/${encodedPath(sourcePath)}.nisb`;
-          await putBackupObject(env,sql,ctx,backupPath,sealed,"application/octet-stream");
+          const metadata=await putBackupObject(env,ctx,backupPath,sealed,"application/octet-stream");
           const row:StoredObject={source_bucket:bucket,source_path:sourcePath,backup_path:backupPath,content_type:contentTypeOf(object),original_size:bytes.byteLength,encrypted_size:sealed.byteLength,checksum};
           storedObjects.push(row);count++;
-          await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_record_object(
-            ${backup.id}::uuid,${bucket},${sourcePath},${backupPath},${row.content_type},
-            ${row.original_size}::bigint,${row.encrypted_size}::bigint,${checksum}
-          )`]);
+          await queueObject({...metadata,record_inventory:true,...row});
         }
         cursor=listed.truncated?listed.cursor:undefined;
       }while(cursor);
@@ -246,13 +266,14 @@ export async function performFullBackup(env:Env,sql:TenantSql,ctx:SessionContext
       auth_users:{count:database.authUserCount,password_hashes_included:false,note:"Neon identity metadata is exported; password hashes are intentionally excluded from portable tenant backups."}
     };
     const sealedManifest=await encryptPayload(enc.encode(JSON.stringify(manifest)),material.key);
-    await putBackupObject(env,sql,ctx,manifestPath,sealedManifest,"application/octet-stream");
+    await queueObject(await putBackupObject(env,ctx,manifestPath,sealedManifest,"application/octet-stream"));
     const index=enc.encode(JSON.stringify({
       format_version:FORMAT_VERSION,schema_version:SCHEMA_VERSION,backup_id:backup.id,backup_key:backup.backup_key,
       generated_at:generatedAt,encrypted:true,algorithm:"AES-256-GCM",key_hint:material.hint,
       manifest_path:manifestPath,database_path:databasePath,storage_object_counts:objectCounts,storage_bytes:totalBytes
     },null,2));
-    await putBackupObject(env,sql,ctx,indexPath,index,"application/json");
+    await queueObject(await putBackupObject(env,ctx,indexPath,index,"application/json"));
+    await flushBackupObjectBatch(sql,ctx,backup.id,pendingObjects);
     const [completedRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select public.backup_worker_complete(
       ${backup.id}::uuid,${indexPath},${database.checksum},${JSON.stringify(database.rowCounts)}::jsonb,
       ${manifestPath},${databasePath},${JSON.stringify(objectCounts)}::jsonb,${totalBytes}::bigint,${material.hint}
