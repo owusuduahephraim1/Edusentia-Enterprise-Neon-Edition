@@ -10,6 +10,7 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   const r2Repair=read("database/reference-compat/0071_backup_r2_tenant_upsert_fix.sql");
   const interruptionRecovery=read("database/reference-compat/0073_backup_interruption_recovery.sql");
   const bulkObjectRecording=read("database/reference-compat/0074_backup_worker_bulk_object_recording.sql");
+  const ambiguityFix=read("database/reference-compat/0075_backup_bulk_object_ambiguity_fix.sql");
   const installer=read("database/reference-compat/install-operational-parity.sh");
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
   const template=read("database/tenant-template/install.sh");
@@ -25,12 +26,14 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   assert.match(installer,/0071_backup_r2_tenant_upsert_fix/);
   assert.match(installer,/0073_backup_interruption_recovery/);
   assert.match(installer,/0074_backup_worker_bulk_object_recording/);
+  assert.match(installer,/0075_backup_bulk_object_ambiguity_fix/);
   assert.match(upgrade,/0069_backup_schedule_restore_experience/);
   assert.match(upgrade,/0070_backup_worker_batch_resilience/);
   assert.match(upgrade,/0071_backup_r2_tenant_upsert_fix/);
   assert.match(upgrade,/0072_grading_scale_interpretation_parity/);
   assert.match(upgrade,/0074_backup_worker_bulk_object_recording/);
-  assert.match(upgrade,/test "\$migration_count" = "50"/);
+  assert.match(upgrade,/0075_backup_bulk_object_ambiguity_fix/);
+  assert.match(upgrade,/test "\$migration_count" = "51"/);
   assert.match(resilience,/backup_worker_read_batch/);
   assert.match(resilience,/heartbeat_at/);
   assert.match(resilience,/backup_worker_reconcile_stale_backups/);
