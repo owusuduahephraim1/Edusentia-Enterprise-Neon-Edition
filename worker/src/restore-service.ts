@@ -7,8 +7,10 @@ import { performFullBackup } from "./backup-service";
 const FORMAT_VERSION=2,SCHEMA_VERSION="7.4.0",MAX_UPLOAD=524288000;
 const BACKUP_BUCKET="system-backups",RESTORE_PREFIX="restore-imports";
 const RESTORABLE_TABLES=[
-  "school_settings","profiles","id_card_settings","id_card_deletion_tombstones","teachers","headteachers",
-  "academic_years","terms","classes","subjects","class_subjects","class_timetable_entries","school_prospectuses",
+  // Restore identity and academic parents before school_settings because
+  // certificate_completion_class_id can reference classes.
+  "profiles","teachers","headteachers","academic_years","terms","classes","school_settings",
+  "id_card_settings","id_card_deletion_tombstones","subjects","class_subjects","class_timetable_entries","school_prospectuses",
   "school_prospectus_sections","school_prospectus_items","school_prospectus_revisions","user_class_access","students",
   "student_guardians","guardian_links","enrollments","student_id_cards","id_card_events","staff_id_cards",
   "staff_id_card_events","class_attendance_registers","student_attendance_entries","grading_scales","assessment_schemes",
