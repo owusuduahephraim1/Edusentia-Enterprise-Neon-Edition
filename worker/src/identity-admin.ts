@@ -231,19 +231,22 @@ async function resetPassword(sql:TenantSql,ctx:SessionContext,userId:string,pass
 
 async function genericAdmin(env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
   const action=clean(body.action,80),payload=(body.payload&&typeof body.payload==="object"?body.payload:{}) as Record<string,unknown>;
-  const [passwordStateRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select must_change_password from public.profiles where id=${ctx.userId}::uuid limit 1`]);
-  const currentProfile=(passwordStateRows[0] as any)?.[0]??(passwordStateRows[0] as any);
-  if(!currentProfile)fail("User profile not found","not_found",404);
   if(action==="complete_own_required_password_change"){
     const password=String(payload.password??"");
+    const [passwordStateRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select must_change_password from public.profiles where id=${ctx.userId}::uuid limit 1`]);
+    const currentProfile=(passwordStateRows[0] as any)?.[0]??(passwordStateRows[0] as any);
+    if(!currentProfile)fail("User profile not found","not_found",404);
     if(currentProfile.must_change_password!==true)return {ok:true,password_changed:true,id:ctx.userId,must_change_password:false,already_completed:true};
     const result=await resetPassword(sql,ctx,ctx.userId,password,false);
     return {...result,password_changed:true};
   }
-  if(currentProfile.must_change_password===true){
-    fail("Replace the temporary password before continuing","password_change_required",428);
-  }
 
+  // The route layer already blocks every other tenant API while the signed-in
+  // account still has must_change_password=true. Do not make administrator
+  // password resets depend on a second lookup of the actor profile here:
+  // that redundant lookup caused valid reset-password requests to fail with
+  // "User profile not found" even though the authenticated System
+  // Administrator session and target account were valid.
   requireAdmin(ctx);await ensureWritable(sql,ctx);
   if(action==="create")return createIdentity(env,sql,ctx,payload);
   if(action==="update")return updateIdentity(env,sql,ctx,payload);
