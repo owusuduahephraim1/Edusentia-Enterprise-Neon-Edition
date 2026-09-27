@@ -149,12 +149,18 @@ test("Required password changes block workspace entry until completed",()=>{
   const app=read("frontend/app.js");
   const routes=read("worker/src/routes.ts");
   const identity=read("worker/src/identity-admin.ts");
-  assert.match(routes,/profile:certifiedBootstrap\?\.profile\|\|null/);
+  const migration=read("database/reference-compat/0076_required_password_bootstrap_enforcement.sql");
+  assert.match(migration,/select id,full_name,public\.current_app_role\(\) role,active,mfa_required,must_change_password,phone/);
+  assert.match(migration,/0076_required_password_bootstrap_enforcement/);
+  assert.match(routes,/requiredPasswordChange\(sql,ctx\)/);
+  assert.match(routes,/password_change_required/);
+  assert.match(routes,/profile:certifiedBootstrap\?\.profile\?\{\.\.\.certifiedBootstrap\.profile,must_change_password:passwordChangeRequired\}:null/);
   assert.match(app,/state\.boot\?\.profile\?\.must_change_password===true/);
   assert.match(app,/openRequiredPasswordChange\(\)/);
   assert.match(app,/complete_own_required_password_change/);
   assert.match(app,/Password Change Required/);
   assert.match(identity,/action==="complete_own_required_password_change"/);
+  assert.match(identity,/currentProfile\.must_change_password===true/);
   assert.match(identity,/resetPassword\(sql,ctx,ctx\.userId,password,false\)/);
 });
 
