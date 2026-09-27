@@ -1,4 +1,5 @@
 // Backup scheduling release: manual backup for all licensed schools; weekly/monthly automation for eligible plans. Production runtime repair verified for stable encryption secrets and resilient maintenance reads.
+// Backup interruption recovery: stale processing rows are reconciled before a new one-click backup.
 import type { Env, SessionContext } from "./types";
 import { tenantDb, type TenantSql } from "./tenant-db";
 import { db, tenantTx } from "./db";
