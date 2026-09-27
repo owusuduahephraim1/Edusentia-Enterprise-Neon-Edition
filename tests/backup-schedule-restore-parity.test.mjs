@@ -85,6 +85,7 @@ test("backup workspace provides simple one-click backup and protected one-confir
   const worker=read("worker/src/backup-service.ts");
   const download=read("frontend/tenant-backup-r2-download-core-r42-v18.js");
   const restore=read("worker/src/restore-service.ts");
+  const restoreBridge=read("database/reference-compat/0077_restore_worker_bridge.sql");
 
   assert.match(enterprise,/Create backup/);
   assert.match(enterprise,/scheduledBackup\("backup_now"\)/);
