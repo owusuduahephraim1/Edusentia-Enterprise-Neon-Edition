@@ -19,6 +19,14 @@ import { cancelRestore, executeRestore, handleRestoreTransfer, prepareRestore } 
 // Protected uploads use tenant-scoped R2 keys; teacher and Principal photographs preserve certified staff-relative path contracts with session-scoped authorization.
 function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.role))throw Object.assign(new Error("You do not have permission for this operation"),{code:"forbidden",status:403});}
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}
+async function requiredPasswordChange(sql:any,ctx:SessionContext){
+  const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
+    txn`select coalesce(must_change_password,false) must_change_password
+          from public.profiles where id=${ctx.userId}::uuid limit 1`
+  ]);
+  const row=(rows[0] as any)?.[0]??(rows[0] as any);
+  return row?.must_change_password===true;
+}
 function uploadContentType(filename:string,value:unknown){
   const supplied=String(value||"").split(";")[0].trim().toLowerCase();
   if(supplied&&supplied!=="application/octet-stream")return supplied;
@@ -94,10 +102,18 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     return json({authenticated:true,user:{id:ctx.userId,email:ctx.email,displayName:ctx.displayName},membership:{tenantId:ctx.tenantId,tenantCode:ctx.tenantCode,tenantName:ctx.tenantName,role:ctx.role,roleLabel:ctx.role.replaceAll('_',' ')},session:{id:ctx.sessionId,assuranceLevel:ctx.assuranceLevel}});
   }
   const ctx=await authed(request,env),sql=tenantDb(env,ctx.databaseName),master=db(env);
+  const passwordChangeRequired=await requiredPasswordChange(sql,ctx);
   const legacyIdentity=p.match(/^\/api\/compat\/functions\/(admin-user-management|directory-user-management)$/);
   if(method==="POST"&&legacyIdentity){
     const body=await readJson<any>(request);
+    const requiredChangeAction=legacyIdentity[1]==="admin-user-management"&&String(body?.action||"")==="complete_own_required_password_change";
+    if(passwordChangeRequired&&!requiredChangeAction){
+      return error("password_change_required","Replace the temporary password before continuing",428,requestId);
+    }
     return json(await handleLegacyIdentityFunction(legacyIdentity[1],env,sql,ctx,body));
+  }
+  if(passwordChangeRequired&&!(method==="GET"&&p==="/api/bootstrap")){
+    return error("password_change_required","Replace the temporary password before continuing",428,requestId);
   }
   if(method==="POST"&&p==="/api/compat/functions/tenant-auth-recovery"){
     const body=await readJson<Record<string,unknown>>(request);
@@ -330,7 +346,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     };
     return json({
       tenant:tenantPayload,metrics:metrics[0]||{},
-      profile:certifiedBootstrap?.profile||null,
+      profile:certifiedBootstrap?.profile?{...certifiedBootstrap.profile,must_change_password:passwordChangeRequired}:null,
       academic_years:Array.isArray(certifiedBootstrap?.academic_years)?certifiedBootstrap.academic_years:[],
       terms:Array.isArray(certifiedBootstrap?.terms)?certifiedBootstrap.terms:[],
       classes:Array.isArray(certifiedBootstrap?.classes)?certifiedBootstrap.classes:[],
