@@ -467,7 +467,13 @@ async function setSchedulePolicy(sql:TenantSql,ctx:SessionContext,mode:string){
 
 export async function handleScheduledBackupCompat(env:Env,sql:TenantSql,ctx:SessionContext,body:Record<string,unknown>){
   if(ctx.role!=="system_admin")fail("School System Administrator access required","forbidden",403);
-  const action=String(body.action||"create");
+  const action=String(body.action||"backup_now");
+  if(action==="backup_now"){
+    const backup=await performFullBackup(env,sql,ctx,"manual");
+    if(!backup?.id)fail("The school backup could not be created","backup_create_failed",500);
+    const verified=await verifyBackup(env,sql,ctx,String(backup.id));
+    return {...backup,...verified,ready:true};
+  }
   if(action==="create")return performFullBackup(env,sql,ctx,"manual");
   if(action==="policy")return schedulePolicy(sql,ctx);
   if(action==="set_schedule")return setSchedulePolicy(sql,ctx,String(body.mode||""));
