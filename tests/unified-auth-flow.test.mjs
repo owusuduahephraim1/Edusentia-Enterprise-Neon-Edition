@@ -165,6 +165,19 @@ test("Required password changes block workspace entry until completed",()=>{
 });
 
 
+test("System Administrator password reset does not depend on a redundant actor profile lookup",()=>{
+  const identity=read("worker/src/identity-admin.ts");
+  const workspace=read("frontend/parity-enterprise-workspaces.js");
+  const genericStart=identity.indexOf("async function genericAdmin");
+  const resetStart=identity.indexOf('if(action==="reset_password")',genericStart);
+  assert.ok(genericStart>=0&&resetStart>genericStart);
+  const prefix=identity.slice(genericStart,resetStart);
+  assert.match(prefix,/if\(action==="complete_own_required_password_change"\)\{[\s\S]*select must_change_password from public\.profiles/);
+  assert.doesNotMatch(prefix,/if\(!currentProfile\).*requireAdmin/s);
+  assert.match(workspace,/adminUserManagement\("reset_password",\{user_id:id,password:/);
+  assert.match(workspace,/must_change_password:form\.elements\.force_password_change\.checked/);
+});
+
 test("Tenant logout returns to the branded school sign-in instead of the public registration page",()=>{
   const app=read("frontend/app.js");
   assert.match(app,/function tenantLoginUrl\(session=state\.session\)/);
