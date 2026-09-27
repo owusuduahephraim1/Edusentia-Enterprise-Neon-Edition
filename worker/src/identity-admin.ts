@@ -231,14 +231,17 @@ async function resetPassword(sql:TenantSql,ctx:SessionContext,userId:string,pass
 
 async function genericAdmin(env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
   const action=clean(body.action,80),payload=(body.payload&&typeof body.payload==="object"?body.payload:{}) as Record<string,unknown>;
+  const [passwordStateRows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select must_change_password from public.profiles where id=${ctx.userId}::uuid limit 1`]);
+  const currentProfile=(passwordStateRows[0] as any)?.[0]??(passwordStateRows[0] as any);
+  if(!currentProfile)fail("User profile not found","not_found",404);
   if(action==="complete_own_required_password_change"){
     const password=String(payload.password??"");
-    const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`select must_change_password from public.profiles where id=${ctx.userId}::uuid limit 1`]);
-    const profile=(rows[0] as any)?.[0]??(rows[0] as any);
-    if(!profile)fail("User profile not found","not_found",404);
-    if(profile.must_change_password!==true)return {ok:true,password_changed:true,id:ctx.userId,must_change_password:false,already_completed:true};
+    if(currentProfile.must_change_password!==true)return {ok:true,password_changed:true,id:ctx.userId,must_change_password:false,already_completed:true};
     const result=await resetPassword(sql,ctx,ctx.userId,password,false);
     return {...result,password_changed:true};
+  }
+  if(currentProfile.must_change_password===true){
+    fail("Replace the temporary password before continuing","password_change_required",428);
   }
 
   requireAdmin(ctx);await ensureWritable(sql,ctx);
