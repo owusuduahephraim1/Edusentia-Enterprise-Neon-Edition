@@ -65,40 +65,33 @@ test("manual backup snapshots use batched tenant-local reads and fail closed wit
   assert.match(migration,/Previous backup worker was interrupted before completion\. Safe retry is allowed\./);
 });
 
-test("backup workspace provides one tap backup, encrypted ZIP download and protected ZIP restore",()=>{
+test("backup workspace provides simple one-click backup and protected one-confirm restore",()=>{
   const enterprise=read("frontend/parity-enterprise-workspaces.js");
+  const worker=read("worker/src/backup-service.ts");
   const download=read("frontend/tenant-backup-r2-download-core-r42-v18.js");
   const restore=read("worker/src/restore-service.ts");
 
-  assert.match(enterprise,/Back up now/);
-  assert.match(enterprise,/PLAN UPGRADE REQUIRED FOR AUTOMATIC BACKUP/);
+  assert.match(enterprise,/Create backup/);
+  assert.match(enterprise,/scheduledBackup\("backup_now"\)/);
+  assert.match(worker,/action==="backup_now"/);
+  assert.match(worker,/verifyBackup\(env,sql,ctx,String\(backup\.id\)\)/);
+  assert.match(enterprise,/Automatic backup & advanced tools/);
   assert.match(enterprise,/Weekly/);
   assert.match(enterprise,/Monthly/);
   assert.match(enterprise,/data-backup-download/);
   assert.match(enterprise,/data-backup-delete-failed/);
   assert.match(enterprise,/scheduledBackup\("delete_failed"/);
-  assert.match(enterprise,/Restore from downloaded ZIP/);
+  assert.match(enterprise,/Restore backup/);
   assert.match(enterprise,/prepare_restore_import/);
   assert.match(enterprise,/execute_restore_import/);
-  assert.match(enterprise,/RESTORE SCHOOL/);
-  assert.match(enterprise,/function backupStatIcon/);
-  const css=read("frontend/style.css");
-  assert.match(css,/\.stat-icon\{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;font-size:21px;font-weight:900\}/);
-  assert.match(css,/\.stat-icon\{width:39px;height:39px\}/);
-  assert.match(css,/\.stat-card>div>span\{display:block;font-size:12px;color:var\(--muted\);font-weight:650\}/);
-  assert.doesNotMatch(css,/\.stat-card span\{display:block/);
-  assert.doesNotMatch(css,/\.stat-icon svg\{/);
-  assert.doesNotMatch(css,/\.stat-icon\{[^}]*flex:/);
-  assert.doesNotMatch(css,/\.backup-stat-icon\{[^}]*width:/);
-  assert.doesNotMatch(enterprise,/backup-stat-icon/);
-  assert.doesNotMatch(enterprise,/<svg viewBox="0 0 24 24"/);
-  assert.doesNotMatch(enterprise,/stat-card backup-stat-card/);
-  assert.match(enterprise,/symbols=\{history:"↻",automatic:"◷",next:"→",retention:"▣"\}/);
-  assert.match(enterprise,/tones=\{history:"blue",automatic:"green",next:"purple",retention:"gold"\}/);
+  assert.match(enterprise,/confirmation:"RESTORE SCHOOL"/);
+  assert.doesNotMatch(enterprise,/Type RESTORE SCHOOL to continue/);
   assert.match(download,/backup-download-gateway/);
   assert.match(download,/new window\.JSZip/);
   assert.match(download,/AES-256-GCM encrypted database and protected-file payloads/);
+  assert.match(restore,/String\(body\.confirmation\|\|""\)!=="RESTORE SCHOOL"/);
   assert.match(restore,/performFullBackup\(env,sql,ctx,"pre_restore"\)/);
+  assert.match(restore,/restore_wrong_tenant/);
   assert.match(restore,/school_restore_clear_operational_data/);
   assert.match(restore,/school_restore_complete/);
 });
