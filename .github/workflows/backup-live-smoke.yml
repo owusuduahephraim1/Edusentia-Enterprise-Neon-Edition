@@ -56,7 +56,7 @@ jobs:
 
           psql "$TENANT_URL" -X -v ON_ERROR_STOP=1 -qAtc "insert into authn.sessions(id,user_id,tenant_id,token_hash,role,assurance_level,expires_at) values('$SESSION_ID'::uuid,'$ADMIN_USER_ID'::uuid,'$TENANT_ID'::uuid,'$TOKEN_HASH','system_admin',2,now()+interval '20 minutes')"
 
-          HTTP_CODE="$(curl -sS --max-time 600 -o /tmp/backup-response.json -w '%{http_code}'             -H 'content-type: application/json'             -H "cookie: __Host-edusentia_session=$TOKEN"             --data '{"action":"backup_now"}'             "$WORKER_URL/api/compat/functions/scheduled-backup")"
+          HTTP_CODE="$(curl -sS --max-time 600 -o /tmp/backup-response.json -w '%{http_code}'             -H 'content-type: application/json'             -H 'origin: https://owusuduahephraim1.github.io'             -H "cookie: __Host-edusentia_session=$TOKEN"             --data '{"action":"backup_now"}'             "$WORKER_URL/api/compat/functions/scheduled-backup")"
 
           export HTTP_CODE
           node --input-type=module -e '
