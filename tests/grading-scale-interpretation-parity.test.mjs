@@ -17,7 +17,7 @@ test("grading-scale interpretation schema matches the certified save contract",(
   assert.match(migration,/0072_grading_scale_interpretation_parity/);
   assert.match(installer,/0072_grading_scale_interpretation_parity/);
   assert.match(upgrade,/0072_grading_scale_interpretation_parity/);
-  assert.match(upgrade,/test "\$migration_count" = "52"/);
+  assert.match(upgrade,/test "\$migration_count" = "53"/);
   assert.match(upgrade,/grading_scale_contract_ok/);
   assert.match(template,/grading_scale_contract_ok/);
   assert.match(mutation,/insert into public\.grading_scales\([\s\S]*interpretation/i);
