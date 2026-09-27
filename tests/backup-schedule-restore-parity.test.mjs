@@ -89,6 +89,10 @@ test("backup workspace provides simple one-click backup and protected one-confir
   assert.match(download,/backup-download-gateway/);
   assert.match(download,/new window\.JSZip/);
   assert.match(download,/AES-256-GCM encrypted database and protected-file payloads/);
+  assert.match(worker,/tenant_code:ctx\.tenantCode,tenant_name:ctx\.tenantName/);
+  assert.match(download,/Tenant number:/);
+  assert.match(download,/School:/);
+  assert.match(download,/\$\{school\}-\$\{tenant\}-encrypted-backup-/);
   assert.match(restore,/String\(body\.confirmation\|\|""\)!=="RESTORE SCHOOL"/);
   assert.match(restore,/performFullBackup\(env,sql,ctx,"pre_restore"\)/);
   assert.match(restore,/restore_wrong_tenant/);
