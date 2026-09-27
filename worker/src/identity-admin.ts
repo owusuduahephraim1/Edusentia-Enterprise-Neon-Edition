@@ -252,7 +252,8 @@ async function genericAdmin(env:Env,sql:TenantSql,ctx:SessionContext,body:Body){
   if(action==="update")return updateIdentity(env,sql,ctx,payload);
   if(action==="reset_password"){
     const userId=uuid(payload.user_id),password=String(payload.password??"");
-    return resetPassword(sql,ctx,userId,password,payload.must_change_password!==false);
+    const mustChange=payload.must_change_password!==undefined?payload.must_change_password!==false:payload.force_password_change!==false;
+    return resetPassword(sql,ctx,userId,password,mustChange);
   }
   if(action==="refresh_generated_email"){
     return refreshGeneratedEmail(env,sql,ctx,payload);
