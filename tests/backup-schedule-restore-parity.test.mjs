@@ -8,6 +8,7 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   const migration=read("database/reference-compat/0069_backup_schedule_restore_experience.sql");
   const resilience=read("database/reference-compat/0070_backup_worker_batch_resilience.sql");
   const r2Repair=read("database/reference-compat/0071_backup_r2_tenant_upsert_fix.sql");
+  const interruptionRecovery=read("database/reference-compat/0073_backup_interruption_recovery.sql");
   const installer=read("database/reference-compat/install-operational-parity.sh");
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
   const template=read("database/tenant-template/install.sh");
@@ -21,6 +22,7 @@ test("backup scheduling is promoted to the tenant template and existing isolated
   assert.match(installer,/0069_backup_schedule_restore_experience/);
   assert.match(installer,/0070_backup_worker_batch_resilience/);
   assert.match(installer,/0071_backup_r2_tenant_upsert_fix/);
+  assert.match(installer,/0073_backup_interruption_recovery/);
   assert.match(upgrade,/0069_backup_schedule_restore_experience/);
   assert.match(upgrade,/0070_backup_worker_batch_resilience/);
   assert.match(upgrade,/0071_backup_r2_tenant_upsert_fix/);
@@ -57,6 +59,7 @@ test("manual backup snapshots use batched tenant-local reads and fail closed wit
 
   assert.match(worker,/DATABASE_BATCH_SIZE=12/);
   assert.match(worker,/backup_worker_read_batch/);
+  assert.match(worker,/backup_worker_reconcile_stale_backups/);
   assert.match(worker,/async function readTable\(/);
   assert.match(worker,/Persist failure state before best-effort R2 cleanup/);
   assert.match(worker,/const material=await encryptionMaterial\(env\)/);
@@ -110,6 +113,8 @@ test("commercial backup entitlements preserve manual backups for Starter and sch
 
 test("production Worker deployment provisions stable backup encryption and transfer secrets",()=>{
   const workflow=read(".github/workflows/deploy-worker.yml");
+  const wrangler=read("worker/wrangler.jsonc");
+  assert.match(wrangler,/"cpu_ms"\s*:\s*300000/);
   assert.match(workflow,/ensure_worker_secret BACKUP_ENCRYPTION_KEY/);
   assert.match(workflow,/ensure_worker_secret BACKUP_SIGNING_SECRET/);
   assert.match(workflow,/preserving the existing key/);
