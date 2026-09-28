@@ -1,4 +1,5 @@
 name: Deploy Cloudflare Worker
+# Deployment trigger: RLS-safe forced temporary-password enforcement 0078.
 # Deployment trigger: reset force-change parity and restore validation.
 # Owner-bootstrap boundary: deployment verifies owner-established role grants and never replays them as runtime.
 # Deployment trigger: required temporary-password enforcement 0076.
