@@ -21,8 +21,7 @@ function requireRole(ctx:SessionContext, roles:string[]){if(!roles.includes(ctx.
 async function authed(request:Request,env:Env){const ctx=await authenticate(request,env);if(!ctx)throw Object.assign(new Error("Authentication is required"),{code:"unauthenticated",status:401});return ctx;}
 async function requiredPasswordChange(sql:any,ctx:SessionContext){
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[
-    txn`select coalesce(must_change_password,false) must_change_password
-          from public.profiles where id=${ctx.userId}::uuid limit 1`
+    txn`select public.required_password_change_state() must_change_password`
   ]);
   const row=(rows[0] as any)?.[0]??(rows[0] as any);
   return row?.must_change_password===true;
@@ -346,7 +345,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     };
     return json({
       tenant:tenantPayload,metrics:metrics[0]||{},
-      profile:certifiedBootstrap?.profile?{...certifiedBootstrap.profile,must_change_password:passwordChangeRequired}:null,
+      profile:certifiedBootstrap?.profile?{...certifiedBootstrap.profile,must_change_password:(passwordChangeRequired||certifiedBootstrap.profile.must_change_password===true)}:null,
       academic_years:Array.isArray(certifiedBootstrap?.academic_years)?certifiedBootstrap.academic_years:[],
       terms:Array.isArray(certifiedBootstrap?.terms)?certifiedBootstrap.terms:[],
       classes:Array.isArray(certifiedBootstrap?.classes)?certifiedBootstrap.classes:[],
