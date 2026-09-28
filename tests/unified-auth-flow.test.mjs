@@ -166,7 +166,7 @@ test("Required password changes block workspace entry until completed",()=>{
   assert.match(app,/complete_own_required_password_change/);
   assert.match(app,/Password Change Required/);
   assert.match(identity,/action==="complete_own_required_password_change"/);
-  assert.match(identity,/currentProfile\.must_change_password!==true/);
+  assert.match(identity,/currentState\?\.must_change_password!==true/);
   assert.match(identity,/resetPassword\(sql,ctx,ctx\.userId,password,false\)/);
 });
 
