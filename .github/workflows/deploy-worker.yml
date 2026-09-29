@@ -1,4 +1,5 @@
 name: Deploy Cloudflare Worker
+# Deployment trigger: repaired school deletion and denied-registration cleanup 0025f.
 # Deployment trigger: validated RLS-safe temporary-password enforcement 0078.
 # Deployment trigger: RLS-safe forced temporary-password enforcement 0078.
 # Deployment trigger: reset force-change parity and restore validation.
