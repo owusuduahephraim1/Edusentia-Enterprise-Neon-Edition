@@ -222,6 +222,30 @@ export async function platformRoute(request:Request,env:Env,requestId:string):Pr
   id=uuidPath(p,/^\/api\/platform\/registrations\/([0-9a-f-]{36})\/deny$/i);
   if(method==="POST"&&id){const b=await readJson<any>(request),rows=await sql`select platform.deny_registration(${id}::uuid,${ctx.userId}::uuid,${String(b.reason||"")}) result`;return json((rows[0] as any)?.result||{ok:true});}
 
+  id=uuidPath(p,/^\/api\/platform\/registrations\/([0-9a-f-]{36})\/delete$/i);
+  if(method==="POST"&&id){
+    const b=await readJson<any>(request);
+    const rows=await sql`
+      select r.id,r.school_name,r.status,r.tenant_id,tc.tenant_code
+        from platform.school_registrations r
+        left join platform.tenant_control tc on tc.tenant_id=r.tenant_id
+       where r.id=${id}::uuid
+       limit 1`;
+    const registration=rows[0] as any;
+    if(!registration)return error("registration_not_found","School registration was not found",404,requestId);
+    if(!["denied","rejected","cancelled"].includes(String(registration.status||""))){
+      return error("registration_not_deletable","Only denied or cancelled school registrations can be permanently deleted",409,requestId);
+    }
+    const confirmation=String(b.confirmation||""),reason=String(b.reason||"");
+    if(registration.tenant_id){
+      const expected=String(registration.tenant_code||"");
+      if(!expected||confirmation!==expected)return error("deletion_confirmation_mismatch","Deletion confirmation does not match the school code",422,requestId);
+      return json(await deleteIsolatedTenant(env,String(registration.tenant_id),ctx.userId,`DELETE ${expected}`,reason));
+    }
+    const deleted=await sql`select platform.delete_denied_registration(${id}::uuid,${ctx.userId}::uuid,${confirmation},${reason}) result`;
+    return json((deleted[0] as any)?.result||{ok:true,deleted:true});
+  }
+
   id=uuidPath(p,/^\/api\/platform\/tenants\/([0-9a-f-]{36})\/provision$/i);
   if(method==="POST"&&id){
     const b=await readJson<any>(request),action=String(b.action||"complete");if(action==="resume")await sql`select platform.resume_provisioning(${id}::uuid,${ctx.userId}::uuid)`;return json(await provisionIsolatedTenant(env,id,ctx.userId));
