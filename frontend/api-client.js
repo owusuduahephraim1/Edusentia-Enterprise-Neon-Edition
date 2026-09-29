@@ -162,6 +162,7 @@
     configureInitialLicense:(registrationId,payload)=>post(`/api/platform/registrations/${registrationId}/license`,payload),
     approveRegistration:(registrationId)=>post(`/api/platform/registrations/${registrationId}/approve`,{}),
     denyRegistration:(registrationId,reason)=>post(`/api/platform/registrations/${registrationId}/deny`,{reason}),
+    deleteRegistration:(registrationId,confirmation,reason)=>post(`/api/platform/registrations/${registrationId}/delete`,{confirmation,reason}),
     provisionTenant:(tenantId,action="complete")=>post(`/api/platform/tenants/${tenantId}/provision`,{action}),
     setTenantStatus:(tenantId,status)=>post(`/api/platform/tenants/${tenantId}/status`,{status}),
     refreshTenantCapacity:(tenantId)=>post(`/api/platform/tenants/${tenantId}/capacity/refresh`,{}),
