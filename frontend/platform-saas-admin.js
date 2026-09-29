@@ -170,7 +170,16 @@ function renderOverview(m){
   <section class="pa-panel" style="margin-top:17px"><header class="pa-panel-head"><h4>Tenant control status</h4><button class="pa-btn secondary small" data-view-jump="tenants">Open tenants</button></header><div class="pa-panel-body">${health.length?health.map(t=>`<article class="pa-event"><strong>${esc(t.school_name)} · ${esc(t.tenant_code)}</strong><small>${esc(t.database_state)} · ${esc(t.plan_code)} · health ${esc(t.last_health_status)} · capacity ${esc(t.student_capacity_status)}</small></article>`).join(""):empty("No tenant schools have been approved yet.")}</div></section>`;
 }
 function renderRegistrations(m){
-  const rows=(m.registrations||[]).map(r=>`<tr><td><strong>${esc(r.school_name)}</strong><br><small>${esc(r.institution_type)}</small></td><td>${esc(r.contact_name)}<br><small>${esc(r.contact_email)}</small></td><td>${badge(r.status)}</td><td>${fmt(r.created_at)}</td><td><div class="pa-actions">${r.status==="pending"?`<button class="pa-btn secondary small" data-action="approve" data-id="${r.id}">Approve</button><button class="pa-btn danger small" data-action="deny" data-id="${r.id}">Deny</button>`:""}</div></td></tr>`);
+  const rows=(m.registrations||[]).map(r=>{
+    const pending=r.status==="pending";
+    const destructive=["denied","rejected","cancelled"].includes(String(r.status||""));
+    const actions=pending
+      ?`<button class="pa-btn secondary small" data-action="approve" data-id="${r.id}">Approve</button><button class="pa-btn danger small" data-action="deny" data-id="${r.id}">Deny</button>`
+      :destructive
+        ?`<button class="pa-btn danger small" data-action="delete-registration" data-id="${r.id}">Delete permanently</button>`
+        :"";
+    return `<tr><td><strong>${esc(r.school_name)}</strong><br><small>${esc(r.institution_type)}</small></td><td>${esc(r.contact_name)}<br><small>${esc(r.contact_email)}</small></td><td>${badge(r.status)}</td><td>${fmt(r.created_at)}</td><td><div class="pa-actions">${actions}</div></td></tr>`;
+  });
   $("#paContent").innerHTML=`${pageHead("School Registrations","Approve only after reviewing the registered school and licence period.")}<section class="pa-panel"><div class="pa-panel-body">${rows.length?table(["School","Primary contact","Status","Submitted","Actions"],rows):empty("No registrations have been submitted.")}</div></section>`;
 }
 function renderTenants(m){
@@ -281,6 +290,31 @@ function openRecovery(t,requestId){
   $("#paRecoveryForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,b=form.querySelector('button[type="submit"]');b.disabled=true;try{const r=await api().resolveRecovery(req.id,form.elements.mode.value);if(r.setupLink){openModal("Protected password recovery link",`<div class="pa-info success"><strong>Recovery prepared</strong><span>MFA changes were applied where requested. Deliver the single-use password link only to the registered administrator.</span></div><label class="pa-field"><span>Recovery link</span><div class="pa-copy-field"><input id="paRecoveryLink" value="${esc(r.setupLink)}" readonly><button id="paCopyRecovery" class="pa-btn secondary" type="button">Copy</button></div></label><div class="pa-modal-actions"><button class="pa-btn ghost" data-modal-close type="button">Done</button></div>`);$("#paCopyRecovery").onclick=()=>copy(r.setupLink);}else{closeModal();status("Protected MFA recovery completed. The administrator must enroll a new factor at next sign-in.","success");}await load(true);}catch(err){status(err.message||String(err),"error");b.disabled=false;}});
   $("#paDenyRecovery").onclick=async()=>{const reason=String($("#paRecoveryForm").elements.denyReason.value||"").trim();if(reason.length<5){status("Enter a clear denial reason of at least five characters.","error");return;}try{await api().denyRecovery(req.id,reason);closeModal();status("Recovery request denied.","success");await load(true);}catch(err){status(err.message||String(err),"error");}};
 }
+function openDeleteRegistration(r){
+  const tenant=(state.model?.tenants||[]).find(t=>String(t.registration_id||"")===String(r.id)||String(t.tenant_id||"")===String(r.tenant_id||""));
+  const expected=tenant?.tenant_code||r.school_name;
+  const linked=Boolean(tenant?.tenant_id);
+  openModal("Permanently delete registration",`<div class="pa-info warning"><strong>Irreversible deletion</strong><span>${linked?"This denied school already has a tenant. Its dedicated Neon database, tenant R2 objects, and master registration records will be permanently removed.":"This permanently removes the denied registration from the control plane. The platform audit record remains."}</span></div>
+  <div class="pa-modal-summary"><strong>${esc(r.school_name)}</strong><span>${esc(r.status)}${tenant?.tenant_code?` · ${esc(tenant.tenant_code)}`:""}</span></div>
+  <form id="paDeleteRegistrationForm" class="pa-form"><label class="pa-field"><span>Reason for permanent deletion</span><textarea name="reason" minlength="8" maxlength="1000" required></textarea></label><label class="pa-field"><span>Type exactly: ${esc(expected)}</span><input name="confirmation" autocomplete="off" required></label><div class="pa-modal-actions"><button class="pa-btn ghost" data-modal-close type="button">Cancel</button><button class="pa-btn danger" type="submit">Delete permanently</button></div></form>`);
+  $("#paDeleteRegistrationForm").addEventListener("submit",async e=>{
+    e.preventDefault();
+    const form=e.currentTarget,b=form.querySelector('button[type="submit"]'),v=Object.fromEntries(new FormData(form));
+    if(String(v.confirmation)!==expected){status("Deletion confirmation does not match the required text.","error");return;}
+    b.disabled=true;b.textContent=linked?"Deleting school data…":"Deleting registration…";
+    try{
+      await api().deleteRegistration(r.id,String(v.confirmation),String(v.reason));
+      closeModal();
+      status(linked?"School, isolated database and tenant R2 objects were permanently deleted.":"Denied school registration permanently deleted.","success");
+      await load(true);
+    }catch(err){
+      status(err.message||String(err),"error");
+      b.disabled=false;b.textContent="Delete permanently";
+      await load(true);
+    }
+  });
+}
+
 function openDelete(t){
   const expected=`DELETE ${t.tenant_code}`;
   openModal("Permanently delete school",`<div class="pa-info warning"><strong>Irreversible tenant destruction</strong><span>This removes the dedicated Neon database, every object under the tenant R2 prefix, and the master tenant/registration records. The deletion audit job remains.</span></div>
@@ -313,6 +347,7 @@ async function action(event){
   if(action==="setup"&&t){openSetup(t);return;}
   if(action==="recovery"&&t){openRecovery(t,b.dataset.request);return;}
   if(action==="delete-tenant"&&t){openDelete(t);return;}
+  if(action==="delete-registration"&&r){openDeleteRegistration(r);return;}
   b.disabled=true;
   try{
     if(action==="deny"&&r){const reason=prompt("Reason for denying this registration");if(reason===null)return;await api().denyRegistration(r.id,reason);}
