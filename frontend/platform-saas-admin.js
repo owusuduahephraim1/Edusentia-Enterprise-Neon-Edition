@@ -186,7 +186,7 @@ function renderTenants(m){
   const recovery=new Map((m.recoveryRequests||[]).map(r=>[String(r.tenant_id),r]));
   const rows=(m.tenants||[]).map(t=>{
     const req=recovery.get(String(t.tenant_id)),ready=t.database_state==="isolated_ready",next=t.status==="active"?"suspended":"active";
-    return `<tr><td><code>${esc(t.tenant_code)}</code></td><td><strong>${esc(t.school_name)}</strong><br><small>${esc(t.admin_email)}</small></td><td>${badge(t.status)}</td><td>${esc(t.plan_code)}<br><small>${t.license_expires_at?fmt(t.license_expires_at):"No expiry"}</small></td><td>${ready?'<span class="pa-badge ready">isolated ready</span>':badge(t.database_state)}<br><small>${esc(t.database_name||"not created")}</small></td><td>${esc(t.student_capacity_status||"unknown")}<br><small>${Number(t.student_active_count||0)} / ${t.student_capacity_limit??"∞"}</small></td><td><div class="pa-actions">
+    return `<tr><td><code>${esc(t.tenant_code)}</code></td><td><strong>${esc(t.school_name)}</strong><br><small>${esc(t.admin_email)}</small></td><td>${badge(t.status)}</td><td>${esc(t.plan_code)}<br><small>${t.license_expires_at?fmt(t.license_expires_at):"No expiry"}</small></td><td>${ready?'<span class="pa-badge ready">isolated ready</span>':badge(t.database_state)}<br><small>${esc(t.database_name||"not created")}</small></td><td><strong>${Number(t.student_active_count||0)} / ${t.student_capacity_limit??"∞"}</strong><br><small>${esc(String(t.student_capacity_status||"unknown").replaceAll("_"," "))}${t.student_capacity_checked_at?` · checked ${fmt(t.student_capacity_checked_at)}`:" · not checked"}</small></td><td><div class="pa-actions">
       ${!ready?`<button class="pa-btn secondary small" data-action="provision" data-id="${t.tenant_id}">Provision</button>`:""}
       ${ready?`<button class="pa-btn secondary small" data-action="setup" data-id="${t.tenant_id}">Admin setup</button><button class="pa-btn ghost small" data-action="health" data-id="${t.tenant_id}">Health</button>`:""}
       ${ready?`<button class="pa-btn ${req?"warning":"ghost"} small" data-action="recovery" data-id="${t.tenant_id}" data-request="${req?.id||""}">${req?"Recovery request":"Reset admin access"}</button>`:""}
@@ -197,8 +197,11 @@ function renderTenants(m){
   $("#paContent").innerHTML=`${pageHead("Tenants","Each active school owns an isolated Neon database and tenant-scoped R2 namespace.")}<section class="pa-panel"><div class="pa-panel-body">${rows.length?table(["Code","School","Status","Licence","Database","Capacity","Actions"],rows):empty("No tenants have been approved.")}</div></section>`;
 }
 function renderCapacity(m){
-  const rows=(m.tenants||[]).map(t=>`<tr><td><strong>${esc(t.school_name)}</strong><br><code>${esc(t.tenant_code)}</code></td><td>${esc(t.plan_code)}</td><td>${Number(t.student_active_count||0)}</td><td>${t.student_capacity_base??"Unlimited"}</td><td>${t.student_capacity_limit??"Unlimited"}</td><td>${badge(t.student_capacity_status)}</td><td><div class="pa-actions"><button class="pa-btn secondary small" data-action="capacity" data-id="${t.tenant_id}">Set allowance</button><button class="pa-btn ghost small" data-action="refresh-capacity" data-id="${t.tenant_id}">Refresh usage</button></div></td></tr>`);
-  $("#paContent").innerHTML=`${pageHead("Student Capacity","Capacity changes never delete or hide existing students.")}<section class="pa-panel"><div class="pa-panel-body">${rows.length?table(["School","Plan","Active","Plan base","Licensed","State","Actions"],rows):empty("No tenant capacity records are available.")}</div></section>`;
+  const rows=(m.tenants||[]).map(t=>{
+    const active=Number(t.student_active_count||0),limit=t.student_capacity_limit==null?"∞":Number(t.student_capacity_limit),total=Number(t.student_total_count||0);
+    return `<tr><td><strong>${esc(t.school_name)}</strong><br><code>${esc(t.tenant_code)}</code></td><td>${esc(t.plan_code)}</td><td><strong>${active} / ${limit}</strong><br><small>${total} total student record${total===1?"":"s"}</small></td><td>${t.student_capacity_base??"Unlimited"}</td><td>${t.student_capacity_limit??"Unlimited"}</td><td>${badge(t.student_capacity_status)}<br><small>${t.student_capacity_checked_at?fmt(t.student_capacity_checked_at):"Not checked yet"}</small></td><td><div class="pa-actions"><button class="pa-btn secondary small" data-action="capacity" data-id="${t.tenant_id}">Set allowance</button><button class="pa-btn ghost small" data-action="refresh-capacity" data-id="${t.tenant_id}">Refresh usage</button></div></td></tr>`;
+  });
+  $("#paContent").innerHTML=`${pageHead("Student Capacity","Live licensed usage is synchronized after student changes. Example: 2 / 300 means 2 active students out of 300 licensed places.")}<section class="pa-panel"><div class="pa-panel-body">${rows.length?table(["School","Plan","Usage","Plan base","Licensed","State / checked","Actions"],rows):empty("No tenant capacity records are available.")}</div></section>`;
 }
 function renderLicensing(m){
   const auths=(m.planAuthorizations||[]),tenants=new Map((m.tenants||[]).map(t=>[String(t.tenant_id),t]));
@@ -388,6 +391,8 @@ function wire(){
     setView(button.dataset.view);
   });
   $("#paContent")?.addEventListener("click",action);$("#paModal")?.addEventListener("click",action);$("#paModal")?.addEventListener("close",()=>$("#paModalBody").innerHTML="");
+  window.setInterval(()=>{if(state.session&&!document.hidden&&["capacity","tenants"].includes(state.view))load();},30000);
+  document.addEventListener("visibilitychange",()=>{if(state.session&&!document.hidden&&["capacity","tenants"].includes(state.view))load(true);});
 }
 wire();boot();
 })();
