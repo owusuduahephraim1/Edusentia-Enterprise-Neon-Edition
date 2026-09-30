@@ -26,6 +26,33 @@ async function requiredPasswordChange(sql:any,ctx:SessionContext){
   const row=(rows[0] as any)?.[0]??(rows[0] as any);
   return row?.must_change_password===true;
 }
+const STUDENT_CAPACITY_MUTATIONS=new Set([
+  "save_student",
+  "bulk_import_students",
+  "archive_student",
+  "restore_student",
+  "admissions_enroll_application",
+  "alumni_create_from_student"
+]);
+async function syncMasterStudentCapacity(master:any,tenantSql:any,ctx:SessionContext,operation:string){
+  if(!STUDENT_CAPACITY_MUTATIONS.has(operation))return;
+  try{
+    const rows=await tenantSql`select app.platform_capacity_snapshot(${ctx.tenantId}::uuid) result`;
+    const capacity=(rows[0] as any)?.result||{};
+    await master`update platform.tenant_control set
+      student_capacity_base=${capacity.base_limit??null},
+      student_capacity_limit=${capacity.effective_limit??null},
+      student_active_count=${Number(capacity.active||0)},
+      student_total_count=${Number(capacity.total||0)},
+      student_capacity_status=${String(capacity.status||"unknown")},
+      student_admissions_blocked=${Boolean(capacity.admissions_blocked)},
+      student_capacity_checked_at=now(),
+      updated_at=now()
+      where tenant_id=${ctx.tenantId}::uuid`;
+  }catch(error){
+    console.warn(JSON.stringify({level:"warn",event:"student_capacity_sync_failed",tenantId:ctx.tenantId,operation,message:String((error as any)?.message||error)}));
+  }
+}
 function uploadContentType(filename:string,value:unknown){
   const supplied=String(value||"").split(";")[0].trim().toLowerCase();
   if(supplied&&supplied!=="application/octet-stream")return supplied;
@@ -226,6 +253,7 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
     const body=await readJson<any>(request);
     const result=await invokeCertifiedRpc(sql,ctx,operation,body?.args??{});
     if(destructiveMutation&&result===false)return error("mutation_not_applied","The requested remove or delete operation did not complete",409,requestId);
+    await syncMasterStudentCapacity(master,sql,ctx,operation);
     return json({ok:true,operation,result});
   }
 
