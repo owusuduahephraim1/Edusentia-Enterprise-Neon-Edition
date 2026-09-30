@@ -36,7 +36,7 @@ node --input-type=module -e '
 
 mapfile -t TENANTS < <(
   psql "$BOOTSTRAP_DATABASE_URL" -At -F $'\t' -c "
-    select tenant_code,database_name
+    select tenant_id,tenant_code,database_name
     from platform.tenant_control
     where database_state='isolated_ready'
       and database_name is not null
@@ -52,8 +52,1458 @@ fi
 
 upgraded=0
 for row in "${TENANTS[@]}"; do
-  IFS=$'\t' read -r tenant_code database_name <<< "$row"
+  IFS=
+    echo "::error::Unsafe tenant code returned by control plane: $tenant_code" >&2
+    exit 1
+  }
+  [[ "$database_name" =~ ^edusentia_[a-z0-9_]{3,50}$ ]] || {
+    echo "::error::Unsafe tenant database name returned by control plane: $database_name" >&2
+    exit 1
+  }
+  case "$database_name" in
+    edusentia|edusentia_tenant_template|edusentia_ci_*|edusentia_final_*|edusentia_lifecycle_*|edusentia_ref_ci_*)
+      echo "::error::Refusing to upgrade reserved database: $database_name" >&2
+      exit 1
+      ;;
+  esac
 
+  exists="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "select count(*) from pg_database where datname='$database_name'")"
+  test "$exists" = "1" || {
+    echo "::error::Control plane tenant database is missing: $database_name" >&2
+    exit 1
+  }
+
+  TENANT_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" TENANT_DATABASE="$database_name" node --input-type=module -e '
+    const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+    u.pathname="/"+process.env.TENANT_DATABASE;
+    process.stdout.write(u.toString());
+  ')"
+  echo "::add-mask::$TENANT_DATABASE_URL"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select current_database()")" = "$database_name"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select current_user")" = "$EXPECTED_RUNTIME_USER"
+
+  tenant_identity="$(psql "$TENANT_DATABASE_URL" -Atc "select code from app.tenants order by created_at limit 1")"
+  test "$tenant_identity" = "$tenant_code" || {
+    echo "::error::Tenant identity mismatch for $database_name" >&2
+    exit 1
+  }
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
+
+  (
+    restore_public_create=false
+    cleanup_public_create() {
+      if [ "$restore_public_create" = true ]; then
+        psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL' || true
+set role edusentia_provisioner;
+revoke create on schema public from edusentia_runtime;
+SQL
+      fi
+    }
+    trap cleanup_public_create EXIT
+
+    if [ "$(psql "$TENANT_DATABASE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" != "t" ]; then
+      psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+set role edusentia_provisioner;
+grant usage,create on schema public to edusentia_runtime;
+reset role;
+SQL
+      restore_public_create=true
+    fi
+
+    echo "Applying operational compatibility to $tenant_code ($database_name) ..."
+    TARGET_DATABASE_URL="$TENANT_DATABASE_URL" bash database/reference-compat/install-operational-parity.sh
+  )
+
+  capacity_row="$(psql "$TENANT_DATABASE_URL" -At -F "$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*) from app.schema_migrations
+    where version in(
+      '0049a_operational_finance_reference','0049b_hr_staff_management','0049c_hr_staff_hardening',
+      '0049d_student_services_foundation','0049e_admissions_management','0049f_admissions_actions',
+      '0049g_admissions_enrollment_reversal','0049h_admissions_core_student_compat',
+      '0049i_discipline_welfare','0049j_health_clinic','0049k_communications','0049l_hostel_boarding',
+      '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
+      '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
+      '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering','0069_backup_schedule_restore_experience','0070_backup_worker_batch_resilience','0071_backup_r2_tenant_upsert_fix','0072_grading_scale_interpretation_parity','0073_backup_interruption_recovery','0074_backup_worker_bulk_object_recording','0075_backup_bulk_object_ambiguity_fix','0076_required_password_bootstrap_enforcement','0077_restore_worker_bridge','0078_required_password_enforcement_context','0079_platform_capacity_public_students'
+    )
+  ")"
+  test "$migration_count" = "55"
+
+  grading_scale_contract_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='grading_scales' and column_name='interpretation'
+        and is_nullable='NO'
+    )
+    and position('interpretation' in pg_get_functiondef('public.save_grading_scale(jsonb)'::regprocedure))>0
+  ")"
+  test "$grading_scale_contract_ok" = "t"
+
+  user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
+      and to_regclass('public.students_profile_id_uidx') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_validate_user_bundle(uuid,jsonb,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_apply_user_bundle(uuid,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_update_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_link_guardian(uuid,uuid,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_reset_password(uuid,uuid,uuid,text,text,text,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_delete_auth_user(uuid,uuid,uuid,text)','execute')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='accountant')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='student')
+      and position('on conflict on constraint tenant_memberships_pkey' in lower(pg_get_functiondef('public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)'::regprocedure)))>0
+      and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''student_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('authn.users' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='teachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='headteachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+  ")"
+  test "$user_workspace_parity_ok" = "t"
+
+  required_password_bootstrap_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('must_change_password' in pg_get_functiondef('public.get_bootstrap_data()'::regprocedure))>0
+      and to_regprocedure('public.required_password_change_state()') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.required_password_change_state()','execute')
+      and position('raw_user_meta_data' in pg_get_functiondef('public.required_password_change_state()'::regprocedure))>0
+  ")"
+  test "$required_password_bootstrap_ok" = "t"
+
+  platform_capacity_public_students_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('from public.students' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('deleted_at is null' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('from public.students' in lower(pg_get_functiondef('app.platform_health_snapshot(uuid)'::regprocedure)))>0
+  ")"
+  test "$platform_capacity_public_students_ok" = "t"
+
+  restore_worker_bridge_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select
+      to_regprocedure('public.school_restore_begin(text,text,text,bigint,uuid)') is not null
+      and to_regprocedure('public.school_restore_set_status(uuid,text,text,text)') is not null
+      and to_regprocedure('public.school_restore_clear_operational_data(uuid)') is not null
+      and to_regprocedure('public.school_restore_apply_table(uuid,text,jsonb)') is not null
+      and to_regprocedure('public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_begin(text,text,text,bigint,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_set_status(uuid,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_clear_operational_data(uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_apply_table(uuid,text,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)','execute')
+  ")"
+  test "$restore_worker_bridge_ok" = "t"
+
+  plan_tiering_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.license_plans p
+    where
+      (p.code='starter' and p.feature_flags='{\"payroll\":false,\"id_cards\":false,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":false,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":false,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":false,\"custom_branding\":false,\"finance_exports\":false,\"financial_holds\":false,\"academic_history\":true,\"priority_support\":false,\"scheduled_backup\":false,\"payroll_statutory\":false,\"school_prospectus\":false,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":false}'::jsonb)
+      or
+      (p.code='professional' and p.feature_flags='{\"payroll\":false,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":false,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":false,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+      or
+      (p.code='enterprise' and p.feature_flags='{\"payroll\":true,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":true,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":true,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+  ")"
+  test "$plan_tiering_count" = "3"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'bulk_workflow' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'scheduled_backup' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'priority_support' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'financial_holds' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regprocedure('public.generate_class_student_identifier(uuid)') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.student_admission_sequences') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.reset_audit_log(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.prepare_object_upload(text,text,text,bigint)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_object_upload_metadata(text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.transition_object_upload(uuid,text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_console()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_insert(text,jsonb)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_remove(text,uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_teacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_teacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('split_part(clean_path' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select not exists(select 1 from pg_constraint where conrelid='public.students'::regclass and conname='students_admission_no_key')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.students_admission_no_ci_idx') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('generate_series(1,999)' in replace(pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure),' ',''))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('s.deleted_at is null' in pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.next_student_identifier_for_prefix' in pg_get_functiondef('public.restore_student(uuid,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_student_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_student_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_student_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('student-photos/' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_headteacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_headteacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_headteacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_guardian_account_records()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.neon_cron_jobs_snapshot()' in pg_get_functiondef('public.operations_dashboard(uuid)'::regprocedure))>0")" = "t"
+
+  psql "$TENANT_DATABASE_URL" -Atc "
+    select distinct p.proname
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')
+    order by p.proname
+  " > "$ACTUAL_FILE"
+
+  comm -23 "$EXPECTED_FILE" "$ACTUAL_FILE" > "$MISSING_FILE"
+  if [ -s "$MISSING_FILE" ]; then
+    echo "::error::Tenant $tenant_code is missing executable future-tenant RPCs:" >&2
+    cat "$MISSING_FILE" >&2
+    exit 1
+  fi
+
+  # Keep the master login router synchronized with every active tenant identity.
+  # Only the master control database can resolve an email to an isolated tenant DB.
+  # Mark prior routes inactive first so renamed, disabled, or deleted accounts cannot
+  # leave stale login entries, then upsert the current tenant identities.
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+update platform.login_directory d
+set active=false,updated_at=now()
+from platform.tenant_control tc
+where tc.tenant_id=d.tenant_id
+  and tc.tenant_code=:'tenant_code'
+  and tc.database_name=:'database_name';
+SQL
+
+  psql "$TENANT_DATABASE_URL" -At -v database_name="$database_name" -c "
+    select format(
+      'insert into platform.login_directory(email_normalized,tenant_id,tenant_code,database_name,role_hint,active) values(%L,%L::uuid,%L,%L,%L,%L::boolean) on conflict(email_normalized,tenant_id) do update set tenant_code=excluded.tenant_code,database_name=excluded.database_name,role_hint=excluded.role_hint,active=excluded.active,updated_at=now();',
+      lower(trim(u.email)),
+      t.id::text,
+      t.code,
+      '$database_name',
+      m.role,
+      case when u.disabled_at is null and m.status='active' and coalesce(p.active,true) then 'true' else 'false' end
+    )
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and m.tenant_id=t.id
+    order by lower(trim(u.email))
+  " | psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1
+
+  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.login_directory d
+    join platform.tenant_control tc on tc.tenant_id=d.tenant_id
+    where tc.tenant_code='$tenant_code'
+      and tc.database_name='$database_name'
+      and d.active
+  ")"
+  tenant_login_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and u.disabled_at is null
+      and m.status='active'
+      and coalesce(p.active,true)
+  ")"
+  test "$route_count" = "$tenant_login_count" || {
+    echo "::error::Login directory synchronization mismatch for $tenant_code: master=$route_count tenant=$tenant_login_count" >&2
+    exit 1
+  }
+  echo "Tenant $tenant_code login directory synchronized: $route_count/$tenant_login_count active identities routable."
+
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
+select
+  tenant_id,
+  registration_id,
+  'tenant_commercial_plan_tiering_v2_verified',
+  jsonb_build_object(
+    'database_name',:'database_name',
+    'migration','0069_backup_schedule_restore_experience',
+    'feature_count',27,
+    'rpc_count',258,
+    'verified_at',now()
+  )
+from platform.tenant_control
+where tenant_code=:'tenant_code'
+  and database_name=:'database_name';
+SQL
+
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 and backup schedule/restore experience confirmed."
+  upgraded=$((upgraded+1))
+done
+
+echo "Existing isolated tenant operational upgrades verified: $upgraded tenant(s)."
+\t' read -r tenant_id tenant_code database_name <<< "$row"
+
+  [[ "$tenant_id" =~ ^[0-9a-fA-F-]{36}$ ]] || {
+    echo "::error::Unsafe tenant ID returned by control plane: $tenant_id" >&2
+    exit 1
+  }
+  [[ "$tenant_code" =~ ^[A-Z0-9][A-Z0-9_-]{2,31}$ ]] || {
+    echo "::error::Unsafe tenant code returned by control plane: $tenant_code" >&2
+    exit 1
+  }
+  [[ "$database_name" =~ ^edusentia_[a-z0-9_]{3,50}$ ]] || {
+    echo "::error::Unsafe tenant database name returned by control plane: $database_name" >&2
+    exit 1
+  }
+  case "$database_name" in
+    edusentia|edusentia_tenant_template|edusentia_ci_*|edusentia_final_*|edusentia_lifecycle_*|edusentia_ref_ci_*)
+      echo "::error::Refusing to upgrade reserved database: $database_name" >&2
+      exit 1
+      ;;
+  esac
+
+  exists="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "select count(*) from pg_database where datname='$database_name'")"
+  test "$exists" = "1" || {
+    echo "::error::Control plane tenant database is missing: $database_name" >&2
+    exit 1
+  }
+
+  TENANT_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" TENANT_DATABASE="$database_name" node --input-type=module -e '
+    const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+    u.pathname="/"+process.env.TENANT_DATABASE;
+    process.stdout.write(u.toString());
+  ')"
+  echo "::add-mask::$TENANT_DATABASE_URL"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select current_database()")" = "$database_name"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select current_user")" = "$EXPECTED_RUNTIME_USER"
+
+  tenant_identity="$(psql "$TENANT_DATABASE_URL" -Atc "select code from app.tenants order by created_at limit 1")"
+  test "$tenant_identity" = "$tenant_code" || {
+    echo "::error::Tenant identity mismatch for $database_name" >&2
+    exit 1
+  }
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
+
+  (
+    restore_public_create=false
+    cleanup_public_create() {
+      if [ "$restore_public_create" = true ]; then
+        psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL' || true
+set role edusentia_provisioner;
+revoke create on schema public from edusentia_runtime;
+SQL
+      fi
+    }
+    trap cleanup_public_create EXIT
+
+    if [ "$(psql "$TENANT_DATABASE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" != "t" ]; then
+      psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+set role edusentia_provisioner;
+grant usage,create on schema public to edusentia_runtime;
+reset role;
+SQL
+      restore_public_create=true
+    fi
+
+    echo "Applying operational compatibility to $tenant_code ($database_name) ..."
+    TARGET_DATABASE_URL="$TENANT_DATABASE_URL" bash database/reference-compat/install-operational-parity.sh
+  )
+
+  migration_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*) from app.schema_migrations
+    where version in(
+      '0049a_operational_finance_reference','0049b_hr_staff_management','0049c_hr_staff_hardening',
+      '0049d_student_services_foundation','0049e_admissions_management','0049f_admissions_actions',
+      '0049g_admissions_enrollment_reversal','0049h_admissions_core_student_compat',
+      '0049i_discipline_welfare','0049j_health_clinic','0049k_communications','0049l_hostel_boarding',
+      '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
+      '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
+      '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering','0069_backup_schedule_restore_experience','0070_backup_worker_batch_resilience','0071_backup_r2_tenant_upsert_fix','0072_grading_scale_interpretation_parity','0073_backup_interruption_recovery','0074_backup_worker_bulk_object_recording','0075_backup_bulk_object_ambiguity_fix','0076_required_password_bootstrap_enforcement','0077_restore_worker_bridge','0078_required_password_enforcement_context','0079_platform_capacity_public_students'
+    )
+  ")"
+  test "$migration_count" = "55"
+
+  grading_scale_contract_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='grading_scales' and column_name='interpretation'
+        and is_nullable='NO'
+    )
+    and position('interpretation' in pg_get_functiondef('public.save_grading_scale(jsonb)'::regprocedure))>0
+  ")"
+  test "$grading_scale_contract_ok" = "t"
+
+  user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
+      and to_regclass('public.students_profile_id_uidx') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_validate_user_bundle(uuid,jsonb,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_apply_user_bundle(uuid,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_update_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_link_guardian(uuid,uuid,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_reset_password(uuid,uuid,uuid,text,text,text,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_delete_auth_user(uuid,uuid,uuid,text)','execute')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='accountant')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='student')
+      and position('on conflict on constraint tenant_memberships_pkey' in lower(pg_get_functiondef('public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)'::regprocedure)))>0
+      and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''student_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('authn.users' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='teachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='headteachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+  ")"
+  test "$user_workspace_parity_ok" = "t"
+
+  required_password_bootstrap_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('must_change_password' in pg_get_functiondef('public.get_bootstrap_data()'::regprocedure))>0
+      and to_regprocedure('public.required_password_change_state()') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.required_password_change_state()','execute')
+      and position('raw_user_meta_data' in pg_get_functiondef('public.required_password_change_state()'::regprocedure))>0
+  ")"
+  test "$required_password_bootstrap_ok" = "t"
+
+  platform_capacity_public_students_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('from public.students' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('deleted_at is null' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('from public.students' in lower(pg_get_functiondef('app.platform_health_snapshot(uuid)'::regprocedure)))>0
+  ")"
+  test "$platform_capacity_public_students_ok" = "t"
+
+  restore_worker_bridge_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select
+      to_regprocedure('public.school_restore_begin(text,text,text,bigint,uuid)') is not null
+      and to_regprocedure('public.school_restore_set_status(uuid,text,text,text)') is not null
+      and to_regprocedure('public.school_restore_clear_operational_data(uuid)') is not null
+      and to_regprocedure('public.school_restore_apply_table(uuid,text,jsonb)') is not null
+      and to_regprocedure('public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_begin(text,text,text,bigint,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_set_status(uuid,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_clear_operational_data(uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_apply_table(uuid,text,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)','execute')
+  ")"
+  test "$restore_worker_bridge_ok" = "t"
+
+  plan_tiering_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.license_plans p
+    where
+      (p.code='starter' and p.feature_flags='{\"payroll\":false,\"id_cards\":false,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":false,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":false,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":false,\"custom_branding\":false,\"finance_exports\":false,\"financial_holds\":false,\"academic_history\":true,\"priority_support\":false,\"scheduled_backup\":false,\"payroll_statutory\":false,\"school_prospectus\":false,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":false}'::jsonb)
+      or
+      (p.code='professional' and p.feature_flags='{\"payroll\":false,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":false,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":false,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+      or
+      (p.code='enterprise' and p.feature_flags='{\"payroll\":true,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":true,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":true,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+  ")"
+  test "$plan_tiering_count" = "3"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'bulk_workflow' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'scheduled_backup' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'priority_support' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'financial_holds' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regprocedure('public.generate_class_student_identifier(uuid)') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.student_admission_sequences') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.reset_audit_log(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.prepare_object_upload(text,text,text,bigint)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_object_upload_metadata(text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.transition_object_upload(uuid,text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_console()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_insert(text,jsonb)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_remove(text,uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_teacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_teacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('split_part(clean_path' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select not exists(select 1 from pg_constraint where conrelid='public.students'::regclass and conname='students_admission_no_key')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.students_admission_no_ci_idx') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('generate_series(1,999)' in replace(pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure),' ',''))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('s.deleted_at is null' in pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.next_student_identifier_for_prefix' in pg_get_functiondef('public.restore_student(uuid,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_student_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_student_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_student_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('student-photos/' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_headteacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_headteacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_headteacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_guardian_account_records()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.neon_cron_jobs_snapshot()' in pg_get_functiondef('public.operations_dashboard(uuid)'::regprocedure))>0")" = "t"
+
+  psql "$TENANT_DATABASE_URL" -Atc "
+    select distinct p.proname
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')
+    order by p.proname
+  " > "$ACTUAL_FILE"
+
+  comm -23 "$EXPECTED_FILE" "$ACTUAL_FILE" > "$MISSING_FILE"
+  if [ -s "$MISSING_FILE" ]; then
+    echo "::error::Tenant $tenant_code is missing executable future-tenant RPCs:" >&2
+    cat "$MISSING_FILE" >&2
+    exit 1
+  fi
+
+  # Keep the master login router synchronized with every active tenant identity.
+  # Only the master control database can resolve an email to an isolated tenant DB.
+  # Mark prior routes inactive first so renamed, disabled, or deleted accounts cannot
+  # leave stale login entries, then upsert the current tenant identities.
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+update platform.login_directory d
+set active=false,updated_at=now()
+from platform.tenant_control tc
+where tc.tenant_id=d.tenant_id
+  and tc.tenant_code=:'tenant_code'
+  and tc.database_name=:'database_name';
+SQL
+
+  psql "$TENANT_DATABASE_URL" -At -v database_name="$database_name" -c "
+    select format(
+      'insert into platform.login_directory(email_normalized,tenant_id,tenant_code,database_name,role_hint,active) values(%L,%L::uuid,%L,%L,%L,%L::boolean) on conflict(email_normalized,tenant_id) do update set tenant_code=excluded.tenant_code,database_name=excluded.database_name,role_hint=excluded.role_hint,active=excluded.active,updated_at=now();',
+      lower(trim(u.email)),
+      t.id::text,
+      t.code,
+      '$database_name',
+      m.role,
+      case when u.disabled_at is null and m.status='active' and coalesce(p.active,true) then 'true' else 'false' end
+    )
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and m.tenant_id=t.id
+    order by lower(trim(u.email))
+  " | psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1
+
+  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.login_directory d
+    join platform.tenant_control tc on tc.tenant_id=d.tenant_id
+    where tc.tenant_code='$tenant_code'
+      and tc.database_name='$database_name'
+      and d.active
+  ")"
+  tenant_login_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and u.disabled_at is null
+      and m.status='active'
+      and coalesce(p.active,true)
+  ")"
+  test "$route_count" = "$tenant_login_count" || {
+    echo "::error::Login directory synchronization mismatch for $tenant_code: master=$route_count tenant=$tenant_login_count" >&2
+    exit 1
+  }
+  echo "Tenant $tenant_code login directory synchronized: $route_count/$tenant_login_count active identities routable."
+
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
+select
+  tenant_id,
+  registration_id,
+  'tenant_commercial_plan_tiering_v2_verified',
+  jsonb_build_object(
+    'database_name',:'database_name',
+    'migration','0069_backup_schedule_restore_experience',
+    'feature_count',27,
+    'rpc_count',258,
+    'verified_at',now()
+  )
+from platform.tenant_control
+where tenant_code=:'tenant_code'
+  and database_name=:'database_name';
+SQL
+
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 and backup schedule/restore experience confirmed."
+  upgraded=$((upgraded+1))
+done
+
+echo "Existing isolated tenant operational upgrades verified: $upgraded tenant(s)."
+\t' -c "
+    select
+      coalesce((snapshot->>'active')::integer,0),
+      coalesce((snapshot->>'total')::integer,0),
+      coalesce((snapshot->>'base_limit')::integer,-1),
+      coalesce((snapshot->>'effective_limit')::integer,-1),
+      coalesce(snapshot->>'status','unknown'),
+      coalesce((snapshot->>'admissions_blocked')::boolean,false)
+    from (select app.platform_capacity_snapshot('$tenant_id'::uuid) snapshot) s
+  ")"
+  IFS="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*) from app.schema_migrations
+    where version in(
+      '0049a_operational_finance_reference','0049b_hr_staff_management','0049c_hr_staff_hardening',
+      '0049d_student_services_foundation','0049e_admissions_management','0049f_admissions_actions',
+      '0049g_admissions_enrollment_reversal','0049h_admissions_core_student_compat',
+      '0049i_discipline_welfare','0049j_health_clinic','0049k_communications','0049l_hostel_boarding',
+      '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
+      '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
+      '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering','0069_backup_schedule_restore_experience','0070_backup_worker_batch_resilience','0071_backup_r2_tenant_upsert_fix','0072_grading_scale_interpretation_parity','0073_backup_interruption_recovery','0074_backup_worker_bulk_object_recording','0075_backup_bulk_object_ambiguity_fix','0076_required_password_bootstrap_enforcement','0077_restore_worker_bridge','0078_required_password_enforcement_context','0079_platform_capacity_public_students'
+    )
+  ")"
+  test "$migration_count" = "55"
+
+  grading_scale_contract_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='grading_scales' and column_name='interpretation'
+        and is_nullable='NO'
+    )
+    and position('interpretation' in pg_get_functiondef('public.save_grading_scale(jsonb)'::regprocedure))>0
+  ")"
+  test "$grading_scale_contract_ok" = "t"
+
+  user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
+      and to_regclass('public.students_profile_id_uidx') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_validate_user_bundle(uuid,jsonb,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_apply_user_bundle(uuid,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_update_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_link_guardian(uuid,uuid,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_reset_password(uuid,uuid,uuid,text,text,text,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_delete_auth_user(uuid,uuid,uuid,text)','execute')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='accountant')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='student')
+      and position('on conflict on constraint tenant_memberships_pkey' in lower(pg_get_functiondef('public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)'::regprocedure)))>0
+      and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''student_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('authn.users' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='teachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='headteachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+  ")"
+  test "$user_workspace_parity_ok" = "t"
+
+  required_password_bootstrap_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('must_change_password' in pg_get_functiondef('public.get_bootstrap_data()'::regprocedure))>0
+      and to_regprocedure('public.required_password_change_state()') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.required_password_change_state()','execute')
+      and position('raw_user_meta_data' in pg_get_functiondef('public.required_password_change_state()'::regprocedure))>0
+  ")"
+  test "$required_password_bootstrap_ok" = "t"
+
+  platform_capacity_public_students_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('from public.students' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('deleted_at is null' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('from public.students' in lower(pg_get_functiondef('app.platform_health_snapshot(uuid)'::regprocedure)))>0
+  ")"
+  test "$platform_capacity_public_students_ok" = "t"
+
+  restore_worker_bridge_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select
+      to_regprocedure('public.school_restore_begin(text,text,text,bigint,uuid)') is not null
+      and to_regprocedure('public.school_restore_set_status(uuid,text,text,text)') is not null
+      and to_regprocedure('public.school_restore_clear_operational_data(uuid)') is not null
+      and to_regprocedure('public.school_restore_apply_table(uuid,text,jsonb)') is not null
+      and to_regprocedure('public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_begin(text,text,text,bigint,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_set_status(uuid,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_clear_operational_data(uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_apply_table(uuid,text,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)','execute')
+  ")"
+  test "$restore_worker_bridge_ok" = "t"
+
+  plan_tiering_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.license_plans p
+    where
+      (p.code='starter' and p.feature_flags='{\"payroll\":false,\"id_cards\":false,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":false,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":false,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":false,\"custom_branding\":false,\"finance_exports\":false,\"financial_holds\":false,\"academic_history\":true,\"priority_support\":false,\"scheduled_backup\":false,\"payroll_statutory\":false,\"school_prospectus\":false,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":false}'::jsonb)
+      or
+      (p.code='professional' and p.feature_flags='{\"payroll\":false,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":false,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":false,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+      or
+      (p.code='enterprise' and p.feature_flags='{\"payroll\":true,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":true,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":true,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+  ")"
+  test "$plan_tiering_count" = "3"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'bulk_workflow' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'scheduled_backup' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'priority_support' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'financial_holds' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regprocedure('public.generate_class_student_identifier(uuid)') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.student_admission_sequences') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.reset_audit_log(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.prepare_object_upload(text,text,text,bigint)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_object_upload_metadata(text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.transition_object_upload(uuid,text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_console()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_insert(text,jsonb)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_remove(text,uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_teacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_teacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('split_part(clean_path' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select not exists(select 1 from pg_constraint where conrelid='public.students'::regclass and conname='students_admission_no_key')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.students_admission_no_ci_idx') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('generate_series(1,999)' in replace(pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure),' ',''))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('s.deleted_at is null' in pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.next_student_identifier_for_prefix' in pg_get_functiondef('public.restore_student(uuid,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_student_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_student_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_student_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('student-photos/' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_headteacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_headteacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_headteacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_guardian_account_records()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.neon_cron_jobs_snapshot()' in pg_get_functiondef('public.operations_dashboard(uuid)'::regprocedure))>0")" = "t"
+
+  psql "$TENANT_DATABASE_URL" -Atc "
+    select distinct p.proname
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')
+    order by p.proname
+  " > "$ACTUAL_FILE"
+
+  comm -23 "$EXPECTED_FILE" "$ACTUAL_FILE" > "$MISSING_FILE"
+  if [ -s "$MISSING_FILE" ]; then
+    echo "::error::Tenant $tenant_code is missing executable future-tenant RPCs:" >&2
+    cat "$MISSING_FILE" >&2
+    exit 1
+  fi
+
+  # Keep the master login router synchronized with every active tenant identity.
+  # Only the master control database can resolve an email to an isolated tenant DB.
+  # Mark prior routes inactive first so renamed, disabled, or deleted accounts cannot
+  # leave stale login entries, then upsert the current tenant identities.
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+update platform.login_directory d
+set active=false,updated_at=now()
+from platform.tenant_control tc
+where tc.tenant_id=d.tenant_id
+  and tc.tenant_code=:'tenant_code'
+  and tc.database_name=:'database_name';
+SQL
+
+  psql "$TENANT_DATABASE_URL" -At -v database_name="$database_name" -c "
+    select format(
+      'insert into platform.login_directory(email_normalized,tenant_id,tenant_code,database_name,role_hint,active) values(%L,%L::uuid,%L,%L,%L,%L::boolean) on conflict(email_normalized,tenant_id) do update set tenant_code=excluded.tenant_code,database_name=excluded.database_name,role_hint=excluded.role_hint,active=excluded.active,updated_at=now();',
+      lower(trim(u.email)),
+      t.id::text,
+      t.code,
+      '$database_name',
+      m.role,
+      case when u.disabled_at is null and m.status='active' and coalesce(p.active,true) then 'true' else 'false' end
+    )
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and m.tenant_id=t.id
+    order by lower(trim(u.email))
+  " | psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1
+
+  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.login_directory d
+    join platform.tenant_control tc on tc.tenant_id=d.tenant_id
+    where tc.tenant_code='$tenant_code'
+      and tc.database_name='$database_name'
+      and d.active
+  ")"
+  tenant_login_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and u.disabled_at is null
+      and m.status='active'
+      and coalesce(p.active,true)
+  ")"
+  test "$route_count" = "$tenant_login_count" || {
+    echo "::error::Login directory synchronization mismatch for $tenant_code: master=$route_count tenant=$tenant_login_count" >&2
+    exit 1
+  }
+  echo "Tenant $tenant_code login directory synchronized: $route_count/$tenant_login_count active identities routable."
+
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
+select
+  tenant_id,
+  registration_id,
+  'tenant_commercial_plan_tiering_v2_verified',
+  jsonb_build_object(
+    'database_name',:'database_name',
+    'migration','0069_backup_schedule_restore_experience',
+    'feature_count',27,
+    'rpc_count',258,
+    'verified_at',now()
+  )
+from platform.tenant_control
+where tenant_code=:'tenant_code'
+  and database_name=:'database_name';
+SQL
+
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 and backup schedule/restore experience confirmed."
+  upgraded=$((upgraded+1))
+done
+
+echo "Existing isolated tenant operational upgrades verified: $upgraded tenant(s)."
+\t' read -r tenant_id tenant_code database_name <<< "$row"
+
+  [[ "$tenant_id" =~ ^[0-9a-fA-F-]{36}$ ]] || {
+    echo "::error::Unsafe tenant ID returned by control plane: $tenant_id" >&2
+    exit 1
+  }
+  [[ "$tenant_code" =~ ^[A-Z0-9][A-Z0-9_-]{2,31}$ ]] || {
+    echo "::error::Unsafe tenant code returned by control plane: $tenant_code" >&2
+    exit 1
+  }
+  [[ "$database_name" =~ ^edusentia_[a-z0-9_]{3,50}$ ]] || {
+    echo "::error::Unsafe tenant database name returned by control plane: $database_name" >&2
+    exit 1
+  }
+  case "$database_name" in
+    edusentia|edusentia_tenant_template|edusentia_ci_*|edusentia_final_*|edusentia_lifecycle_*|edusentia_ref_ci_*)
+      echo "::error::Refusing to upgrade reserved database: $database_name" >&2
+      exit 1
+      ;;
+  esac
+
+  exists="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "select count(*) from pg_database where datname='$database_name'")"
+  test "$exists" = "1" || {
+    echo "::error::Control plane tenant database is missing: $database_name" >&2
+    exit 1
+  }
+
+  TENANT_DATABASE_URL="$(BOOTSTRAP_DATABASE_URL="$BOOTSTRAP_DATABASE_URL" TENANT_DATABASE="$database_name" node --input-type=module -e '
+    const u=new URL(process.env.BOOTSTRAP_DATABASE_URL);
+    u.pathname="/"+process.env.TENANT_DATABASE;
+    process.stdout.write(u.toString());
+  ')"
+  echo "::add-mask::$TENANT_DATABASE_URL"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select current_database()")" = "$database_name"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select current_user")" = "$EXPECTED_RUNTIME_USER"
+
+  tenant_identity="$(psql "$TENANT_DATABASE_URL" -Atc "select code from app.tenants order by created_at limit 1")"
+  test "$tenant_identity" = "$tenant_code" || {
+    echo "::error::Tenant identity mismatch for $database_name" >&2
+    exit 1
+  }
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Tenant Runtime' limit 1")" = "0020"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select schema_version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "0048"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select version from app.release_identity where edition='Edusentia Enterprise Neon Edition' limit 1")" = "neon-v1.0.0-r42"
+
+  (
+    restore_public_create=false
+    cleanup_public_create() {
+      if [ "$restore_public_create" = true ]; then
+        psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL' || true
+set role edusentia_provisioner;
+revoke create on schema public from edusentia_runtime;
+SQL
+      fi
+    }
+    trap cleanup_public_create EXIT
+
+    if [ "$(psql "$TENANT_DATABASE_URL" -Atc "select has_schema_privilege('edusentia_runtime','public','create')")" != "t" ]; then
+      psql "$TENANT_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+set role edusentia_provisioner;
+grant usage,create on schema public to edusentia_runtime;
+reset role;
+SQL
+      restore_public_create=true
+    fi
+
+    echo "Applying operational compatibility to $tenant_code ($database_name) ..."
+    TARGET_DATABASE_URL="$TENANT_DATABASE_URL" bash database/reference-compat/install-operational-parity.sh
+  )
+
+  migration_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*) from app.schema_migrations
+    where version in(
+      '0049a_operational_finance_reference','0049b_hr_staff_management','0049c_hr_staff_hardening',
+      '0049d_student_services_foundation','0049e_admissions_management','0049f_admissions_actions',
+      '0049g_admissions_enrollment_reversal','0049h_admissions_core_student_compat',
+      '0049i_discipline_welfare','0049j_health_clinic','0049k_communications','0049l_hostel_boarding',
+      '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
+      '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
+      '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering','0069_backup_schedule_restore_experience','0070_backup_worker_batch_resilience','0071_backup_r2_tenant_upsert_fix','0072_grading_scale_interpretation_parity','0073_backup_interruption_recovery','0074_backup_worker_bulk_object_recording','0075_backup_bulk_object_ambiguity_fix','0076_required_password_bootstrap_enforcement','0077_restore_worker_bridge','0078_required_password_enforcement_context','0079_platform_capacity_public_students'
+    )
+  ")"
+  test "$migration_count" = "55"
+
+  grading_scale_contract_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='grading_scales' and column_name='interpretation'
+        and is_nullable='NO'
+    )
+    and position('interpretation' in pg_get_functiondef('public.save_grading_scale(jsonb)'::regprocedure))>0
+  ")"
+  test "$grading_scale_contract_ok" = "t"
+
+  user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
+      and to_regclass('public.students_profile_id_uidx') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_validate_user_bundle(uuid,jsonb,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_apply_user_bundle(uuid,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_update_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_link_guardian(uuid,uuid,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_reset_password(uuid,uuid,uuid,text,text,text,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_delete_auth_user(uuid,uuid,uuid,text)','execute')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='accountant')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='student')
+      and position('on conflict on constraint tenant_memberships_pkey' in lower(pg_get_functiondef('public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)'::regprocedure)))>0
+      and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''student_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('authn.users' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='teachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='headteachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+  ")"
+  test "$user_workspace_parity_ok" = "t"
+
+  required_password_bootstrap_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('must_change_password' in pg_get_functiondef('public.get_bootstrap_data()'::regprocedure))>0
+      and to_regprocedure('public.required_password_change_state()') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.required_password_change_state()','execute')
+      and position('raw_user_meta_data' in pg_get_functiondef('public.required_password_change_state()'::regprocedure))>0
+  ")"
+  test "$required_password_bootstrap_ok" = "t"
+
+  platform_capacity_public_students_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('from public.students' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('deleted_at is null' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('from public.students' in lower(pg_get_functiondef('app.platform_health_snapshot(uuid)'::regprocedure)))>0
+  ")"
+  test "$platform_capacity_public_students_ok" = "t"
+
+  restore_worker_bridge_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select
+      to_regprocedure('public.school_restore_begin(text,text,text,bigint,uuid)') is not null
+      and to_regprocedure('public.school_restore_set_status(uuid,text,text,text)') is not null
+      and to_regprocedure('public.school_restore_clear_operational_data(uuid)') is not null
+      and to_regprocedure('public.school_restore_apply_table(uuid,text,jsonb)') is not null
+      and to_regprocedure('public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_begin(text,text,text,bigint,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_set_status(uuid,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_clear_operational_data(uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_apply_table(uuid,text,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)','execute')
+  ")"
+  test "$restore_worker_bridge_ok" = "t"
+
+  plan_tiering_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.license_plans p
+    where
+      (p.code='starter' and p.feature_flags='{\"payroll\":false,\"id_cards\":false,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":false,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":false,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":false,\"custom_branding\":false,\"finance_exports\":false,\"financial_holds\":false,\"academic_history\":true,\"priority_support\":false,\"scheduled_backup\":false,\"payroll_statutory\":false,\"school_prospectus\":false,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":false}'::jsonb)
+      or
+      (p.code='professional' and p.feature_flags='{\"payroll\":false,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":false,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":false,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+      or
+      (p.code='enterprise' and p.feature_flags='{\"payroll\":true,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":true,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":true,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+  ")"
+  test "$plan_tiering_count" = "3"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'bulk_workflow' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'scheduled_backup' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'priority_support' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'financial_holds' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regprocedure('public.generate_class_student_identifier(uuid)') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.student_admission_sequences') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.reset_audit_log(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.prepare_object_upload(text,text,text,bigint)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_object_upload_metadata(text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.transition_object_upload(uuid,text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_console()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_insert(text,jsonb)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_remove(text,uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_teacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_teacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('split_part(clean_path' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select not exists(select 1 from pg_constraint where conrelid='public.students'::regclass and conname='students_admission_no_key')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.students_admission_no_ci_idx') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('generate_series(1,999)' in replace(pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure),' ',''))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('s.deleted_at is null' in pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.next_student_identifier_for_prefix' in pg_get_functiondef('public.restore_student(uuid,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_student_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_student_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_student_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('student-photos/' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_headteacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_headteacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_headteacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_guardian_account_records()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.neon_cron_jobs_snapshot()' in pg_get_functiondef('public.operations_dashboard(uuid)'::regprocedure))>0")" = "t"
+
+  psql "$TENANT_DATABASE_URL" -Atc "
+    select distinct p.proname
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')
+    order by p.proname
+  " > "$ACTUAL_FILE"
+
+  comm -23 "$EXPECTED_FILE" "$ACTUAL_FILE" > "$MISSING_FILE"
+  if [ -s "$MISSING_FILE" ]; then
+    echo "::error::Tenant $tenant_code is missing executable future-tenant RPCs:" >&2
+    cat "$MISSING_FILE" >&2
+    exit 1
+  fi
+
+  # Keep the master login router synchronized with every active tenant identity.
+  # Only the master control database can resolve an email to an isolated tenant DB.
+  # Mark prior routes inactive first so renamed, disabled, or deleted accounts cannot
+  # leave stale login entries, then upsert the current tenant identities.
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+update platform.login_directory d
+set active=false,updated_at=now()
+from platform.tenant_control tc
+where tc.tenant_id=d.tenant_id
+  and tc.tenant_code=:'tenant_code'
+  and tc.database_name=:'database_name';
+SQL
+
+  psql "$TENANT_DATABASE_URL" -At -v database_name="$database_name" -c "
+    select format(
+      'insert into platform.login_directory(email_normalized,tenant_id,tenant_code,database_name,role_hint,active) values(%L,%L::uuid,%L,%L,%L,%L::boolean) on conflict(email_normalized,tenant_id) do update set tenant_code=excluded.tenant_code,database_name=excluded.database_name,role_hint=excluded.role_hint,active=excluded.active,updated_at=now();',
+      lower(trim(u.email)),
+      t.id::text,
+      t.code,
+      '$database_name',
+      m.role,
+      case when u.disabled_at is null and m.status='active' and coalesce(p.active,true) then 'true' else 'false' end
+    )
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and m.tenant_id=t.id
+    order by lower(trim(u.email))
+  " | psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1
+
+  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.login_directory d
+    join platform.tenant_control tc on tc.tenant_id=d.tenant_id
+    where tc.tenant_code='$tenant_code'
+      and tc.database_name='$database_name'
+      and d.active
+  ")"
+  tenant_login_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and u.disabled_at is null
+      and m.status='active'
+      and coalesce(p.active,true)
+  ")"
+  test "$route_count" = "$tenant_login_count" || {
+    echo "::error::Login directory synchronization mismatch for $tenant_code: master=$route_count tenant=$tenant_login_count" >&2
+    exit 1
+  }
+  echo "Tenant $tenant_code login directory synchronized: $route_count/$tenant_login_count active identities routable."
+
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
+select
+  tenant_id,
+  registration_id,
+  'tenant_commercial_plan_tiering_v2_verified',
+  jsonb_build_object(
+    'database_name',:'database_name',
+    'migration','0069_backup_schedule_restore_experience',
+    'feature_count',27,
+    'rpc_count',258,
+    'verified_at',now()
+  )
+from platform.tenant_control
+where tenant_code=:'tenant_code'
+  and database_name=:'database_name';
+SQL
+
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 and backup schedule/restore experience confirmed."
+  upgraded=$((upgraded+1))
+done
+
+echo "Existing isolated tenant operational upgrades verified: $upgraded tenant(s)."
+\t' read -r capacity_active capacity_total capacity_base capacity_limit capacity_status capacity_blocked <<< "$capacity_row"
+  [[ "$capacity_active" =~ ^[0-9]+$ && "$capacity_total" =~ ^[0-9]+$ && "$capacity_base" =~ ^-?[0-9]+$ && "$capacity_limit" =~ ^-?[0-9]+$ ]] || {
+    echo "::error::Invalid capacity snapshot returned for $tenant_code" >&2
+    exit 1
+  }
+  [[ "$capacity_status" =~ ^(available|near_limit|at_limit|over_limit|unlimited|unknown)$ ]] || {
+    echo "::error::Invalid capacity status returned for $tenant_code: $capacity_status" >&2
+    exit 1
+  }
+  [[ "$capacity_blocked" = "t" || "$capacity_blocked" = "f" ]] || {
+    echo "::error::Invalid admissions-blocked flag returned for $tenant_code" >&2
+    exit 1
+  }
+
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1     -v tenant_id="$tenant_id"     -v active="$capacity_active"     -v total="$capacity_total"     -v base="$capacity_base"     -v limit="$capacity_limit"     -v capacity_status="$capacity_status"     -v blocked="$capacity_blocked"     -c "update platform.tenant_control
+        set student_active_count=:'active'::integer,
+            student_total_count=:'total'::integer,
+            student_capacity_base=nullif(:'base'::integer,-1),
+            student_capacity_limit=nullif(:'limit'::integer,-1),
+            student_capacity_status=:'capacity_status',
+            student_admissions_blocked=:'blocked'::boolean,
+            student_capacity_checked_at=now(),
+            updated_at=now()
+        where tenant_id=:'tenant_id'::uuid;" >/dev/null
+  echo "Capacity snapshot reconciled for $tenant_code: $capacity_active / $([ "$capacity_limit" = "-1" ] && echo "unlimited" || echo "$capacity_limit")."
+
+  migration_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*) from app.schema_migrations
+    where version in(
+      '0049a_operational_finance_reference','0049b_hr_staff_management','0049c_hr_staff_hardening',
+      '0049d_student_services_foundation','0049e_admissions_management','0049f_admissions_actions',
+      '0049g_admissions_enrollment_reversal','0049h_admissions_core_student_compat',
+      '0049i_discipline_welfare','0049j_health_clinic','0049k_communications','0049l_hostel_boarding',
+      '0049m_alumni','0049n_student_services_directory','0049o_student_services_reference',
+      '0049p_student_services_hostel_bridge','0049q_student_services_resolution',
+      '0049r_student_services_hardening','0049s_user_student_guardian_linkage','0049t_student_portal',
+      '0049u_student_portal_report_attendance_fix','0049v_live_plan_feature_parity','0049w_school_identity_logo_parity','0049x_class_scoped_student_admission_numbers','0049y_audit_permanent_reset','0049z_operational_runtime_grants','0051_r2_upload_metadata_api','0052_school_logo_tenant_context_fix','0053_blueprint_template_path_parity','0054_shs_operational_parity','0055_teacher_photo_r2_authorization','0056_teacher_photo_neon_context_fix','0057_teacher_photo_reference_contract','0058_reusable_student_admission_numbers','0059_student_photo_r2_contract','0060_principal_photo_r2_contract','0061_discovered_operational_parity_repairs','0062_user_directory_role_workspace_parity','0063_identity_user_bundle_runtime_grants','0064_neon_identity_admin_bridges','0065_identity_membership_upsert_fix','0066_generated_user_email_first_name_fix','0067_id_card_issue_runtime_prerequisites','0068_commercial_plan_tiering','0069_backup_schedule_restore_experience','0070_backup_worker_batch_resilience','0071_backup_r2_tenant_upsert_fix','0072_grading_scale_interpretation_parity','0073_backup_interruption_recovery','0074_backup_worker_bulk_object_recording','0075_backup_bulk_object_ambiguity_fix','0076_required_password_bootstrap_enforcement','0077_restore_worker_bridge','0078_required_password_enforcement_context','0079_platform_capacity_public_students'
+    )
+  ")"
+  test "$migration_count" = "55"
+
+  grading_scale_contract_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(
+      select 1 from information_schema.columns
+      where table_schema='public' and table_name='grading_scales' and column_name='interpretation'
+        and is_nullable='NO'
+    )
+    and position('interpretation' in pg_get_functiondef('public.save_grading_scale(jsonb)'::regprocedure))>0
+  ")"
+  test "$grading_scale_contract_ok" = "t"
+
+  user_workspace_parity_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select exists(select 1 from information_schema.columns where table_schema='public' and table_name='students' and column_name='profile_id') and exists(select 1 from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='must_change_password')
+      and to_regclass('public.students_profile_id_uidx') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.list_profiles_with_access()','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_validate_user_bundle(uuid,jsonb,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.admin_apply_user_bundle(uuid,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_update_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_link_guardian(uuid,uuid,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_reset_password(uuid,uuid,uuid,text,text,text,boolean)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.neon_identity_delete_auth_user(uuid,uuid,uuid,text)','execute')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='accountant')
+      and exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='app_role' and e.enumlabel='student')
+      and position('on conflict on constraint tenant_memberships_pkey' in lower(pg_get_functiondef('public.neon_identity_create_auth_user(uuid,uuid,uuid,text,text,text,boolean,text,boolean,boolean,text,text,text)'::regprocedure)))>0
+      and position('''teacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''headteacher_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''accountant_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('''student_records''' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and position('authn.users' in pg_get_functiondef('public.list_profiles_with_access()'::regprocedure))>0
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='teachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+      and exists(select 1 from pg_policies where schemaname='public' and tablename='headteachers' and policyname='neon_certified_runtime_owner' and 'edusentia_runtime'=any(roles))
+  ")"
+  test "$user_workspace_parity_ok" = "t"
+
+  required_password_bootstrap_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('must_change_password' in pg_get_functiondef('public.get_bootstrap_data()'::regprocedure))>0
+      and to_regprocedure('public.required_password_change_state()') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.required_password_change_state()','execute')
+      and position('raw_user_meta_data' in pg_get_functiondef('public.required_password_change_state()'::regprocedure))>0
+  ")"
+  test "$required_password_bootstrap_ok" = "t"
+
+  platform_capacity_public_students_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select position('from public.students' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('deleted_at is null' in lower(pg_get_functiondef('app.platform_capacity_snapshot(uuid)'::regprocedure)))>0
+      and position('from public.students' in lower(pg_get_functiondef('app.platform_health_snapshot(uuid)'::regprocedure)))>0
+  ")"
+  test "$platform_capacity_public_students_ok" = "t"
+
+  restore_worker_bridge_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select
+      to_regprocedure('public.school_restore_begin(text,text,text,bigint,uuid)') is not null
+      and to_regprocedure('public.school_restore_set_status(uuid,text,text,text)') is not null
+      and to_regprocedure('public.school_restore_clear_operational_data(uuid)') is not null
+      and to_regprocedure('public.school_restore_apply_table(uuid,text,jsonb)') is not null
+      and to_regprocedure('public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)') is not null
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_begin(text,text,text,bigint,uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_set_status(uuid,text,text,text)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_clear_operational_data(uuid)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_apply_table(uuid,text,jsonb)','execute')
+      and has_function_privilege('edusentia_worker_runtime','public.school_restore_complete(uuid,jsonb,jsonb,integer,integer,text,text,text,text,text)','execute')
+  ")"
+  test "$restore_worker_bridge_ok" = "t"
+
+  plan_tiering_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.license_plans p
+    where
+      (p.code='starter' and p.feature_flags='{\"payroll\":false,\"id_cards\":false,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":false,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":false,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":false,\"custom_branding\":false,\"finance_exports\":false,\"financial_holds\":false,\"academic_history\":true,\"priority_support\":false,\"scheduled_backup\":false,\"payroll_statutory\":false,\"school_prospectus\":false,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":false}'::jsonb)
+      or
+      (p.code='professional' and p.feature_flags='{\"payroll\":false,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":false,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":false,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+      or
+      (p.code='enterprise' and p.feature_flags='{\"payroll\":true,\"id_cards\":true,\"analytics\":true,\"timetable\":true,\"assessment\":true,\"attendance\":true,\"governance\":true,\"certificates\":true,\"core_records\":true,\"finance_fees\":true,\"integrations\":false,\"report_cards\":true,\"bulk_workflow\":true,\"manual_backup\":true,\"notifications\":true,\"staff_id_cards\":true,\"custom_branding\":true,\"finance_exports\":true,\"financial_holds\":true,\"academic_history\":true,\"priority_support\":true,\"scheduled_backup\":true,\"payroll_statutory\":true,\"school_prospectus\":true,\"advanced_analytics\":false,\"finance_statements\":true,\"uploaded_templates\":true}'::jsonb)
+  ")"
+  test "$plan_tiering_count" = "3"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'bulk_workflow' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'scheduled_backup' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'priority_support' from platform.license_plans where code='starter'")" = "false"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'id_cards' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'finance_exports' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'financial_holds' from platform.license_plans where code='professional'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'payroll_statutory' from platform.license_plans where code='enterprise'")" = "true"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select feature_flags->>'custom_branding' from platform.license_plans where code='enterprise'")" = "true"
+
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.set_school_logo_reference(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regprocedure('public.generate_class_student_identifier(uuid)') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.student_admission_sequences') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.reset_audit_log(text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.prepare_object_upload(text,text,text,bigint)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.get_object_upload_metadata(text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.transition_object_upload(uuid,text,text)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('v_tenant_id' in pg_get_functiondef('public.set_school_logo_reference(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('report-card-templates' in pg_get_functiondef('public.save_report_card_template(text,text,text,text,bigint,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select pg_get_constraintdef(oid) like '%report-card-templates%' from pg_constraint where conrelid='public.report_card_templates'::regclass and conname='report_card_templates_path_chk'")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_console()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_insert(text,jsonb)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_shs_academic_remove(text,uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_teacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_teacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_authorize_teacher_photo_upload(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('auth.uid()' in pg_get_functiondef('public.neon_teacher_photo_descriptor(uuid)'::regprocedure))=0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('split_part(clean_path' in pg_get_functiondef('public.set_teacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select not exists(select 1 from pg_constraint where conrelid='public.students'::regclass and conname='students_admission_no_key')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select to_regclass('public.students_admission_no_ci_idx') is not null")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('generate_series(1,999)' in replace(pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure),' ',''))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('s.deleted_at is null' in pg_get_functiondef('public.next_student_identifier_for_prefix(text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.next_student_identifier_for_prefix' in pg_get_functiondef('public.restore_student(uuid,text)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_student_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_student_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_student_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('student-photos/' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_student_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_authorize_headteacher_photo_upload(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_headteacher_photo_descriptor(uuid)','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.neon_authorize_headteacher_photo_upload(uuid)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('app.current_user_id()' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('staff-photos/' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('storage.object_metadata' in pg_get_functiondef('public.set_headteacher_photo(uuid,text,timestamptz)'::regprocedure))>0")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select exists(select 1 from information_schema.columns where table_schema='public' and table_name='student_reports' and column_name='archived_status')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select has_function_privilege('edusentia_worker_runtime','public.neon_guardian_account_records()','EXECUTE')")" = "t"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select position('public.neon_cron_jobs_snapshot()' in pg_get_functiondef('public.operations_dashboard(uuid)'::regprocedure))>0")" = "t"
+
+  psql "$TENANT_DATABASE_URL" -Atc "
+    select distinct p.proname
+    from pg_proc p
+    join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE')
+    order by p.proname
+  " > "$ACTUAL_FILE"
+
+  comm -23 "$EXPECTED_FILE" "$ACTUAL_FILE" > "$MISSING_FILE"
+  if [ -s "$MISSING_FILE" ]; then
+    echo "::error::Tenant $tenant_code is missing executable future-tenant RPCs:" >&2
+    cat "$MISSING_FILE" >&2
+    exit 1
+  fi
+
+  # Keep the master login router synchronized with every active tenant identity.
+  # Only the master control database can resolve an email to an isolated tenant DB.
+  # Mark prior routes inactive first so renamed, disabled, or deleted accounts cannot
+  # leave stale login entries, then upsert the current tenant identities.
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+update platform.login_directory d
+set active=false,updated_at=now()
+from platform.tenant_control tc
+where tc.tenant_id=d.tenant_id
+  and tc.tenant_code=:'tenant_code'
+  and tc.database_name=:'database_name';
+SQL
+
+  psql "$TENANT_DATABASE_URL" -At -v database_name="$database_name" -c "
+    select format(
+      'insert into platform.login_directory(email_normalized,tenant_id,tenant_code,database_name,role_hint,active) values(%L,%L::uuid,%L,%L,%L,%L::boolean) on conflict(email_normalized,tenant_id) do update set tenant_code=excluded.tenant_code,database_name=excluded.database_name,role_hint=excluded.role_hint,active=excluded.active,updated_at=now();',
+      lower(trim(u.email)),
+      t.id::text,
+      t.code,
+      '$database_name',
+      m.role,
+      case when u.disabled_at is null and m.status='active' and coalesce(p.active,true) then 'true' else 'false' end
+    )
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and m.tenant_id=t.id
+    order by lower(trim(u.email))
+  " | psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1
+
+  route_count="$(psql "$BOOTSTRAP_DATABASE_URL" -Atc "
+    select count(*)
+    from platform.login_directory d
+    join platform.tenant_control tc on tc.tenant_id=d.tenant_id
+    where tc.tenant_code='$tenant_code'
+      and tc.database_name='$database_name'
+      and d.active
+  ")"
+  tenant_login_count="$(psql "$TENANT_DATABASE_URL" -Atc "
+    select count(*)
+    from authn.users u
+    join app.tenant_memberships m on m.user_id=u.id
+    join app.tenants t on t.id=m.tenant_id
+    left join public.profiles p on p.id=u.id
+    where t.code='$tenant_code'
+      and u.disabled_at is null
+      and m.status='active'
+      and coalesce(p.active,true)
+  ")"
+  test "$route_count" = "$tenant_login_count" || {
+    echo "::error::Login directory synchronization mismatch for $tenant_code: master=$route_count tenant=$tenant_login_count" >&2
+    exit 1
+  }
+  echo "Tenant $tenant_code login directory synchronized: $route_count/$tenant_login_count active identities routable."
+
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
+insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
+select
+  tenant_id,
+  registration_id,
+  'tenant_commercial_plan_tiering_v2_verified',
+  jsonb_build_object(
+    'database_name',:'database_name',
+    'migration','0069_backup_schedule_restore_experience',
+    'feature_count',27,
+    'rpc_count',258,
+    'verified_at',now()
+  )
+from platform.tenant_control
+where tenant_code=:'tenant_code'
+  and database_name=:'database_name';
+SQL
+
+  echo "Tenant $tenant_code operational surface verified: 258/258 executable and commercial plan tiering v2 and backup schedule/restore experience confirmed."
+  upgraded=$((upgraded+1))
+done
+
+echo "Existing isolated tenant operational upgrades verified: $upgraded tenant(s)."
+\t' read -r tenant_id tenant_code database_name <<< "$row"
+
+  [[ "$tenant_id" =~ ^[0-9a-fA-F-]{36}$ ]] || {
+    echo "::error::Unsafe tenant ID returned by control plane: $tenant_id" >&2
+    exit 1
+  }
   [[ "$tenant_code" =~ ^[A-Z0-9][A-Z0-9_-]{2,31}$ ]] || {
     echo "::error::Unsafe tenant code returned by control plane: $tenant_code" >&2
     exit 1
