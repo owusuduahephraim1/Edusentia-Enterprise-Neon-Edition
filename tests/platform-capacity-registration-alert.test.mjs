@@ -24,6 +24,8 @@ test("platform admin displays licensed usage as active over capacity",()=>{
   assert.match(ui,/\$\{active\} \/ \$\{limit\}/);
   assert.match(ui,/student_capacity_checked_at/);
   assert.match(ui,/30000/);
+  assert.match(ui,/reconcileCapacitySnapshots/);
+  assert.match(ui,/refreshTenantCapacity/);
 });
 
 test("successful school registration offers WhatsApp and SMS app alerts",()=>{
@@ -36,4 +38,17 @@ test("successful school registration offers WhatsApp and SMS app alerts",()=>{
   assert.match(script,/sms:/);
   assert.match(script,/Platform Super Administrator/);
   assert.match(script,/Registration ID/);
+});
+
+test("platform capacity telemetry counts the certified public student directory",()=>{
+  const migration=read("database/reference-compat/0079_platform_capacity_public_students.sql");
+  const installer=read("database/reference-compat/install-operational-parity.sh");
+  const upgrader=read("scripts/update-isolated-operational-tenants.sh");
+  assert.match(migration,/from public\.students/);
+  assert.match(migration,/status='active' and deleted_at is null/);
+  assert.doesNotMatch(migration,/from app\.students/);
+  assert.match(migration,/platform_health_snapshot/);
+  assert.match(installer,/0079_platform_capacity_public_students/);
+  assert.match(upgrader,/0079_platform_capacity_public_students/);
+  assert.match(upgrader,/migration_count\" = \"55\"/);
 });
