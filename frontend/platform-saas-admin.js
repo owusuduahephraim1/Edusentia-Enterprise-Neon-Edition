@@ -5,7 +5,7 @@ const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const api=()=>window.EdusentiaApi;
 const packageApi=()=>window.EdusentiaPlatformApi;
 const cfg=window.EDS_MASTER_CONFIG||{};
-const state={view:"overview",model:null,session:null,mfaChallenge:"",pendingSession:null,turnstileToken:"",turnstileId:null,loading:false,packageModel:{templates:[],artifacts:[],reconciliation:[],signing_keys:[],signing_configured:false,signing_bootstrap_available:false}};
+const state={view:"overview",model:null,session:null,mfaChallenge:"",pendingSession:null,turnstileToken:"",turnstileId:null,loading:false,capacitySyncing:false,packageModel:{templates:[],artifacts:[],reconciliation:[],signing_keys:[],signing_configured:false,signing_bootstrap_available:false}};
 function setMobileDrawer(open=false){
   const drawer=$("#paPlatformSidebar")||$(".pa-sidebar"),backdrop=$("#paMobileDrawerBackdrop"),button=$("#paMobileMenuButton"),active=Boolean(open);
   if(active){
@@ -75,7 +75,7 @@ function beginMfa(result){
   else{box.classList.add("hidden");renderQr($("#paMfaQr"),"");}
   $("#paMfaCode").value="";$("#paMfaCode").focus();
 }
-async function enter(session){showConsole(session);setView(state.view);await load(true);}
+async function enter(session){showConsole(session);setView(state.view);await load(true);if(state.view==="capacity")await reconcileCapacitySnapshots();}
 async function boot(){
   try{
     const savedView=String(sessionStorage.getItem("edusentia.platform.view.v1")||"");
@@ -90,6 +90,19 @@ async function load(force=false){
   catch(e){$("#paConnection").textContent="Control plane unavailable";status(e?.message||"Could not load Platform Administration.","error");}
   finally{state.loading=false;}
 }
+async function reconcileCapacitySnapshots(){
+  if(state.capacitySyncing||!state.model)return;
+  const tenants=(state.model.tenants||[]).filter(t=>t.database_state==="isolated_ready"&&t.tenant_id);
+  if(!tenants.length)return;
+  state.capacitySyncing=true;
+  try{
+    const results=await Promise.allSettled(tenants.map(t=>api().refreshTenantCapacity(t.tenant_id)));
+    state.model=await api().platformOverview();
+    if(state.view==="capacity")render();
+    const failed=results.filter(r=>r.status==="rejected").length;
+    if(failed)status(`${failed} tenant capacity snapshot${failed===1?"":"s"} could not be refreshed.`,"error");
+  }finally{state.capacitySyncing=false;}
+}
 function setView(view){
   if(!titles[view])view="overview";
   state.view=view;
@@ -99,6 +112,7 @@ function setView(view){
   const [title,subtitle]=titles[view];$("#paPageTitle").textContent=title;$("#paPageSubtitle").textContent=subtitle;
   render();
   if(view==="packages")loadPackages().catch(e=>status(e?.message||"Package service could not be loaded.","error"));
+  if(view==="capacity"&&state.model)reconcileCapacitySnapshots().catch(e=>status(e?.message||"Capacity usage could not be refreshed.","error"));
   requestAnimationFrame(()=>{
     const content=$("#paContent");
     try{content?.focus({preventScroll:true});}catch{content?.focus();}
@@ -392,7 +406,7 @@ function wire(){
   });
   $("#paContent")?.addEventListener("click",action);$("#paModal")?.addEventListener("click",action);$("#paModal")?.addEventListener("close",()=>$("#paModalBody").innerHTML="");
   window.setInterval(()=>{if(state.session&&!document.hidden&&["capacity","tenants"].includes(state.view))load();},30000);
-  document.addEventListener("visibilitychange",()=>{if(state.session&&!document.hidden&&["capacity","tenants"].includes(state.view))load(true);});
+  document.addEventListener("visibilitychange",()=>{if(!state.session||document.hidden)return;if(state.view==="capacity")reconcileCapacitySnapshots().catch(()=>{});else if(state.view==="tenants")load(true);});
 }
 wire();boot();
 })();
