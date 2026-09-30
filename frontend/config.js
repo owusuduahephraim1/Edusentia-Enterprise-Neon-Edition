@@ -5,5 +5,7 @@ window.EDS_MASTER_CONFIG = Object.freeze({
   repositoryBasePath: "/Edusentia-Enterprise-Neon-Edition/",
   logoPath: "assets/school-logo.png",
   turnstileSiteKey: "0x4AAAAAAE9z98I97UNWfs7m",
+  platformAdminPhoneE164: "233240240898",
+  platformAdminPhoneDisplay: "+233 24 024 0898",
   environment: "production"
 });
