@@ -570,7 +570,8 @@ test("existing isolated tenants are upgraded additively before production deploy
   assert.match(u,/plan_tiering_count/);
   assert.match(u,/set role edusentia_provisioner;[\s\S]*grant usage,create on schema public to edusentia_runtime/i);
   assert.match(u,/revoke create on schema public from edusentia_runtime/i);
-  assert.doesNotMatch(u,/drop database|create database|delete from platform\.tenant_control|update platform\.tenant_control/i);
+  assert.doesNotMatch(u,/drop database|create database|delete from platform\.tenant_control/i);
+  assert.match(u,/update platform\.tenant_control[\s\S]*student_active_count[\s\S]*student_capacity_checked_at/i);
 
   assert.match(deploy,/scripts\/update-isolated-operational-tenants\.sh/);
   assert.ok(deploy.indexOf('TENANT_TEMPLATE_DATABASE="edusentia_tenant_template"') < deploy.indexOf('bash scripts/update-isolated-operational-tenants.sh'));
