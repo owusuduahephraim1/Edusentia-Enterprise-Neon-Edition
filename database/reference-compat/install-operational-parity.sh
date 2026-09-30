@@ -105,6 +105,7 @@ reconcile_once_recorded "0075_backup_bulk_object_ambiguity_fix" "$DIR/0075_backu
 reconcile_once_recorded "0076_required_password_bootstrap_enforcement" "$DIR/0076_required_password_bootstrap_enforcement.sql"
 reconcile_once_recorded "0077_restore_worker_bridge" "$DIR/0077_restore_worker_bridge.sql"
 reconcile_once_recorded "0078_required_password_enforcement_context" "$DIR/0078_required_password_enforcement_context.sql"
+reconcile_once_recorded "0079_platform_capacity_public_students" "$DIR/0079_platform_capacity_public_students.sql"
 
 test "$(psql "$TARGET_DATABASE_URL" -Atc "select count(distinct p.proname) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('edusentia_worker_runtime',p.oid,'EXECUTE') and (p.proname like 'finance_%' or p.proname like 'hr_%' or p.proname like 'student_services_%' or p.proname like 'admissions_%' or p.proname like 'discipline_%' or p.proname like 'welfare_%' or p.proname like 'health_%' or p.proname like 'communications_%' or p.proname like 'hostel_%' or p.proname like 'alumni_%' or p.proname in ('get_my_student_portal','get_my_student_portal_v2'))")" -ge 85
 
