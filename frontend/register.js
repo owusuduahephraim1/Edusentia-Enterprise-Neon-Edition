@@ -16,7 +16,7 @@ function showRegistrationAlerts(body,registration){
   if(!e164){box.hidden=true;box.innerHTML="";return;}
   const message=registrationAlertMessage(body,registration);
   const smsPhone=String(cfg.platformAdminPhoneDisplay||("+"+e164)).replace(/\s+/g,"");
-  box.innerHTML=`<div class="pa-info success"><strong>Registration received</strong><span>You can optionally alert the Platform Super Administrator now. Edusentia prepares the message, then WhatsApp or your SMS app performs the actual send.</span></div><div class="pa-actions"><a class="pa-btn secondary" href="https://wa.me/${encodeURIComponent(e164)}?text=${encodeURIComponent(message)}" target="_blank" rel="noopener noreferrer">Open WhatsApp</a><a class="pa-btn ghost" href="sms:${encodeURIComponent(smsPhone)}?body=${encodeURIComponent(message)}">Open SMS</a></div>`;
+  box.innerHTML=`<div class="pa-info success"><strong>Registration received</strong><span>You can optionally alert the Platform Super Administrator now. Edusentia prepares the message, then WhatsApp or your SMS app performs the actual send.</span></div><div class="pa-actions"><a class="pa-btn secondary" href="https://wa.me/${encodeURIComponent(e164)}?text=${encodeURIComponent(message)}" target="_blank" rel="noopener noreferrer">Open WhatsApp</a><a class="pa-btn ghost" href="sms:${smsPhone}?body=${encodeURIComponent(message)}">Open SMS</a></div>`;
   box.hidden=false;
 }
 window.onRegistrationTurnstileLoad=()=>{
