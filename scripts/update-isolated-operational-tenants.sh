@@ -149,24 +149,16 @@ SQL
     exit 1
   }
 
-  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 \
-    -v tenant_id="$tenant_id" \
-    -v active="$capacity_active" \
-    -v total="$capacity_total" \
-    -v base="$capacity_base" \
-    -v limit="$capacity_limit" \
-    -v capacity_status="$capacity_status" \
-    -v blocked="$capacity_blocked" \
-    -c "update platform.tenant_control
-        set student_active_count=:'active'::integer,
-            student_total_count=:'total'::integer,
-            student_capacity_base=nullif(:'base'::integer,-1),
-            student_capacity_limit=nullif(:'limit'::integer,-1),
-            student_capacity_status=:'capacity_status',
-            student_admissions_blocked=:'blocked'::boolean,
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "update platform.tenant_control
+        set student_active_count=$capacity_active::integer,
+            student_total_count=$capacity_total::integer,
+            student_capacity_base=nullif($capacity_base::integer,-1),
+            student_capacity_limit=nullif($capacity_limit::integer,-1),
+            student_capacity_status='$capacity_status',
+            student_admissions_blocked=$capacity_blocked::boolean,
             student_capacity_checked_at=now(),
             updated_at=now()
-        where tenant_id=:'tenant_id'::uuid;" >/dev/null
+        where tenant_id='$tenant_id'::uuid;" >/dev/null
   if [ "$capacity_limit" = "-1" ]; then capacity_label="unlimited"; else capacity_label="$capacity_limit"; fi
   echo "Capacity snapshot reconciled for $tenant_code: $capacity_active / $capacity_label."
 
