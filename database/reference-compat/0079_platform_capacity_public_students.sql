@@ -1,5 +1,6 @@
 -- Repair Platform Super Administrator capacity telemetry to count the certified
 -- public student directory instead of the legacy app.students table.
+-- Deployment reconciliation also updates existing isolated schools on the next capacity refresh.
 begin;
 
 create or replace function app.platform_capacity_snapshot(p_tenant_id uuid)
