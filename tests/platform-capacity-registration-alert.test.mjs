@@ -52,6 +52,8 @@ test("platform capacity telemetry counts the certified public student directory"
   assert.match(upgrader,/0079_platform_capacity_public_students/);
   assert.match(upgrader,/migration_count\" = \"55\"/);
   assert.match(upgrader,/platform_capacity_snapshot/);
-  assert.match(upgrader,/student_active_count/);
-  assert.match(upgrader,/Capacity snapshot reconciled/);
+  assert.match(upgrader,/student_active_count=:'capacity_active'::integer/);
+  assert.match(upgrader,/student_total_count=:'capacity_total'::integer/);
+  assert.match(upgrader,/student_capacity_checked_at=now\(\)/);
+  assert.match(upgrader,/student capacity synchronized/);
 });
