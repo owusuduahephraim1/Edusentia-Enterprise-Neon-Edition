@@ -30,14 +30,39 @@ test("platform admin displays licensed usage as active over capacity",()=>{
 
 test("successful school registration offers WhatsApp and SMS app alerts",()=>{
   const config=read("frontend/config.js");
-  const html=read("frontend/register.html");
-  const script=read("frontend/register.js");
+  const standaloneHtml=read("frontend/register.html");
+  const standaloneScript=read("frontend/register.js");
+  const shellHtml=read("frontend/index.html");
+  const shellScript=read("frontend/app.js");
+  const shellCss=read("frontend/registration-form.css");
+  const serviceWorker=read("frontend/service-worker.js");
+
   assert.match(config,/platformAdminPhoneE164/);
-  assert.match(html,/registrationAlertActions/);
-  assert.match(script,/https:\/\/wa\.me\//);
-  assert.match(script,/sms:/);
-  assert.match(script,/Platform Super Administrator/);
-  assert.match(script,/Registration ID/);
+
+  assert.match(standaloneHtml,/registrationAlertActions/);
+  assert.match(standaloneScript,/https:\/\/wa\.me\//);
+  assert.match(standaloneScript,/sms:/);
+
+  assert.match(shellHtml,/id="registrationSuccess"/);
+  assert.match(shellHtml,/id="registrationSuccessSchool"/);
+  assert.match(shellHtml,/id="registrationSuccessMeta"/);
+  assert.match(shellHtml,/id="registrationSuccessActions"/);
+  assert.match(shellHtml,/Open WhatsApp|WhatsApp or SMS/);
+
+  assert.match(shellScript,/registrationAlertMessage/);
+  assert.match(shellScript,/showRegistrationSuccess/);
+  assert.match(shellScript,/result\?\.registration/);
+  assert.match(shellScript,/https:\/\/wa\.me\//);
+  assert.match(shellScript,/sms:/);
+  assert.match(shellScript,/Primary contact:/);
+  assert.match(shellScript,/Please review the registration for onboarding/);
+  assert.match(shellScript,/Registration ID:/);
+  assert.match(shellScript,/registrationSuccessClose/);
+
+  assert.match(shellCss,/registration-alert-actions/);
+  assert.match(shellCss,/registration-alert-whatsapp/);
+  assert.match(shellCss,/registration-alert-sms/);
+  assert.match(serviceWorker,/edusentia-neon-v43/);
 });
 
 test("platform capacity telemetry counts the certified public student directory",()=>{
