@@ -124,44 +124,6 @@ SQL
     TARGET_DATABASE_URL="$TENANT_DATABASE_URL" bash database/reference-compat/install-operational-parity.sh
   )
 
-  capacity_row="$(psql "$TENANT_DATABASE_URL" -At -F '|' -c "
-    select
-      coalesce((snapshot->>'active')::integer,0),
-      coalesce((snapshot->>'total')::integer,0),
-      coalesce((snapshot->>'base_limit')::integer,-1),
-      coalesce((snapshot->>'effective_limit')::integer,-1),
-      coalesce(snapshot->>'status','unknown'),
-      coalesce((snapshot->>'admissions_blocked')::boolean,false)
-    from (select app.platform_capacity_snapshot('$tenant_id'::uuid) snapshot) s
-  ")"
-  IFS='|' read -r capacity_active capacity_total capacity_base capacity_limit capacity_status capacity_blocked <<< "$capacity_row"
-
-  [[ "$capacity_active" =~ ^[0-9]+$ && "$capacity_total" =~ ^[0-9]+$ && "$capacity_base" =~ ^-?[0-9]+$ && "$capacity_limit" =~ ^-?[0-9]+$ ]] || {
-    echo "::error::Invalid capacity snapshot returned for $tenant_code" >&2
-    exit 1
-  }
-  [[ "$capacity_status" =~ ^(available|near_limit|at_limit|over_limit|unlimited|unknown)$ ]] || {
-    echo "::error::Invalid capacity status returned for $tenant_code: $capacity_status" >&2
-    exit 1
-  }
-  [[ "$capacity_blocked" = "t" || "$capacity_blocked" = "f" ]] || {
-    echo "::error::Invalid admissions-blocked flag returned for $tenant_code" >&2
-    exit 1
-  }
-
-  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "update platform.tenant_control
-        set student_active_count=$capacity_active::integer,
-            student_total_count=$capacity_total::integer,
-            student_capacity_base=nullif($capacity_base::integer,-1),
-            student_capacity_limit=nullif($capacity_limit::integer,-1),
-            student_capacity_status='$capacity_status',
-            student_admissions_blocked=$capacity_blocked::boolean,
-            student_capacity_checked_at=now(),
-            updated_at=now()
-        where tenant_id='$tenant_id'::uuid;" >/dev/null
-  if [ "$capacity_limit" = "-1" ]; then capacity_label="unlimited"; else capacity_label="$capacity_limit"; fi
-  echo "Capacity snapshot reconciled for $tenant_code: $capacity_active / $capacity_label."
-
   migration_count="$(psql "$TENANT_DATABASE_URL" -Atc "
     select count(*) from app.schema_migrations
     where version in(
