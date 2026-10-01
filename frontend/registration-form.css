@@ -178,6 +178,36 @@
   font-weight:800;
 }
 .registration-success .button{min-width:180px}
+.registration-success-meta{
+  margin:-10px auto 18px;
+  color:#607590;
+  font-size:12px;
+  font-weight:800;
+  word-break:break-word;
+}
+.registration-alert-actions{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:4px auto 20px;
+}
+.registration-alert-actions .button{
+  min-width:160px;
+  text-decoration:none;
+}
+.registration-alert-whatsapp{
+  border-color:#bce5d2!important;
+  background:#eefaf4!important;
+  color:#087a46!important;
+}
+.registration-alert-sms{
+  border-color:#cad8ea!important;
+  background:#f7faff!important;
+  color:#123c78!important;
+}
+.registration-success-close{margin-top:2px}
 
 body:has(#registrationDialog[open]) .auth-view{
   background-attachment:scroll!important;
