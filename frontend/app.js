@@ -246,6 +246,44 @@
     if(!turnstileSiteKey||!window.turnstile||recoveryWidgetId!=null||!byId("accessRecoveryTurnstile"))return;
     recoveryWidgetId=window.turnstile.render("#accessRecoveryTurnstile",{sitekey:turnstileSiteKey,action:"access_recovery",theme:"auto",size:"flexible",callback:token=>{recoveryTurnstileToken=String(token||"");const el=byId("accessRecoveryMessage");if(el){el.textContent="";el.dataset.kind="";}},"expired-callback":()=>{recoveryTurnstileToken="";}});
   }
+  function normalizeRegistrationAlertPhone(value){return String(value||"").replace(/[^0-9]/g,"");}
+  function registrationAlertMessage(payload,registration){
+    const school=String(payload?.schoolName||"").trim(),id=String(registration?.id||"").trim();
+    const contact=[
+      String(payload?.contactName||"").trim(),
+      String(payload?.contactEmail||"").trim(),
+      String(payload?.contactPhone||"").trim(),
+      String(payload?.country||"").trim()
+    ].filter(Boolean).join(" · ");
+    return `Hello Edusentia Platform Super Administrator, I have successfully submitted a new school registration for ${school}.${id?` Registration ID: ${id}.`:""}${contact?` Primary contact: ${contact}.`:""} Please review the registration for onboarding. Thank you.`;
+  }
+  function setRegistrationState(success=false){
+    byId("registrationForm")?.classList.toggle("hidden",success);
+    byId("registrationSuccess")?.classList.toggle("hidden",!success);
+  }
+  function resetRegistrationSuccess(){
+    setRegistrationState(false);
+    const school=byId("registrationSuccessSchool"),meta=byId("registrationSuccessMeta"),actions=byId("registrationSuccessActions");
+    if(school)school.textContent="";
+    if(meta)meta.textContent="";
+    if(actions)actions.innerHTML="";
+  }
+  function showRegistrationSuccess(payload,result){
+    const registration=result?.registration||result||{},id=String(registration?.id||"").trim();
+    const school=byId("registrationSuccessSchool"),meta=byId("registrationSuccessMeta"),actions=byId("registrationSuccessActions");
+    if(school)school.textContent=String(payload?.schoolName||"").trim();
+    if(meta)meta.textContent=id?`Registration ID: ${id}`:"Registration submitted";
+    if(actions){
+      const cfg=window.EDS_MASTER_CONFIG||{},e164=normalizeRegistrationAlertPhone(cfg.platformAdminPhoneE164||cfg.platformAdminPhoneDisplay);
+      const message=registrationAlertMessage(payload,registration);
+      const smsPhone=String(cfg.platformAdminPhoneDisplay||("+"+e164)).replace(/\s+/g,"");
+      actions.innerHTML=e164
+        ? `<a class="button secondary registration-alert-whatsapp" href="https://wa.me/${encodeURIComponent(e164)}?text=${encodeURIComponent(message)}" target="_blank" rel="noopener noreferrer">Open WhatsApp</a><a class="button ghost registration-alert-sms" href="sms:${escapeHtml(smsPhone)}?body=${encodeURIComponent(message)}">Open SMS</a>`
+        : `<p class="muted">Platform administrator contact is not configured.</p>`;
+    }
+    setRegistrationState(true);
+    requestAnimationFrame(()=>byId("registrationSuccessClose")?.focus());
+  }
   window.onTurnstileLoad=()=>{renderTurnstile();if(byId("registrationDialog")?.open)renderRegistrationTurnstile();if(byId("accessRecoveryDialog")?.open)renderRecoveryTurnstile();};
 
   function applyLoginBrand(school){
@@ -838,10 +876,36 @@
   byId("recoveryContinue")?.addEventListener("click",async()=>{if(!pendingSession)return;const s=pendingSession,scope=pendingScope;pendingSession=null;pendingScope=platformMode?"platform":"tenant";byId("recoveryCodes").textContent="";if(scope==="platform"){location.replace("./platform-saas-admin.html");return;}await enter(s);});
   byId("togglePassword")?.addEventListener("click",()=>{const input=byId("password"),showing=input?.type==="text";if(input)input.type=showing?"password":"text";byId("togglePassword").setAttribute("aria-label",showing?"Show password":"Hide password");});
   byId("tenantCodeFallback")?.addEventListener("input",event=>{byId("tenantCode").value=String(event.currentTarget.value||"").trim().toUpperCase();});
-  byId("registerSchoolButton")?.addEventListener("click",()=>{const dialog=byId("registrationDialog");byId("registrationMessage").textContent="";if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");setTimeout(renderRegistrationTurnstile,0);});
-  const closeRegistration=()=>{const dialog=byId("registrationDialog");if(dialog?.open)dialog.close();};
-  byId("registrationClose")?.addEventListener("click",closeRegistration);byId("registrationCancel")?.addEventListener("click",closeRegistration);byId("registrationDialog")?.addEventListener("click",event=>{if(event.target===event.currentTarget)closeRegistration();});
-  byId("registrationForm")?.addEventListener("submit",async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),msg=byId("registrationMessage");msg.textContent="";msg.dataset.kind="";if(turnstileSiteKey&&!registrationToken){msg.textContent="Complete the human verification before submitting your registration.";msg.dataset.kind="error";renderRegistrationTurnstile();return;}button.disabled=true;try{const fd=new FormData(form),result=await api().registerSchool({schoolName:fd.get("schoolName"),institutionType:fd.get("institutionType"),contactName:fd.get("contactName"),contactEmail:fd.get("contactEmail"),contactPhone:fd.get("contactPhone"),country:fd.get("country"),turnstileToken:registrationToken});form.reset();registrationToken="";msg.textContent="Registration submitted successfully. The Platform Super Administrator will review it before the school workspace is provisioned.";msg.dataset.kind="success";if(window.turnstile&&registrationWidgetId!=null){try{window.turnstile.reset(registrationWidgetId);}catch{}}return result;}catch(error){msg.textContent=friendly(error);msg.dataset.kind="error";registrationToken="";if(window.turnstile&&registrationWidgetId!=null){try{window.turnstile.reset(registrationWidgetId);}catch{}}}finally{button.disabled=false;}});
+  byId("registerSchoolButton")?.addEventListener("click",()=>{const dialog=byId("registrationDialog"),form=byId("registrationForm"),msg=byId("registrationMessage");resetRegistrationSuccess();form?.reset();registrationToken="";if(msg){msg.textContent="";msg.dataset.kind="";}if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");setTimeout(()=>{if(window.turnstile&&registrationWidgetId!=null){try{window.turnstile.reset(registrationWidgetId);}catch{}}renderRegistrationTurnstile();},0);});
+  const closeRegistration=()=>{const dialog=byId("registrationDialog");if(dialog?.open)dialog.close();resetRegistrationSuccess();};
+  byId("registrationClose")?.addEventListener("click",closeRegistration);byId("registrationCancel")?.addEventListener("click",closeRegistration);byId("registrationSuccessClose")?.addEventListener("click",closeRegistration);byId("registrationDialog")?.addEventListener("click",event=>{if(event.target===event.currentTarget)closeRegistration();});
+  byId("registrationForm")?.addEventListener("submit",async event=>{
+    event.preventDefault();
+    const form=event.currentTarget,button=form.querySelector('button[type="submit"]'),msg=byId("registrationMessage");
+    msg.textContent="";msg.dataset.kind="";
+    if(turnstileSiteKey&&!registrationToken){msg.textContent="Complete the human verification before submitting your registration.";msg.dataset.kind="error";renderRegistrationTurnstile();return;}
+    button.disabled=true;
+    try{
+      const fd=new FormData(form),payload={
+        schoolName:fd.get("schoolName"),
+        institutionType:fd.get("institutionType"),
+        contactName:fd.get("contactName"),
+        contactEmail:fd.get("contactEmail"),
+        contactPhone:fd.get("contactPhone"),
+        country:fd.get("country"),
+        turnstileToken:registrationToken
+      };
+      const result=await api().registerSchool(payload);
+      form.reset();
+      registrationToken="";
+      if(window.turnstile&&registrationWidgetId!=null){try{window.turnstile.reset(registrationWidgetId);}catch{}}
+      showRegistrationSuccess(payload,result);
+      return result;
+    }catch(error){
+      msg.textContent=friendly(error);msg.dataset.kind="error";registrationToken="";
+      if(window.turnstile&&registrationWidgetId!=null){try{window.turnstile.reset(registrationWidgetId);}catch{}}
+    }finally{button.disabled=false;}
+  });
   byId("forgotPasswordButton")?.addEventListener("click",()=>{const dialog=byId("accessRecoveryDialog"),form=byId("accessRecoveryForm"),email=String(byId("email")?.value||"").trim(),tenantCode=String(byId("tenantCode")?.value||"").trim();if(form){form.elements.identifier.value=tenantCode||email||"";form.elements.contactEmail.value=email||"";}byId("accessRecoveryMessage").textContent="";if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");setTimeout(renderRecoveryTurnstile,0);});
   const closeRecovery=()=>{const dialog=byId("accessRecoveryDialog");if(dialog?.open)dialog.close();};
   byId("accessRecoveryClose")?.addEventListener("click",closeRecovery);byId("accessRecoveryCancel")?.addEventListener("click",closeRecovery);byId("accessRecoveryDialog")?.addEventListener("click",event=>{if(event.target===event.currentTarget)closeRecovery();});
