@@ -83,20 +83,31 @@ jobs:
           set -euo pipefail
           case "$PAGE_URL" in */) ;; *) PAGE_URL="$PAGE_URL/" ;; esac
           local_sw_sha="$(sha256sum frontend/service-worker.js | awk '{print $1}')"
+          local_index_sha="$(sha256sum frontend/index.html | awk '{print $1}')"
           local_css_sha="$(sha256sum frontend/style.css | awk '{print $1}')"
+          local_registration_css_sha="$(sha256sum frontend/registration-form.css | awk '{print $1}')"
           local_app_sha="$(sha256sum frontend/app.js | awk '{print $1}')"
           verified=false
           for attempt in $(seq 1 30); do
             nonce="$GITHUB_SHA-$attempt"
             if curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}deployment-meta.json?verify=${nonce}" -o /tmp/live-meta.json \
               && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}service-worker.js?verify=${nonce}" -o /tmp/live-sw.js \
+              && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}index.html?verify=${nonce}" -o /tmp/live-index.html \
               && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}style.css?verify=${nonce}" -o /tmp/live-style.css \
+              && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}registration-form.css?verify=${nonce}" -o /tmp/live-registration.css \
               && curl -fsS -H 'Cache-Control: no-cache' "${PAGE_URL}app.js?verify=${nonce}" -o /tmp/live-app.js; then
               live_commit="$(node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/live-meta.json','utf8'));process.stdout.write(String(x.commit_sha||''))")" || true
               live_sw_sha="$(sha256sum /tmp/live-sw.js | awk '{print $1}')"
+              live_index_sha="$(sha256sum /tmp/live-index.html | awk '{print $1}')"
               live_css_sha="$(sha256sum /tmp/live-style.css | awk '{print $1}')"
+              live_registration_css_sha="$(sha256sum /tmp/live-registration.css | awk '{print $1}')"
               live_app_sha="$(sha256sum /tmp/live-app.js | awk '{print $1}')"
-              if [ "$live_commit" = "$GITHUB_SHA" ] && [ "$live_sw_sha" = "$local_sw_sha" ] && [ "$live_css_sha" = "$local_css_sha" ] && [ "$live_app_sha" = "$local_app_sha" ]; then
+              if [ "$live_commit" = "$GITHUB_SHA" ] \
+                && [ "$live_sw_sha" = "$local_sw_sha" ] \
+                && [ "$live_index_sha" = "$local_index_sha" ] \
+                && [ "$live_css_sha" = "$local_css_sha" ] \
+                && [ "$live_registration_css_sha" = "$local_registration_css_sha" ] \
+                && [ "$live_app_sha" = "$local_app_sha" ]; then
                 verified=true
                 break
               fi
@@ -104,4 +115,7 @@ jobs:
             sleep 4
           done
           test "$verified" = true
-          echo "Live GitHub Pages deployment matches commit $GITHUB_SHA and critical PWA assets."
+          grep -F 'id="registrationSuccessActions"' /tmp/live-index.html
+          grep -F 'Open WhatsApp' /tmp/live-app.js
+          grep -F 'Open SMS' /tmp/live-app.js
+          echo "Live GitHub Pages deployment matches commit $GITHUB_SHA, registration success markup, and critical PWA assets."
