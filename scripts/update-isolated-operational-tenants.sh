@@ -379,6 +379,45 @@ SQL
   }
   echo "Tenant $tenant_code login directory synchronized: $route_count/$tenant_login_count active identities routable."
 
+  capacity_row="$(psql "$TENANT_DATABASE_URL" -At -F '|' -c "
+    select
+      coalesce(snapshot->>'base_limit',''),
+      coalesce(snapshot->>'effective_limit',''),
+      coalesce(snapshot->>'active','0'),
+      coalesce(snapshot->>'total','0'),
+      coalesce(snapshot->>'status','unknown'),
+      coalesce(snapshot->>'admissions_blocked','false')
+    from (select app.platform_capacity_snapshot('$tenant_id'::uuid) snapshot) q
+  ")"
+  IFS='|' read -r capacity_base capacity_limit capacity_active capacity_total capacity_status capacity_blocked <<< "$capacity_row"
+
+  [[ "$capacity_active" =~ ^[0-9]+$ ]] || { echo "::error::Invalid active student count for $tenant_code: $capacity_active" >&2; exit 1; }
+  [[ "$capacity_total" =~ ^[0-9]+$ ]] || { echo "::error::Invalid total student count for $tenant_code: $capacity_total" >&2; exit 1; }
+  [[ -z "$capacity_base" || "$capacity_base" =~ ^[0-9]+$ ]] || { echo "::error::Invalid base capacity for $tenant_code: $capacity_base" >&2; exit 1; }
+  [[ -z "$capacity_limit" || "$capacity_limit" =~ ^[0-9]+$ ]] || { echo "::error::Invalid effective capacity for $tenant_code: $capacity_limit" >&2; exit 1; }
+  [[ "$capacity_blocked" = "true" || "$capacity_blocked" = "false" ]] || { echo "::error::Invalid admissions block state for $tenant_code: $capacity_blocked" >&2; exit 1; }
+
+  psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 \
+    -v tenant_id="$tenant_id" \
+    -v capacity_base="$capacity_base" \
+    -v capacity_limit="$capacity_limit" \
+    -v capacity_active="$capacity_active" \
+    -v capacity_total="$capacity_total" \
+    -v capacity_status="$capacity_status" \
+    -v capacity_blocked="$capacity_blocked" <<'SQL'
+update platform.tenant_control
+set student_capacity_base=nullif(:'capacity_base','')::integer,
+    student_capacity_limit=nullif(:'capacity_limit','')::integer,
+    student_active_count=:'capacity_active'::integer,
+    student_total_count=:'capacity_total'::integer,
+    student_capacity_status=:'capacity_status',
+    student_admissions_blocked=:'capacity_blocked'::boolean,
+    student_capacity_checked_at=now(),
+    updated_at=now()
+where tenant_id=:'tenant_id'::uuid;
+SQL
+  echo "Tenant $tenant_code student capacity synchronized: $capacity_active / ${capacity_limit:-unlimited} active students."
+
   psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_code="$tenant_code" -v database_name="$database_name" <<'SQL'
 insert into platform.tenant_events(tenant_id,registration_id,event_type,details)
 select
