@@ -7,9 +7,12 @@ const read=p=>fs.readFileSync(p,"utf8");
 test("student admission numbers remain class scoped while active",()=>{
   const base=read("database/reference-compat/0049x_class_scoped_student_admission_numbers.sql");
   const reuse=read("database/reference-compat/0058_reusable_student_admission_numbers.sql");
-  assert.match(base,/prefix:='BS'\|\|parts\[1\]/);
-  assert.match(base,/prefix:='KG'\|\|parts\[1\]/);
-  assert.match(base,/prefix:='NS'\|\|parts\[1\]/);
+  const shared=read("database/reference-compat/0080_shared_division_student_admission_numbers.sql");
+  assert.match(shared,/prefix:='BS'/);
+  assert.match(shared,/prefix:='KG'/);
+  assert.match(shared,/prefix:='NS'/);
+  assert.match(shared,/update public\.student_admission_sequences[\s\S]*student_class_identifier_prefix\(seq\.class_id\)/);
+  assert.match(shared,/0080_shared_division_student_admission_numbers/);
   assert.match(base,/prefix:='CR'/);
   assert.match(reuse,/candidate:=root\|\|'-STU-'\|\|clean_prefix\|\|lpad\(n::text,3,'0'\)/);
   assert.match(reuse,/select s\.admission_no::text[\s\S]*into admission[\s\S]*for update/);
@@ -44,7 +47,7 @@ test("restore keeps a released number when free and reallocates on collision",()
 test("student UI explains automatic lowest-available class numbering",()=>{
   const ui=read("frontend/parity-students.js");
   assert.match(ui,/Generated automatically on save/);
-  assert.match(ui,/Basic 3 → NIS000001-STU-BS3001/);
+  assert.match(ui,/Basic 3 → NIS000001-STU-BS003/);
   assert.match(ui,/lowest available/);
   assert.match(ui,/released by removed students are reused/i);
   assert.doesNotMatch(ui,/generate_school_identifier",\{identifier_kind:"student"\}/);
