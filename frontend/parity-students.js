@@ -119,11 +119,9 @@
   }
   function admissionClassPrefix(name){
     const value=String(name||"").trim().toUpperCase().replace(/\s+/g," ");
-    let match=value.match(/^BASIC\s*(\d+)([A-Z]?)$/);if(match)return "BS"+match[1]+(match[2]||"");
-    match=value.match(/^KINDERGARTEN\s*KG\s*(\d+)([A-Z]?)$/);if(match)return "KG"+match[1]+(match[2]||"");
-    match=value.match(/^KINDERGARTEN\s*(\d+)([A-Z]?)$/);if(match)return "KG"+match[1]+(match[2]||"");
-    match=value.match(/^KG\s*(\d+)([A-Z]?)$/);if(match)return "KG"+match[1]+(match[2]||"");
-    match=value.match(/^NURSERY\s*(\d+)([A-Z]?)$/);if(match)return "NS"+match[1]+(match[2]||"");
+    if(/^BASIC\s*\d+[A-Z]?$/.test(value))return "BS";
+    if(/^KINDERGARTEN\s+KG\s*\d+[A-Z]?$/.test(value)||/^KINDERGARTEN\s*\d+[A-Z]?$/.test(value)||/^KG\s*\d+[A-Z]?$/.test(value))return "KG";
+    if(/^NURSERY\s*\d+[A-Z]?$/.test(value))return "NS";
     if(value==="CRECHE"||value==="CRÈCHE")return "CR";
     return value.replace(/[^A-Z0-9]/g,"").slice(0,6)||"CLASS";
   }
@@ -140,7 +138,7 @@
       <form id="studentCertifiedForm" class="form-stack"><input type="hidden" name="id" value="${esc(student.id||"")}"><input type="hidden" name="updated_at" value="${esc(student.updated_at||"")}">
       <div class="staff-photo-editor">${photoUrl?`<img id="studentPhotoPreview" src="${esc(photoUrl)}" alt="Student photograph">`:`<span id="studentPhotoPreview">${initials}</span>`}<label class="field"><span>Student photograph</span><input id="studentPhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG or WebP. The photograph is stored privately in the school’s dedicated R2 space.</small></label></div>
       <div class="form-grid three">
-        <label class="field"><span>Admission number</span><input id="studentAdmissionDisplay" value="${esc(id?admission:"Generated automatically on save")}" readonly aria-readonly="true"><small id="studentAdmissionHint">${id?"Admission identifier. It remains unchanged while the student is active and on promotion.":"Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001."}</small></label>
+        <label class="field"><span>Admission number</span><input id="studentAdmissionDisplay" value="${esc(id?admission:"Generated automatically on save")}" readonly aria-readonly="true"><small id="studentAdmissionHint">${id?"Admission identifier. It remains unchanged while the student is active and on promotion.":"Select the admission class. Example: Basic 3 → NIS000001-STU-BS003."}</small></label>
         <label class="field"><span>First name</span><input name="first_name" value="${esc(student.first_name||"")}" required></label>
         <label class="field"><span>Middle name</span><input name="middle_name" value="${esc(student.middle_name||"")}"></label>
         <label class="field"><span>Last name</span><input name="last_name" value="${esc(student.last_name||"")}" required></label>
@@ -168,7 +166,7 @@
       const prefix=selected?admissionClassPrefix(selected.name):"";
       byId("studentAdmissionHint").textContent=selected
         ? "This class uses "+prefix+". The lowest available number is allocated atomically when the student is saved. Numbers released by removed students are reused; an active student's number remains unchanged on promotion."
-        : "Select the admission class. Example: Basic 3 → NIS000001-STU-BS3001.";
+        : "Select the admission class. Example: Basic 3 → NIS000001-STU-BS003.";
     };
     studentForm.elements.class_id.addEventListener("change",refreshAdmissionHint);
     refreshAdmissionHint();
