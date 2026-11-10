@@ -4,7 +4,7 @@ import fs from "node:fs";
 
 const read=p=>fs.readFileSync(p,"utf8");
 
-test("student admission numbers remain class scoped while active",()=>{
+test("student admission numbers share a sequence across classes in each division",()=>{
   const base=read("database/reference-compat/0049x_class_scoped_student_admission_numbers.sql");
   const reuse=read("database/reference-compat/0058_reusable_student_admission_numbers.sql");
   const shared=read("database/reference-compat/0080_shared_division_student_admission_numbers.sql");
@@ -34,6 +34,7 @@ test("removed students release their admission number for lowest-gap reuse",()=>
   const install=read("database/reference-compat/install-operational-parity.sh");
   assert.match(install,/reconcile_once_recorded "0058_reusable_student_admission_numbers"/);
   assert.ok(install.indexOf("0049x_class_scoped_student_admission_numbers")<install.indexOf("0058_reusable_student_admission_numbers"));
+  assert.match(install,/reconcile_once_recorded "0080_shared_division_student_admission_numbers"/);
 });
 
 test("restore keeps a released number when free and reallocates on collision",()=>{
