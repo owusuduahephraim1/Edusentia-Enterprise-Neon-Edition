@@ -120,7 +120,7 @@
   function admissionClassPrefix(name){
     const value=String(name||"").trim().toUpperCase().replace(/\s+/g," ");
     if(/^BASIC\s*\d+[A-Z]?$/.test(value))return "BS";
-    if(/^KINDERGARTEN\s+KG\s*\d+[A-Z]?$/.test(value)||/^KINDERGARTEN\s*\d+[A-Z]?$/.test(value)||/^KG\s*\d+[A-Z]?$/.test(value))return "KG";
+    if(/^KINDERGARTEN\s*KG\s*\d+[A-Z]?$/.test(value)||/^KINDERGARTEN\s*\d+[A-Z]?$/.test(value)||/^KG\s*\d+[A-Z]?$/.test(value))return "KG";
     if(/^NURSERY\s*\d+[A-Z]?$/.test(value))return "NS";
     if(value==="CRECHE"||value==="CRÈCHE")return "CR";
     return value.replace(/[^A-Z0-9]/g,"").slice(0,6)||"CLASS";
