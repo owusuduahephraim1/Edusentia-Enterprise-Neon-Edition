@@ -170,5 +170,5 @@ test("Principal login deletion recovers orphaned auth identities without weakeni
   assert.ok(upgrade.includes("0081_orphaned_principal_login_cleanup"));
   assert.ok(upgrade.includes("0082_orphaned_principal_role_cleanup"));
   assert.ok(upgrade.includes("0083_orphaned_principal_event_reference_cleanup"));
-  assert.ok(upgrade.includes('migration_count" = "58'));
+  assert.ok(upgrade.includes('migration_count" = "59'));
 });
