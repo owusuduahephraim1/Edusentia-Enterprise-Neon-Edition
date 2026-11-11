@@ -214,7 +214,6 @@ async function ensureDeletable(sql:TenantSql,ctx:SessionContext,userId:string){
       coalesce(p.active,m.status='active',u.disabled_at is null) active,
       (p.id is not null) has_profile,
       (m.user_id is not null) has_membership,
-      exists(select 1 from public.accounts_office_staff a where a.profile_id=u.id) is_accounts_office,
       (select count(*)::int from public.profiles q
         where q.active and public.current_app_role_for(q.role)='system_admin' and q.id<>${userId}::uuid) other_admins
     from authn.users u
@@ -224,7 +223,9 @@ async function ensureDeletable(sql:TenantSql,ctx:SessionContext,userId:string){
   const row=(rows[0] as any)?.[0]??(rows[0] as any);
   if(!row)fail("Authentication account was not found","not_found",404);
   if(row.has_profile!==true&&row.has_membership!==true&&String(row.role)!=="principal")fail("User account is not linked to this school","tenant_membership_not_found",404);
-  if(row.is_accounts_office===true||String(row.role)==="accountant")fail("Accounts Office Staff accounts must be archived, not permanently deleted","protected_account",409);
+  // Accounts Office Staff protection is enforced inside the SECURITY DEFINER
+  // deletion function. The Worker runtime must not query the restricted table.
+  if(String(row.role)==="accountant")fail("Accounts Office Staff accounts must be archived, not permanently deleted","protected_account",409);
   if(row.active===true&&String(row.role)==="system_admin"&&Number(row.other_admins||0)<1)fail("At least one active School System Administrator must remain","last_administrator",409);
 }
 async function resetPassword(sql:TenantSql,ctx:SessionContext,userId:string,password:string,mustChange:boolean){
