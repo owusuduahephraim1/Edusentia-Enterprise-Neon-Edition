@@ -34,8 +34,8 @@ begin
   end if;
 
   select
-    coalesce(public.current_app_role_for(p.role)::text,m.role),
-    coalesce(p.active,m.status='active'),
+    coalesce(public.current_app_role_for(p.role)::text,m.role,u.raw_app_meta_data->>'role'),
+    coalesce(p.active,m.status='active',u.disabled_at is null),
     p.id is not null,
     m.user_id is not null,
     exists(select 1 from public.accounts_office_staff a where a.profile_id=u.id)
@@ -49,7 +49,7 @@ begin
   if not found then
     raise exception 'Authentication account was not found' using errcode='P0002';
   end if;
-  if not coalesce(has_profile,false) and not coalesce(has_membership,false) then
+  if not coalesce(has_profile,false) and not coalesce(has_membership,false) and target_role is distinct from 'principal' then
     raise exception 'User account is not linked to this school' using errcode='42501';
   end if;
 
