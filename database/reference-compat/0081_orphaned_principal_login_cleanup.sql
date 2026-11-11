@@ -42,7 +42,7 @@ begin
   into target_role,target_active,has_profile,has_membership,is_accounts_office
   from authn.users u
   left join public.profiles p on p.id=u.id
-  left join app.tenant_memberships m on m.user_id=u.id and m.tenant_id=tenant_id
+  left join app.tenant_memberships m on m.user_id=u.id and m.tenant_id=$2
   where u.id=target_user_id
   limit 1;
 
