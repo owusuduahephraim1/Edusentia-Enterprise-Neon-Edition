@@ -155,13 +155,13 @@ test("Principal login deletion recovers orphaned auth identities without weakeni
   const worker=read("worker/src/identity-admin.ts");
   const installer=read("database/reference-compat/install-operational-parity.sh");
   const upgrade=read("scripts/update-isolated-operational-tenants.sh");
-  assert.match(sql,/from authn\\.users u[\\s\\S]*left join public\\.profiles p on p\\.id=u\\.id/i);
-  assert.match(sql,/left join app\\.tenant_memberships m on m\\.user_id=u\\.id and m\\.tenant_id=\\$2/i);
+  assert.match(sql,/from authn\.users u[\\s\\S]*left join public\.profiles p on p\.id=u\.id/i);
+  assert.match(sql,/left join app\.tenant_memberships m on m\.user_id=u\.id and m\.tenant_id=\\$2/i);
   assert.match(sql,/not coalesce\\(has_profile,false\) and not coalesce\\(has_membership,false\)/i);
   assert.match(sql,/Accounts Office Staff accounts must be archived, not permanently deleted/);
-  assert.match(sql,/audit\\.record_auth_event/);
-  assert.match(worker,/from authn\\.users u[\\s\\S]*left join public\\.profiles p on p\\.id=u\\.id/);
-  assert.match(worker,/row\\.has_profile!==true&&row\\.has_membership!==true/);
+  assert.match(sql,/audit\.record_auth_event/);
+  assert.match(worker,/from authn\.users u[\\s\\S]*left join public\.profiles p on p\.id=u\.id/);
+  assert.match(worker,/row\.has_profile!==true&&row\.has_membership!==true/);
   assert.match(worker,/is_accounts_office===true/);
   assert.match(installer,/0081_orphaned_principal_login_cleanup/);
   assert.match(upgrade,/0081_orphaned_principal_login_cleanup/);
