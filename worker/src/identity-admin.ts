@@ -205,6 +205,7 @@ async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,se
   return {ok:true,id:userId,email:newEmail,changed:true,old_email:oldEmail};
 }
 
+// Deployment trigger: apply migration 0082 for orphaned Principal identity cleanup.
 async function ensureDeletable(sql:TenantSql,ctx:SessionContext,userId:string){
   if(userId===ctx.userId)fail("You cannot delete your current account","cannot_delete_current_account",400);
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
