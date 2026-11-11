@@ -38,7 +38,7 @@ test("Tenant sign-in remains isolated-school aware",()=>{
   assert.match(auth,/tenantDb\(env,String\(route\.database_name\)\)/);
   assert.match(auth,/mfaRequired:true/);
   assert.match(auth,/assuranceLevel:2/);
-  assert.match(auth,/\["system_admin","principal","platform_super_admin"\]\.includes\(canonicalAppRole\(role\)\)/);
+  assert.match(auth,/function privilegedRoleRequiresMfa\(role:unknown\)\{return \["system_admin","platform_super_admin"\]\.includes\(canonicalAppRole\(role\)\);\}/);\n  assert.match(auth,/if\(!row\.mfa_required\)\{/);\n  assert.match(auth,/\(context\.mfa_required&&Number\(session\.assurance_level\)<2\)\|\|\(privilegedRoleRequiresMfa\(context\.role\)&&Number\(session\.assurance_level\)<2\)/);
 });
 
 test("Approved school administrator setup returns to branded tenant sign-in",()=>{
