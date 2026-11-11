@@ -158,11 +158,11 @@ test("Principal login deletion recovers orphaned auth identities without weakeni
   assert.ok(sql.includes("from authn.users u"));
   assert.ok(sql.includes("left join public.profiles p on p.id=u.id"));
   assert.ok(sql.includes("left join app.tenant_memberships m on m.user_id=u.id and m.tenant_id=$2"));
-  assert.ok(sql.includes("not coalesce(has_profile,false) and not coalesce(has_membership,false)"));
+  assert.ok(sql.includes("not coalesce(has_profile,false) and not coalesce(has_membership,false) and target_role is distinct from 'principal'"));
   assert.ok(sql.includes("Accounts Office Staff accounts must be archived, not permanently deleted"));
   assert.ok(sql.includes("audit.record_auth_event"));
   assert.ok(worker.includes("from authn.users u"));
-  assert.ok(worker.includes("row.has_profile!==true&&row.has_membership!==true"));
+  assert.ok(worker.includes('row.has_profile!==true&&row.has_membership!==true&&String(row.role)!=="principal"'));
   assert.ok(worker.includes("is_accounts_office===true"));
   assert.ok(installer.includes("0081_orphaned_principal_login_cleanup"));
   assert.ok(upgrade.includes("0081_orphaned_principal_login_cleanup"));
