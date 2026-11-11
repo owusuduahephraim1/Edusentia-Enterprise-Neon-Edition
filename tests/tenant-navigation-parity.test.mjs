@@ -333,7 +333,7 @@ test("Principal workspace preserves Supabase operational navigation and AAL2 sec
   const enterprise=read("frontend/parity-enterprise-workspaces.js");
   const hr=read("frontend/tenant-hr-staff-v1.js");
 
-  assert.match(auth,/\["system_admin","principal","platform_super_admin"\]\.includes\(canonicalAppRole\(role\)\)/);
+  assert.match(auth,/function privilegedRoleRequiresMfa\(role:unknown\)\{return \["system_admin","platform_super_admin"\]\.includes\(canonicalAppRole\(role\)\);\}/);
   for(const label of ["Principal Dashboard","Emergency Delegation","Active Students","Awaiting Action","Published Reports","Published Average","Digital Signature","Current Academic Period","Class Performance","Recent Report Cards"]){
     assert.ok(app.includes(label),label);
   }
