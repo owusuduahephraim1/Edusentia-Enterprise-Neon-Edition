@@ -58,7 +58,7 @@ test("0061 is installed and verified for future and existing tenants",()=>{
   assert.match(upgrade,/0063_identity_user_bundle_runtime_grants/);
   assert.match(upgrade,/0062_user_directory_role_workspace_parity/);
   assert.match(upgrade,/0061_discovered_operational_parity_repairs/);
-  assert.match(upgrade,/migration_count" = "58/);
+  assert.match(upgrade,/migration_count" = "59/);
   assert.match(template,/operational_repairs_ok/);
 });
 
@@ -166,7 +166,9 @@ test("Principal login deletion recovers orphaned auth identities without weakeni
   assert.ok(worker.includes('String(row.role)==="accountant"'));
   assert.ok(installer.includes("0081_orphaned_principal_login_cleanup"));
   assert.ok(installer.includes("0082_orphaned_principal_role_cleanup"));
+  assert.ok(installer.includes("0083_orphaned_principal_event_reference_cleanup"));
   assert.ok(upgrade.includes("0081_orphaned_principal_login_cleanup"));
   assert.ok(upgrade.includes("0082_orphaned_principal_role_cleanup"));
+  assert.ok(upgrade.includes("0083_orphaned_principal_event_reference_cleanup"));
   assert.ok(upgrade.includes('migration_count" = "58'));
 });
