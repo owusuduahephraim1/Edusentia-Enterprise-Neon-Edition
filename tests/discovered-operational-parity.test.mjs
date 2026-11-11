@@ -163,7 +163,7 @@ test("Principal login deletion recovers orphaned auth identities without weakeni
   assert.ok(sql.includes("audit.record_auth_event"));
   assert.ok(worker.includes("from authn.users u"));
   assert.ok(worker.includes('row.has_profile!==true&&row.has_membership!==true&&String(row.role)!=="principal"'));
-  assert.ok(worker.includes("is_accounts_office===true"));
+  assert.ok(worker.includes('String(row.role)==="accountant"'));
   assert.ok(installer.includes("0081_orphaned_principal_login_cleanup"));
   assert.ok(installer.includes("0082_orphaned_principal_role_cleanup"));
   assert.ok(upgrade.includes("0081_orphaned_principal_login_cleanup"));
