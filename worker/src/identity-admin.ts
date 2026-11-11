@@ -223,7 +223,8 @@ async function ensureDeletable(sql:TenantSql,ctx:SessionContext,userId:string){
   const row=(rows[0] as any)?.[0]??(rows[0] as any);
   if(!row)fail("Authentication account was not found","not_found",404);
   if(row.has_profile!==true&&row.has_membership!==true&&String(row.role)!=="principal")fail("User account is not linked to this school","tenant_membership_not_found",404);
-  // Accounts Office Staff protection is enforced inside the SECURITY DEFINER
+  // Orphaned Principal cleanup: runtime reads remain least-privilege; the protected database bridge enforces retention.
+// Accounts Office Staff protection is enforced inside the SECURITY DEFINER
   // deletion function. The Worker runtime must not query the restricted table.
   if(String(row.role)==="accountant")fail("Accounts Office Staff accounts must be archived, not permanently deleted","protected_account",409);
   if(row.active===true&&String(row.role)==="system_admin"&&Number(row.other_admins||0)<1)fail("At least one active School System Administrator must remain","last_administrator",409);
