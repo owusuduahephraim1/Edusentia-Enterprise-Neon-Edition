@@ -208,12 +208,22 @@ async function refreshGeneratedEmail(env:Env,sql:TenantSql,ctx:SessionContext,se
 async function ensureDeletable(sql:TenantSql,ctx:SessionContext,userId:string){
   if(userId===ctx.userId)fail("You cannot delete your current account","cannot_delete_current_account",400);
   const [rows]=await tenantTx<any[]>(sql,ctx,txn=>[txn`
-    select p.role::text role,p.active,
+    select
+      coalesce(public.current_app_role_for(p.role)::text,m.role) role,
+      coalesce(p.active,m.status='active') active,
+      (p.id is not null) has_profile,
+      (m.user_id is not null) has_membership,
+      exists(select 1 from public.accounts_office_staff a where a.profile_id=u.id) is_accounts_office,
       (select count(*)::int from public.profiles q
         where q.active and public.current_app_role_for(q.role)='system_admin' and q.id<>${userId}::uuid) other_admins
-    from public.profiles p where p.id=${userId}::uuid limit 1`]);
+    from authn.users u
+    left join public.profiles p on p.id=u.id
+    left join app.tenant_memberships m on m.user_id=u.id and m.tenant_id=${ctx.tenantId}::uuid
+    where u.id=${userId}::uuid limit 1`]);
   const row=(rows[0] as any)?.[0]??(rows[0] as any);
-  if(!row)fail("User profile not found","not_found",404);
+  if(!row)fail("Authentication account was not found","not_found",404);
+  if(row.has_profile!==true&&row.has_membership!==true)fail("User account is not linked to this school","tenant_membership_not_found",404);
+  if(row.is_accounts_office===true||String(row.role)==="accountant")fail("Accounts Office Staff accounts must be archived, not permanently deleted","protected_account",409);
   if(row.active===true&&String(row.role)==="system_admin"&&Number(row.other_admins||0)<1)fail("At least one active School System Administrator must remain","last_administrator",409);
 }
 async function resetPassword(sql:TenantSql,ctx:SessionContext,userId:string,password:string,mustChange:boolean){
