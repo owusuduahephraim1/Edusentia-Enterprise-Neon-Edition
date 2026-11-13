@@ -216,6 +216,141 @@ BEGIN
 END
 $body$;
 
--- Attendance reconciliation functions follow.
+CREATE OR REPLACE FUNCTION public.save_class_attendance(target_term_id uuid, target_class_id uuid, target_date date, entries jsonb, notes_text text DEFAULT ''::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare target_year_id uuid;term_start date;term_end date;target_register_id uuid;expected_count integer;provided_count integer;distinct_count integer;invalid_count integer;
+begin
+  if not public.is_assigned_class_teacher(target_class_id) then raise exception 'You can mark attendance only for your assigned class' using errcode='42501'; end if;
+  if not public.term_phase_writable(target_term_id,'attendance',null) then raise exception 'Attendance is locked for the selected term' using errcode='42501'; end if;
+  if target_term_id is null or target_date is null then raise exception 'Term and attendance date are required'; end if;
+  if entries is null or jsonb_typeof(entries)<>'array' then raise exception 'Attendance entries must be supplied as a list'; end if;
+  select t.academic_year_id,t.start_date,t.end_date into target_year_id,term_start,term_end from public.terms t where t.id=target_term_id and t.deleted_at is null;
+  if target_year_id is null then raise exception 'Term is unavailable'; end if;
+  if term_start is not null and target_date<term_start then raise exception 'Attendance date is before the selected term'; end if;
+  if term_end is not null and target_date>term_end then raise exception 'Attendance date is after the selected term'; end if;
+  if target_date>current_date then raise exception 'Attendance cannot be marked for a future date'; end if;
+  if extract(isodow from target_date)::integer>5 then
+    raise exception 'Attendance cannot be marked on a weekend. Select a teaching weekday.' using errcode='23514';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('school_calendar:'||target_term_id::text));
+  if exists(select 1 from public.school_closures c where c.term_id=target_term_id
+    and c.deleted_at is null and target_date between c.start_date and c.end_date) then
+    raise exception 'School closed on this date. Attendance cannot be marked during a school holiday or break.' using errcode='23514';
+  end if;
+  select count(*) into expected_count from public.enrollments e join public.students s on s.id=e.student_id and s.deleted_at is null and s.status='active' where e.academic_year_id=target_year_id and e.class_id=target_class_id and e.deleted_at is null and e.active;
+  if expected_count=0 then raise exception 'No students are enrolled in this class for the selected term'; end if;
+  select count(*),count(distinct public.safe_uuid(item->>'enrollment_id')) into provided_count,distinct_count from jsonb_array_elements(entries) item;
+  if provided_count<>expected_count or distinct_count<>provided_count then raise exception 'Attendance must include each student exactly once'; end if;
+  select count(*) into invalid_count from jsonb_array_elements(entries) item
+  left join public.enrollments e on e.id=public.safe_uuid(item->>'enrollment_id') left join public.students s on s.id=e.student_id
+  where public.safe_uuid(item->>'enrollment_id') is null or coalesce(item->>'attendance_status','') not in ('present','absent','late','excused')
+    or e.id is null or e.deleted_at is not null or not e.active or e.academic_year_id<>target_year_id or e.class_id<>target_class_id
+    or s.id is null or s.deleted_at is not null or s.status<>'active';
+  if invalid_count>0 then raise exception 'One or more attendance entries are invalid or outside the assigned class'; end if;
+  perform set_config('app.change_reason','Class attendance marked',true);
+  insert into public.class_attendance_registers(term_id,class_id,attendance_date,marked_by,notes,updated_at)
+  values(target_term_id,target_class_id,target_date,auth.uid(),coalesce(notes_text,''),now())
+  on conflict(term_id,class_id,attendance_date) do update set marked_by=auth.uid(),notes=excluded.notes,updated_at=now()
+  returning id into target_register_id;
+  insert into public.student_attendance_entries(register_id,enrollment_id,attendance_status,updated_at)
+  select target_register_id,public.safe_uuid(item->>'enrollment_id'),item->>'attendance_status',now() from jsonb_array_elements(entries) item
+  on conflict(register_id,enrollment_id) do update set attendance_status=excluded.attendance_status,updated_at=now();
+  delete from public.student_attendance_entries a where a.register_id=target_register_id and not exists(select 1 from jsonb_array_elements(entries) item where public.safe_uuid(item->>'enrollment_id')=a.enrollment_id);
+  perform public.sync_attendance_reports(target_term_id,target_class_id);
+  return public.get_class_attendance_register(target_term_id,target_class_id,target_date);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_class_attendance_register(target_term_id uuid, target_class_id uuid, target_date date)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare target_year_id uuid;term_start date;term_end date;register_row public.class_attendance_registers%rowtype;
+begin
+  if not public.is_assigned_class_teacher(target_class_id) then raise exception 'You can mark attendance only for your assigned class' using errcode='42501'; end if;
+  if target_term_id is null or target_date is null then raise exception 'Term and attendance date are required'; end if;
+  select t.academic_year_id,t.start_date,t.end_date into target_year_id,term_start,term_end
+  from public.terms t where t.id=target_term_id and t.deleted_at is null;
+  if target_year_id is null then raise exception 'Term is unavailable'; end if;
+  if term_start is not null and target_date<term_start then raise exception 'Attendance date is before the selected term'; end if;
+  if term_end is not null and target_date>term_end then raise exception 'Attendance date is after the selected term'; end if;
+  select * into register_row from public.class_attendance_registers r
+  where r.term_id=target_term_id and r.class_id=target_class_id and r.attendance_date=target_date;
+  return jsonb_build_object(
+    'register',case when register_row.id is null then null else to_jsonb(register_row) end,
+    'term',jsonb_build_object('id',target_term_id,'start_date',term_start,'end_date',term_end,'academic_year_id',target_year_id),
+    'class',(select jsonb_build_object('id',c.id,'name',c.name) from public.classes c where c.id=target_class_id),
+    'closed_date',(extract(isodow from target_date)::integer>5 OR exists(
+      select 1 from public.school_closures c where c.term_id=target_term_id and c.deleted_at is null
+        and target_date between c.start_date and c.end_date)),
+    'closure',(select jsonb_build_object('closure_type',c.closure_type,'reason',c.reason)
+      from public.school_closures c where c.term_id=target_term_id and c.deleted_at is null
+        and target_date between c.start_date and c.end_date limit 1),
+    'days_school_opened',(select count(*) from public.class_attendance_registers r
+      where r.term_id=target_term_id and r.class_id=target_class_id
+        and extract(isodow from r.attendance_date)::integer<=5
+        and not exists(select 1 from public.school_closures c where c.term_id=r.term_id and c.deleted_at is null
+          and r.attendance_date between c.start_date and c.end_date)
+        and exists(select 1 from public.student_attendance_entries e where e.register_id=r.id)),
+    'students',coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'enrollment_id',e.id,'student_id',s.id,'admission_no',s.admission_no,
+        'first_name',s.first_name,'middle_name',s.middle_name,'last_name',s.last_name,
+        'full_name',concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name),
+        'roll_number',e.roll_number,
+        'attendance_status',coalesce(a.attendance_status,'present'),
+        'days_present',counts.days_present,
+        'days_school_opened',counts.days_school_opened
+      ) order by lower(concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name)),s.admission_no::text)
+      from public.enrollments e
+      join public.students s on s.id=e.student_id and s.deleted_at is null and s.status='active'
+      left join public.student_attendance_entries a on a.register_id=register_row.id and a.enrollment_id=e.id
+      cross join lateral public.attendance_counts_for_enrollment(e.id,target_term_id) counts
+      where e.academic_year_id=target_year_id
+        and e.class_id=target_class_id
+        and e.deleted_at is null
+    ),'[]'::jsonb)
+  );
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.attendance_counts_for_enrollment(target_enrollment_id uuid, target_term_id uuid)
+ RETURNS TABLE(days_school_opened integer, days_present integer)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+  select count(distinct r.id) filter(where exists(select 1 from public.student_attendance_entries logged where logged.register_id=r.id))::integer,
+    count(a.id) filter(where a.attendance_status in ('present','late'))::integer
+  from public.enrollments e
+  join public.class_attendance_registers r on r.class_id=e.class_id and r.term_id=target_term_id
+  left join public.student_attendance_entries a on a.register_id=r.id and a.enrollment_id=e.id
+  where e.id=target_enrollment_id
+    and extract(isodow from r.attendance_date)::integer<=5
+    and not exists(select 1 from public.school_closures c where c.term_id=r.term_id
+      and c.deleted_at is null and r.attendance_date between c.start_date and c.end_date)
+$function$
+;
+
+
+-- Readable only through authenticated, role-checked security-definer functions.
+REVOKE ALL ON FUNCTION public.list_school_closures(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.save_school_closure(uuid,date,date,text,text,uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.archive_school_closure(uuid,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_attendance_weekly_history(uuid,uuid,date) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_school_closures(uuid) TO edusentia_worker_runtime;
+GRANT EXECUTE ON FUNCTION public.save_school_closure(uuid,date,date,text,text,uuid) TO edusentia_worker_runtime;
+GRANT EXECUTE ON FUNCTION public.archive_school_closure(uuid,text) TO edusentia_worker_runtime;
+GRANT EXECUTE ON FUNCTION public.get_attendance_weekly_history(uuid,uuid,date) TO edusentia_worker_runtime;
+
+INSERT INTO app.schema_migrations(version) VALUES('0086_weekly_attendance_school_closures')
+ON CONFLICT DO NOTHING;
+
 
 COMMIT;
