@@ -32,7 +32,7 @@ test("class teacher and principal receive reviewable suggestions and independent
   assert.match(ui,/can_edit_teacher_comment/);
   assert.match(ui,/can_edit_principal_comment/);
   assert.match(ui,/save_report_comments/);
-  assert.match(migration,/head_comment must be reviewed and saved before approving/);
+  assert.match(migration,/Principal comment must be reviewed and saved before approving/);
   assert.match(migration,/Class teacher comment must be reviewed and saved before submission/);
   assert.match(migration,/head_comment=head_comment/);
 });
