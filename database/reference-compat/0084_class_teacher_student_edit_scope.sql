@@ -1,6 +1,6 @@
 -- Class-scoped student editing. Supabase reference remains unchanged.
 -- Guardian and enrolment modifications are reserved for school system administrators.
-create or replace function public.can_manage_student(target_student_id uuid default null)
+create or replace function public.can_edit_student_record(target_student_id uuid)
 returns boolean language sql stable security definer set search_path to 'public','extensions' as $scope$
   select public.is_records_manager() or (
     target_student_id is not null
@@ -38,7 +38,7 @@ begin
   if public.current_app_role()='class_teacher' and guardian_data <> '{}'::jsonb then
     raise exception 'Guardian details are managed only by the School System Administrator' using errcode='42501';
   end if;
-  if not public.can_manage_student(sid) then
+  if not public.can_edit_student_record(sid) then
     raise exception 'Access denied' using errcode='42501';
   end if;
 
