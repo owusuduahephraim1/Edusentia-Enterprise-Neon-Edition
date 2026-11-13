@@ -16,7 +16,7 @@ test("weekly attendance supports term-based week numbers, days and per-student r
   assert.match(migration,/IS NOT NULL THEN 'closed'/);
   assert.match(migration,/THEN 'weekend'/);
   assert.match(migration,/THEN 'unrecorded'/);
-  assert.match(migration,/THEN 'recorded'/);
+  assert.match(migration,/ELSE 'recorded'/);
   assert.match(migration,/attendance_status='present'/);
   assert.match(migration,/attendance_status='late'/);
   assert.match(frontend,/async function loadWeeklyAttendanceHistory/);
