@@ -30,6 +30,7 @@
       catch(error){console.warn("student_photo_display_failed",error);}
     }));
   }
+  const canEditStudent=async id=>Boolean(id)&&Boolean(await certified("can_edit_student_record",{target_student_id:id}));
   async function renderStudents(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>Students</h3><p>Certified student directory, enrolment and bulk admission tools.</p></div></div>${loading("Loading certified student workspace")}`;
     let config;
@@ -80,6 +81,14 @@
         ${rows.map(row=>`<tr><td><div class="cell-main">${studentAvatarHtml(row)}<span class="cell-copy"><strong>${esc([row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.gender||"—")} • ${formatDate(row.date_of_birth)}</small></span></div></td><td>${esc(row.admission_no||"—")}</td><td>${esc(row.class_name||"—")}</td><td>${esc(row.academic_year_name||"—")}</td><td>${esc(row.roll_number||"—")}</td><td>${status(row.archived?"archived":row.status)}</td><td><div class="table-actions"><button class="button ghost small" data-student-view="${esc(row.id)}">View</button>${row.enrollment_id&&!row.archived&&["class_teacher","subject_teacher"].includes(currentRole())?`<button class="button outline small" data-student-report="${esc(row.enrollment_id)}" data-student-report-class="${esc(row.class_id||"")}">Report</button>`:""}${canManage&&!row.archived?`<button class="button secondary small" data-student-edit="${esc(row.id)}">Edit</button>`:""}${isSystemAdmin()&&!row.archived?`<button class="button danger small" data-student-archive="${esc(row.id)}">Remove</button>`:""}${isSystemAdmin()&&row.archived?`<button class="button success small" data-student-restore="${esc(row.id)}">Restore</button>`:""}</div></td></tr>`).join("")}
       </tbody></table></div>`;
       await hydrateStudentPhotos(box);
+      if(currentRole()==="class_teacher"){
+        await Promise.all([...box.querySelectorAll("[data-student-view]")].map(async b=>{
+          const row=b.closest("tr");if(!row)return;
+          try{if(await canEditStudent(b.dataset.studentView)){
+            const cell=row.querySelector(".table-actions");if(cell){const edit=document.createElement("button");edit.className="button secondary small";edit.textContent="Edit";edit.onclick=async()=>{const config=await academicConfig();openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},b.dataset.studentView)};cell.append(edit)}
+          }}catch(error){console.warn("student_edit_permission_check_failed",error)}
+        }));
+      }
       box.querySelectorAll("[data-student-view]").forEach(b=>b.onclick=()=>openStudentRecord(b.dataset.studentView));
       box.querySelectorAll("[data-student-report]").forEach(b=>b.onclick=()=>{shellState().pendingReportEnrollmentId=b.dataset.studentReport;shellState().reportClassFilter=b.dataset.studentReportClass||"";window.EdusentiaShell?.navigate?.("reports");});
       box.querySelectorAll("[data-student-edit]").forEach(b=>b.onclick=async()=>{const config=await academicConfig();openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},b.dataset.studentEdit);});
@@ -93,10 +102,11 @@
       const data=await certified("get_student_record_v5",{target_student_id:id}),student=data?.student||{},enrolments=Array.isArray(data?.enrollments)?data.enrollments:[],guardians=Array.isArray(data?.guardians)?data.guardians:[],reports=Array.isArray(data?.reports)?data.reports:[];
       let photoUrl="";if(student.id&&student.photo_url){try{photoUrl=await studentPhotoUrl(student.id,student.photo_url);}catch(_){}}
       const recordPhoto=photoUrl?`<img class="student-record-photo" src="${esc(photoUrl)}" alt="Student photograph">`:`<span class="avatar large">${studentInitials(student)}</span>`;
+      const editable=!student.archived && (await canEditStudent(id));
       openModal([student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" ")||"Student",student.admission_no||"",`
         <div class="grid two"><section class="panel pad"><div class="cell-main">${recordPhoto}<div class="cell-copy"><strong>${esc([student.first_name,student.middle_name,student.last_name].filter(Boolean).join(" "))}</strong><small>${esc(student.gender||"—")} • ${formatDate(student.date_of_birth)}</small><small>${status(student.archived?"archived":student.status)}</small></div></div><div class="hr"></div><div class="section-title"><h4>Guardians</h4></div>${guardians.length?guardians.map(g=>'<div class="metric"><strong>'+esc(g.full_name||"Guardian")+'</strong><span>'+esc(g.relationship||"Guardian")+' • '+esc(g.phone||"No phone")+' • '+esc(g.email||"No email")+'</span></div>').join(""):'<p class="help-text">No guardian record</p>'}</section>
         <section class="panel pad"><div class="section-title"><h4>Enrolment History</h4></div>${enrolments.length?enrolments.map(e=>'<div class="diff-row"><span>'+esc(e.academic_year_name||"")+' • '+esc(e.class_name||"")+'</span><b>'+(e.active?"Active":"Closed")+'</b></div>').join(""):'<p class="help-text">No enrolment record</p>'}<div class="hr"></div><div class="section-title"><h4>Report Cards</h4></div>${reports.length?reports.slice(0,10).map(r=>'<div class="diff-row"><span>'+esc(r.term_name||r.report_number||"Report")+'</span><b>'+esc(String(r.status||"draft").replaceAll("_"," "))+'</b></div>').join(""):'<p class="help-text">No report cards</p>'}</section></div>`,
-        '<button id="studentRecordClose" class="button ghost" type="button">Close</button>'+(student.archived?'':'<button id="studentRecordEdit" class="button primary" type="button">Edit student</button>'));
+        '<button id="studentRecordClose" class="button ghost" type="button">Close</button>'+(editable?'<button id="studentRecordEdit" class="button primary" type="button">Edit student</button>':''));
       byId("studentRecordClose").onclick=closeModal;
       byId("studentRecordEdit")?.addEventListener("click",async()=>{closeModal();const config=await academicConfig();openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},id);});
     }catch(error){alert(friendly(error));}
@@ -128,15 +138,17 @@
 
   async function openStudentEditor(ctx,id=""){
     let record={student:{status:"active",gender:"Male"},enrollments:[],guardians:[]};
-    if(id)record=await certified("get_student_record_v5",{target_student_id:id});
-    let guardians=[];try{guardians=await certified("list_guardian_portal_accounts",{search_text:""});}catch{}
+    if(id){if(!await canEditStudent(id))throw new Error("Only the assigned main class teacher or School System Administrator may edit this student.");record=await certified("get_student_record_v5",{target_student_id:id});}
+    if(!id&&!isSystemAdmin())throw new Error("Only the School System Administrator may register students.");
+    const teacherEdit=currentRole()==="class_teacher";
+    let guardians=[];if(isSystemAdmin()){try{guardians=await certified("list_guardian_portal_accounts",{search_text:""});}catch{}}
     const student=record.student||{},latest=record.enrollments?.[0]||{},guardian=record.guardians?.find(g=>g.is_primary)||record.guardians?.[0]||{};
     const admission=student.admission_no||"";
     let photoUrl="";if(student.id&&student.photo_url){try{photoUrl=await studentPhotoUrl(student.id,student.photo_url);}catch(_){}}
     const initials=studentInitials(student);
     openModal(id?"Edit Student":"Add Student",id?admission:"Create a certified student. The admission number is generated from the admission class when the record is saved.",`
       <form id="studentCertifiedForm" class="form-stack"><input type="hidden" name="id" value="${esc(student.id||"")}"><input type="hidden" name="updated_at" value="${esc(student.updated_at||"")}">
-      <div class="staff-photo-editor">${photoUrl?`<img id="studentPhotoPreview" src="${esc(photoUrl)}" alt="Student photograph">`:`<span id="studentPhotoPreview">${initials}</span>`}<label class="field"><span>Student photograph</span><input id="studentPhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG or WebP. The photograph is stored privately in the school’s dedicated R2 space.</small></label></div>
+      <div class="staff-photo-editor">${photoUrl?`<img id="studentPhotoPreview" src="${esc(photoUrl)}" alt="Student photograph">`:`<span id="studentPhotoPreview">${initials}</span>`}<label class="field"><span>Student photograph</span><input id="studentPhotoFile" type="file" accept="image/jpeg,image/png,image/webp" ${teacherEdit?"disabled":""}><small>${teacherEdit?"Photograph changes require the School System Administrator.":"JPEG, PNG or WebP. The photograph is stored privately in the school’s dedicated R2 space."}</small></label></div>
       <div class="form-grid three">
         <label class="field"><span>Admission number</span><input id="studentAdmissionDisplay" value="${esc(id?admission:"Generated automatically on save")}" readonly aria-readonly="true"><small id="studentAdmissionHint">${id?"Admission identifier. It remains unchanged while the student is active and on promotion.":"Select the admission class. Example: Basic 3 → NIS000001-STU-BS003."}</small></label>
         <label class="field"><span>First name</span><input name="first_name" value="${esc(student.first_name||"")}" required></label>
@@ -145,10 +157,10 @@
         <label class="field"><span>Gender</span><select name="gender">${["Male","Female","Other"].map(v=>'<option '+(v===student.gender?"selected":"")+'>'+v+'</option>').join("")}</select></label>
         <label class="field"><span>Date of birth</span><input type="date" name="date_of_birth" value="${esc(String(student.date_of_birth||"").slice(0,10))}"></label>
         <label class="field"><span>Status</span><select name="status">${["active","graduated","withdrawn","suspended"].map(v=>'<option value="'+v+'" '+(v===student.status?"selected":"")+'>'+v.replaceAll("_"," ")+'</option>').join("")}</select></label>
-        <label class="field"><span>Academic year</span><select name="academic_year_id">${optionRows(ctx.years,"id","name",latest.academic_year_id||"","No enrolment")}</select></label>
-        <label class="field"><span>Class</span><select name="class_id">${optionRows(ctx.classes,"id","name",latest.class_id||"","No enrolment")}</select></label>
-        <label class="field"><span>Roll number</span><input type="number" min="1" name="roll_number" value="${esc(latest.roll_number||"")}"></label>
-      </div><div class="section-title"><h4>Primary Guardian</h4></div><div class="form-grid three"><input type="hidden" name="guardian_id" value="${esc(guardian.id||"")}">
+        <label class="field"><span>Academic year</span><select name="academic_year_id" ${teacherEdit?"disabled":""}>${optionRows(ctx.years,"id","name",latest.academic_year_id||"","No enrolment")}</select></label>
+        <label class="field"><span>Class</span><select name="class_id" ${teacherEdit?"disabled":""}>${optionRows(ctx.classes,"id","name",latest.class_id||"","No enrolment")}</select></label>
+        <label class="field"><span>Roll number</span><input type="number" min="1" name="roll_number" ${teacherEdit?"disabled":""} value="${esc(latest.roll_number||"")}"></label>
+      </div>${teacherEdit?'<p class="help-text">Guardian details and class placement can only be changed by the School System Administrator.</p>':""}<fieldset ${teacherEdit?'disabled style="display:none"':""}><div class="section-title"><h4>Primary Guardian</h4></div><div class="form-grid three"><input type="hidden" name="guardian_id" value="${esc(guardian.id||"")}">
         <label class="field"><span>Full name</span><input name="guardian_name" value="${esc(guardian.full_name||student.guardian_name||"")}"></label>
         <label class="field"><span>Relationship</span><input name="relationship" value="${esc(guardian.relationship||"Guardian")}"></label>
         <label class="field"><span>Telephone</span><input name="guardian_phone" value="${esc(guardian.phone||student.guardian_phone||"")}"></label>
@@ -156,7 +168,7 @@
         <label class="field"><span>Portal account</span><select name="guardian_auth_user_id"><option value="">No linked account</option>${(Array.isArray(guardians)?guardians:[]).map(item=>'<option value="'+esc(item.id||"")+'" '+(String(item.id||"")===String(guardian.auth_user_id||"")?"selected":"")+'>'+esc(item.full_name||item.email||"Guardian")+(item.email?" • "+esc(item.email):"")+'</option>').join("")}</select></label>
         <label class="field"><span>Address</span><input name="guardian_address" value="${esc(guardian.address||"")}"></label>
         <label class="check-field"><input type="checkbox" name="guardian_notify" ${guardian.can_receive_notifications!==false?"checked":""}><span>Receive notifications</span></label>
-      </div><p id="studentCertifiedMessage" class="form-message hidden" role="alert"></p></form>`,
+      </div></fieldset><p id="studentCertifiedMessage" class="form-message hidden" role="alert"></p></form>`,
       '<button id="studentCertifiedCancel" class="button ghost" type="button">Cancel</button><button id="studentCertifiedSave" class="button primary" type="submit" form="studentCertifiedForm">Save student</button>');
     const studentForm=byId("studentCertifiedForm");
     const refreshAdmissionHint=()=>{
@@ -168,7 +180,7 @@
         ? "This class uses "+prefix+". The lowest available number is allocated atomically when the student is saved. Numbers released by removed students are reused; an active student's number remains unchanged on promotion."
         : "Select the admission class. Example: Basic 3 → NIS000001-STU-BS003.";
     };
-    studentForm.elements.class_id.addEventListener("change",refreshAdmissionHint);
+    studentForm.elements.class_id?.addEventListener("change",refreshAdmissionHint);
     refreshAdmissionHint();
     let localPhotoPreview="";
     byId("studentPhotoFile").onchange=e=>{
@@ -183,9 +195,10 @@
       e.preventDefault();const button=byId("studentCertifiedSave");button.disabled=true;
       try{
         const v=formValues(e.currentTarget);
+        if(id&&!await canEditStudent(id))throw new Error("You are not assigned as this student’s main class teacher.");
         if(Boolean(v.academic_year_id)!==Boolean(v.class_id))throw new Error("Academic year and class must be selected together.");
         if(!id&&(!v.academic_year_id||!v.class_id))throw new Error("Academic year and class are required for a new student so the admission number can be generated.");
-        const payload={student:{id:v.id||"",updated_at:v.updated_at||"",admission_no:student.admission_no||"",first_name:String(v.first_name||"").trim(),middle_name:String(v.middle_name||"").trim(),last_name:String(v.last_name||"").trim(),gender:v.gender,date_of_birth:v.date_of_birth||"",status:v.status||"active",photo_url:student.photo_url||""},enrollment:v.academic_year_id&&v.class_id?{academic_year_id:v.academic_year_id,class_id:v.class_id,roll_number:v.roll_number||"",active:true}:{},guardian:{id:v.guardian_id||"",full_name:String(v.guardian_name||"").trim(),relationship:String(v.relationship||"Guardian").trim(),phone:String(v.guardian_phone||"").trim(),email:String(v.guardian_email||"").trim(),address:String(v.guardian_address||"").trim(),auth_user_id:v.guardian_auth_user_id||"",is_primary:true,can_view_reports:true,can_receive_notifications:e.currentTarget.elements.guardian_notify.checked},reason:id?"Student record updated":"Student registered"};
+        const payload={student:{id:v.id||"",updated_at:v.updated_at||"",admission_no:student.admission_no||"",first_name:String(v.first_name||"").trim(),middle_name:String(v.middle_name||"").trim(),last_name:String(v.last_name||"").trim(),gender:v.gender,date_of_birth:v.date_of_birth||"",status:v.status||"active",photo_url:student.photo_url||""},enrollment:teacherEdit?{}:v.academic_year_id&&v.class_id?{academic_year_id:v.academic_year_id,class_id:v.class_id,roll_number:v.roll_number||"",active:true}:{},guardian:teacherEdit?{}:{id:v.guardian_id||"",full_name:String(v.guardian_name||"").trim(),relationship:String(v.relationship||"Guardian").trim(),phone:String(v.guardian_phone||"").trim(),email:String(v.guardian_email||"").trim(),address:String(v.guardian_address||"").trim(),auth_user_id:v.guardian_auth_user_id||"",is_primary:true,can_view_reports:true,can_receive_notifications:e.currentTarget.elements.guardian_notify?.checked!==false},reason:id?"Student record updated":"Student registered"};
         let saved=await certified("save_student",{payload}),file=byId("studentPhotoFile")?.files?.[0];
         if(file){
           const savedStudent=saved?.student||saved;

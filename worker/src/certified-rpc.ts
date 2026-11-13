@@ -26,6 +26,7 @@ const EXPLICIT_CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "search_students_v5",
   "mark_notifications_read",
   "save_student",
+  "can_edit_student_record",
   "bulk_import_students",
   "bulk_import_scores",
   "save_report_card",
@@ -260,6 +261,10 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
     case "mark_notifications_read":{
       const ids=uuidArrayArg(args,"notification_ids");
       return singleResult(sql,ctx,txn=>txn`select public.mark_notifications_read(${ids}::uuid[]) result`);
+    }
+    case "can_edit_student_record":{
+      const studentId=uuidArg(args,"target_student_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.can_edit_student_record(${studentId}::uuid) result`);
     }
     case "save_student":{
       const payload=jsonArg(args,"payload");
