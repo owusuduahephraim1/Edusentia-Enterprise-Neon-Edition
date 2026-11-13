@@ -117,6 +117,14 @@
     root.innerHTML=loading("Loading attendance register");
     try{
       const data=await certified("get_class_attendance_register",{target_term_id:a.termId,target_class_id:a.classId,target_date:a.date}),rows=arr(data?.students),opened=Number(data?.days_school_opened||0),marked=Boolean(data?.register?.id);
+      if(data?.closed_date){
+        root.innerHTML='<div class="panel-header"><div><h3>'+esc(data?.class?.name||"Class Attendance")+'</h3>'+
+          '<p>'+esc(formatDate(a.date))+' · No teaching session</p></div></div>'+
+          '<div class="panel-body"><div class="attendance-closure-notice"><strong>School closed for this date</strong>'+
+          '<p>'+esc(data?.closure?.reason||"Weekend or non-teaching day")+'</p>'+
+          '<span>No attendance is required or permitted. This date is excluded from attendance totals.</span></div></div>';
+        return;
+      }
       root.innerHTML='<div class="panel-header attendance-header"><div><h3>'+esc(data?.class?.name||"Assigned Class")+'</h3><p>'+esc(formatDate(a.date))+' • '+(marked?"Attendance already recorded":"New attendance register")+'</p></div><div class="button-row"><button class="button outline small" id="attendanceAllPresent" type="button" '+(rows.length&&writable()?"":"disabled")+'>Mark all present</button><button class="button primary attendance-desktop-save" id="attendanceSaveTop" type="button" '+(rows.length&&writable()?"":"disabled")+'>Save attendance</button></div></div>'+
         '<div class="panel-body attendance-body"><div class="metric-row attendance-summary"><div class="metric"><span>Students</span><strong>'+rows.length+'</strong></div><div class="metric"><span>School days recorded</span><strong>'+opened+'</strong></div><div class="metric"><span>Selected date</span><strong>'+(marked?"Recorded":"Not recorded")+'</strong></div></div>'+
         (rows.length?'<div class="attendance-live-summary" aria-live="polite"><span class="attendance-summary-chip" data-attendance-state="present">Present <b id="attendanceCount-present">0</b></span><span class="attendance-summary-chip" data-attendance-state="absent">Absent <b id="attendanceCount-absent">0</b></span><span class="attendance-summary-chip" data-attendance-state="late">Late <b id="attendanceCount-late">0</b></span><span class="attendance-summary-chip" data-attendance-state="excused">Excused <b id="attendanceCount-excused">0</b></span><span class="attendance-summary-chip" data-attendance-state="unmarked">Unmarked <b id="attendanceCount-unmarked">0</b></span></div>'+
@@ -200,7 +208,7 @@
     const buttons=[byId("attendanceSave"),byId("attendanceSaveTop")].filter(Boolean);buttons.forEach(b=>{b.disabled=true;b.dataset.oldText=b.textContent;b.textContent="Saving";});
     try{
       const data=await certified("save_class_attendance",{target_term_id:a.termId,target_class_id:a.classId,target_date:a.date,entries,notes_text:String(byId("attendanceNotes")?.value||"").trim()});
-      notify("Attendance saved",Number(data?.days_school_opened||0)+" school day"+(Number(data?.days_school_opened||0)===1?"":"s")+" recorded for this term.");await loadAttendanceRegister();
+      notify("Attendance saved",Number(data?.days_school_opened||0)+" school day"+(Number(data?.days_school_opened||0)===1?"":"s")+" recorded for this term.");await loadAttendanceRegister();await loadWeeklyAttendanceHistory();
     }catch(error){notify("Attendance not saved",friendly(error),"error");}
     finally{buttons.forEach(b=>{b.disabled=false;b.textContent=b.dataset.oldText||"Save attendance";});}
   }
@@ -213,14 +221,18 @@
       let classId=local.attendance.classId;if(!classes.some(x=>String(x.id)===String(classId)))classId=classes[0]?.id||"";
       const today=localDateValue(),maxDate=term?.end_date&&term.end_date<today?term.end_date:today;let date=local.attendance.date||termDate(term);
       if(term?.start_date&&date<term.start_date)date=term.start_date;if(date>maxDate)date=maxDate;
-      local.attendance={termId:term?.id||termId,classId,date};
+      const weekStart=local.attendance.weekStart||weekMonday(date);
+      local.attendance={termId:term?.id||termId,classId,date,weekStart};
       const options=(rows,selected)=>rows.map(x=>'<option value="'+esc(x.id)+'" '+(String(x.id)===String(selected)?"selected":"")+'>'+esc(x.name||x.class_name||"")+'</option>').join("");
       byId("content").innerHTML=sectionHead("Class Attendance","Mark daily attendance for your assigned class. Term totals update report cards automatically.")+
-        '<section class="panel pad"><div class="form-grid three attendance-controls"><label class="field"><span>Academic term</span><select id="attendanceTerm">'+options(terms,local.attendance.termId)+'</select></label><label class="field"><span>Assigned class</span><select id="attendanceClass">'+(classes.length?options(classes,classId):'<option value="">No assigned class</option>')+'</select></label><label class="field"><span>School date</span><input id="attendanceDate" type="date" value="'+esc(date)+'" '+(term?.start_date?'min="'+esc(term.start_date)+'"':"")+' max="'+esc(maxDate)+'"></label></div></section><section class="panel" id="attendanceResults">'+loading("Loading attendance register")+'</section>';
-      byId("attendanceTerm").addEventListener("change",()=>{local.attendance.termId=byId("attendanceTerm").value;local.attendance.classId="";local.attendance.date="";renderAttendance();});
-      byId("attendanceClass").addEventListener("change",()=>{local.attendance.classId=byId("attendanceClass").value;loadAttendanceRegister();});
-      byId("attendanceDate").addEventListener("change",()=>{local.attendance.date=byId("attendanceDate").value;loadAttendanceRegister();});
-      if(classId)await loadAttendanceRegister();else byId("attendanceResults").innerHTML='<div class="empty"><strong>No class-teacher assignment</strong><span>Ask the System Administrator to assign you as a class teacher.</span></div>';
+        '<section class="panel pad"><div class="form-grid three attendance-controls"><label class="field"><span>Academic term</span><select id="attendanceTerm">'+options(terms,local.attendance.termId)+'</select></label><label class="field"><span>Assigned class</span><select id="attendanceClass">'+(classes.length?options(classes,classId):'<option value="">No assigned class</option>')+'</select></label><label class="field"><span>School date</span><input id="attendanceDate" type="date" value="'+esc(date)+'" '+(term?.start_date?'min="'+esc(term.start_date)+'"':"")+' max="'+esc(maxDate)+'"></label></div></section>'+
+        '<section class="panel attendance-weekly-panel" id="attendanceWeeklyHistory">'+loading("Loading weekly attendance records")+'</section>'+
+        '<section class="panel" id="attendanceResults">'+loading("Loading attendance register")+'</section>';
+      byId("attendanceTerm").addEventListener("change",()=>{local.attendance.termId=byId("attendanceTerm").value;local.attendance.classId="";local.attendance.date="";local.attendance.weekStart="";renderAttendance();});
+      byId("attendanceClass").addEventListener("change",()=>{local.attendance.classId=byId("attendanceClass").value;loadAttendanceRegister();loadWeeklyAttendanceHistory();});
+      byId("attendanceDate").addEventListener("change",()=>{local.attendance.date=byId("attendanceDate").value;local.attendance.weekStart=weekMonday(local.attendance.date);loadAttendanceRegister();loadWeeklyAttendanceHistory();});
+      if(classId){await Promise.all([loadAttendanceRegister(),loadWeeklyAttendanceHistory()]);}
+      else {byId("attendanceWeeklyHistory").innerHTML="";byId("attendanceResults").innerHTML='<div class="empty"><strong>No class-teacher assignment</strong><span>Ask the System Administrator to assign you as a class teacher.</span></div>';}
     }catch(error){byId("content").innerHTML=sectionHead("Class Attendance","Mark daily attendance for your assigned class. Term totals update report cards automatically.")+pageError(error);}
   }
 
