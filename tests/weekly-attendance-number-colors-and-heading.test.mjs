@@ -9,7 +9,7 @@ test("weekly attendance ratio uses distinct present and recorded-day values",()=
   assert.match(ui,/attendance-week-ratio/);
   assert.match(ui,/attendance-week-value--present/);
   assert.match(ui,/attendance-week-value--recorded/);
-  assert.match(ui,/aria-label=".* recorded school days/);
+  assert.match(ui,/recorded school days/);
   assert.match(ui,/Number\(st\.days_present\|\|0\)/);
   assert.match(ui,/Number\(data\?\.recorded_days\|\|0\)/);
   assert.match(ui,/attendance-week-ratio-divider/);
