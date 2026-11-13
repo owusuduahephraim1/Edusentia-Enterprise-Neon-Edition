@@ -5,8 +5,8 @@
 
   const P=window.EdusentiaParity,S=window.EdusentiaShell;
   if(!P||!S)return;
-  const {registerView,api,certified,certifiedAllRows,role,esc,formatDate,formatDateTime,status,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig}=P;
-  const local={attendance:{},insights:{},history:{}};
+  const {registerView,api,certified,certifiedAllRows,role,esc,formatDate,formatDateTime,status,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig,openModal,closeModal}=P;
+  const local={attendance:{},insights:{},history:{},calendar:{}};
   const arr=value=>Array.isArray(value)?value:[];
   const obj=value=>value&&typeof value==="object"&&!Array.isArray(value)?value:{};
   const state=()=>S.state||{};
@@ -117,6 +117,14 @@
     root.innerHTML=loading("Loading attendance register");
     try{
       const data=await certified("get_class_attendance_register",{target_term_id:a.termId,target_class_id:a.classId,target_date:a.date}),rows=arr(data?.students),opened=Number(data?.days_school_opened||0),marked=Boolean(data?.register?.id);
+      if(data?.closed_date){
+        root.innerHTML='<div class="panel-header"><div><h3>'+esc(data?.class?.name||"Class Attendance")+'</h3>'+
+          '<p>'+esc(formatDate(a.date))+' · No teaching session</p></div></div>'+
+          '<div class="panel-body"><div class="attendance-closure-notice"><strong>School closed for this date</strong>'+
+          '<p>'+esc(data?.closure?.reason||"Weekend or non-teaching day")+'</p>'+
+          '<span>No attendance is required or permitted. This date is excluded from attendance totals.</span></div></div>';
+        return;
+      }
       root.innerHTML='<div class="panel-header attendance-header"><div><h3>'+esc(data?.class?.name||"Assigned Class")+'</h3><p>'+esc(formatDate(a.date))+' • '+(marked?"Attendance already recorded":"New attendance register")+'</p></div><div class="button-row"><button class="button outline small" id="attendanceAllPresent" type="button" '+(rows.length&&writable()?"":"disabled")+'>Mark all present</button><button class="button primary attendance-desktop-save" id="attendanceSaveTop" type="button" '+(rows.length&&writable()?"":"disabled")+'>Save attendance</button></div></div>'+
         '<div class="panel-body attendance-body"><div class="metric-row attendance-summary"><div class="metric"><span>Students</span><strong>'+rows.length+'</strong></div><div class="metric"><span>School days recorded</span><strong>'+opened+'</strong></div><div class="metric"><span>Selected date</span><strong>'+(marked?"Recorded":"Not recorded")+'</strong></div></div>'+
         (rows.length?'<div class="attendance-live-summary" aria-live="polite"><span class="attendance-summary-chip" data-attendance-state="present">Present <b id="attendanceCount-present">0</b></span><span class="attendance-summary-chip" data-attendance-state="absent">Absent <b id="attendanceCount-absent">0</b></span><span class="attendance-summary-chip" data-attendance-state="late">Late <b id="attendanceCount-late">0</b></span><span class="attendance-summary-chip" data-attendance-state="excused">Excused <b id="attendanceCount-excused">0</b></span><span class="attendance-summary-chip" data-attendance-state="unmarked">Unmarked <b id="attendanceCount-unmarked">0</b></span></div>'+
@@ -133,13 +141,74 @@
       updateAttendanceSummary();
     }catch(error){root.innerHTML=pageError(error);}
   }
+  const weekMonday=value=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||"")))return "";
+    const date=new Date(value+"T12:00:00Z");
+    if(Number.isNaN(date.getTime()))return "";
+    const weekday=date.getUTCDay();
+    date.setUTCDate(date.getUTCDate()-(weekday===0?6:weekday-1));
+    return date.toISOString().slice(0,10);
+  };
+  async function loadWeeklyAttendanceHistory(){
+    const root=byId("attendanceWeeklyHistory"),a=local.attendance;
+    if(!root||!a.termId||!a.classId)return;
+    const loadId=(a.historyLoadId||0)+1;a.historyLoadId=loadId;
+    root.innerHTML=loading("Loading weekly attendance records");
+    try{
+      const data=await certified("get_attendance_weekly_history",{
+        target_term_id:a.termId,target_class_id:a.classId,target_week_start:a.weekStart||null
+      });
+      if(a.historyLoadId!==loadId||!root.isConnected)return;
+      a.weekStart=String(data?.week_start||a.weekStart||"");
+      const weeks=arr(data?.weeks),days=arr(data?.days),students=arr(data?.students);
+      const weekOptions=weeks.map(w=>'<option value="'+esc(w.week_start)+'" '+(String(w.week_start)===String(a.weekStart)?"selected":"")+'>'+
+        'Week '+Number(w.week_number||0)+' · '+esc(formatDate(w.start_date))+' – '+esc(formatDate(w.end_date))+'</option>').join("");
+      const daysMarkup=days.map(day=>{
+        const type=String(day.day_status||"unrecorded");
+        const text={recorded:"Recorded",unrecorded:"Not recorded",closed:"School closed",weekend:"Weekend",upcoming:"Upcoming"}[type]||"Not recorded";
+        const note=type==="closed"?(day.closure_reason||"School holiday"):
+          type==="recorded"?"Present "+Number(day.present||0)+" · Absent "+Number(day.absent||0)+" · Late "+Number(day.late||0)+" · Excused "+Number(day.excused||0):
+          type==="unrecorded"?"No attendance register saved":"";
+        const selectable=["recorded","unrecorded"].includes(type);
+        return '<button class="attendance-week-day" type="button" data-week-day="'+esc(day.date||"")+
+          '" data-week-state="'+esc(type)+'" '+(selectable?"":"disabled")+
+          ' aria-label="'+esc(formatDate(day.date)+": "+text+(day.closure_reason?", "+day.closure_reason:""))+'">'+
+          '<strong>'+esc(formatDate(day.date))+'</strong><span>'+esc(text)+'</span>'+
+          (note?'<small>'+esc(note)+'</small>':"")+'</button>';
+      }).join("");
+      const studentsMarkup=students.length?'<div class="table-wrap attendance-week-students"><table><thead><tr><th>Student</th><th>Days present</th><th>Absent</th><th>Late</th><th>Excused</th></tr></thead><tbody>'+
+        students.map(st=>'<tr><td><strong>'+esc(st.student_name||"Student")+'</strong><small class="muted">'+esc(st.admission_no||"")+'</small></td>'+
+          '<td>'+Number(st.days_present||0)+' / '+Number(data?.recorded_days||0)+'</td>'+
+          '<td>'+Number(st.absent||0)+'</td><td>'+Number(st.late||0)+'</td><td>'+Number(st.excused||0)+'</td></tr>').join("")+'</tbody></table></div>':
+        '<p class="muted">No active students are enrolled in this class for this term.</p>';
+      root.innerHTML='<div class="panel-header attendance-week-header"><div><h3>Weekly Attendance History</h3><p>Week '+Number(data?.week_number||0)+' · '+esc(formatDate(data?.start_date))+' to '+esc(formatDate(data?.end_date))+'</p></div>'+
+        '<label class="field attendance-week-picker"><span>Attendance week</span><select id="attendanceWeekSelect" aria-label="Select attendance week">'+weekOptions+'</select></label></div>'+
+        '<div class="panel-body attendance-week-body"><div class="attendance-week-totals">'+
+        '<div><span>Scheduled teaching days</span><strong>'+Number(data?.scheduled_days||0)+'</strong></div>'+
+        '<div><span>Days recorded</span><strong>'+Number(data?.recorded_days||0)+'</strong></div>'+
+        '<div><span>School closure days</span><strong>'+Number(data?.closed_days||0)+'</strong></div>'+
+        '<div><span>Unrecorded past days</span><strong>'+Number(data?.unrecorded_days||0)+'</strong></div></div>'+
+        '<div class="attendance-week-days">'+daysMarkup+'</div>'+
+        '<div class="section-title"><h4>Student attendance for selected week</h4></div>'+studentsMarkup+
+        '<p class="muted attendance-week-footnote">Scheduled days exclude weekends and school holidays. Unrecorded days are not absences. Attendance totals use saved daily registers only.</p></div>';
+      byId("attendanceWeekSelect")?.addEventListener("change",()=>{a.weekStart=byId("attendanceWeekSelect").value;loadWeeklyAttendanceHistory();});
+      root.querySelectorAll("[data-week-day]").forEach(btn=>btn.addEventListener("click",()=>{
+        a.date=btn.dataset.weekDay;
+        if(byId("attendanceDate"))byId("attendanceDate").value=a.date;
+        loadAttendanceRegister();
+      }));
+    }catch(error){
+      if(a.historyLoadId===loadId)root.innerHTML=pageError(error);
+    }
+  }
+
   async function saveAttendance(){
     const root=byId("attendanceResults"),a=local.attendance;if(!root)return;
     const entries=[...root.querySelectorAll("[data-attendance-enrollment]")].map(select=>({enrollment_id:select.dataset.attendanceEnrollment,attendance_status:select.value}));if(!entries.length)return;
     const buttons=[byId("attendanceSave"),byId("attendanceSaveTop")].filter(Boolean);buttons.forEach(b=>{b.disabled=true;b.dataset.oldText=b.textContent;b.textContent="Saving";});
     try{
       const data=await certified("save_class_attendance",{target_term_id:a.termId,target_class_id:a.classId,target_date:a.date,entries,notes_text:String(byId("attendanceNotes")?.value||"").trim()});
-      notify("Attendance saved",Number(data?.days_school_opened||0)+" school day"+(Number(data?.days_school_opened||0)===1?"":"s")+" recorded for this term.");await loadAttendanceRegister();
+      notify("Attendance saved",Number(data?.days_school_opened||0)+" school day"+(Number(data?.days_school_opened||0)===1?"":"s")+" recorded for this term.");await loadAttendanceRegister();await loadWeeklyAttendanceHistory();
     }catch(error){notify("Attendance not saved",friendly(error),"error");}
     finally{buttons.forEach(b=>{b.disabled=false;b.textContent=b.dataset.oldText||"Save attendance";});}
   }
@@ -152,14 +221,18 @@
       let classId=local.attendance.classId;if(!classes.some(x=>String(x.id)===String(classId)))classId=classes[0]?.id||"";
       const today=localDateValue(),maxDate=term?.end_date&&term.end_date<today?term.end_date:today;let date=local.attendance.date||termDate(term);
       if(term?.start_date&&date<term.start_date)date=term.start_date;if(date>maxDate)date=maxDate;
-      local.attendance={termId:term?.id||termId,classId,date};
+      const weekStart=local.attendance.weekStart||weekMonday(date);
+      local.attendance={termId:term?.id||termId,classId,date,weekStart};
       const options=(rows,selected)=>rows.map(x=>'<option value="'+esc(x.id)+'" '+(String(x.id)===String(selected)?"selected":"")+'>'+esc(x.name||x.class_name||"")+'</option>').join("");
       byId("content").innerHTML=sectionHead("Class Attendance","Mark daily attendance for your assigned class. Term totals update report cards automatically.")+
-        '<section class="panel pad"><div class="form-grid three attendance-controls"><label class="field"><span>Academic term</span><select id="attendanceTerm">'+options(terms,local.attendance.termId)+'</select></label><label class="field"><span>Assigned class</span><select id="attendanceClass">'+(classes.length?options(classes,classId):'<option value="">No assigned class</option>')+'</select></label><label class="field"><span>School date</span><input id="attendanceDate" type="date" value="'+esc(date)+'" '+(term?.start_date?'min="'+esc(term.start_date)+'"':"")+' max="'+esc(maxDate)+'"></label></div></section><section class="panel" id="attendanceResults">'+loading("Loading attendance register")+'</section>';
-      byId("attendanceTerm").addEventListener("change",()=>{local.attendance.termId=byId("attendanceTerm").value;local.attendance.classId="";local.attendance.date="";renderAttendance();});
-      byId("attendanceClass").addEventListener("change",()=>{local.attendance.classId=byId("attendanceClass").value;loadAttendanceRegister();});
-      byId("attendanceDate").addEventListener("change",()=>{local.attendance.date=byId("attendanceDate").value;loadAttendanceRegister();});
-      if(classId)await loadAttendanceRegister();else byId("attendanceResults").innerHTML='<div class="empty"><strong>No class-teacher assignment</strong><span>Ask the System Administrator to assign you as a class teacher.</span></div>';
+        '<section class="panel pad"><div class="form-grid three attendance-controls"><label class="field"><span>Academic term</span><select id="attendanceTerm">'+options(terms,local.attendance.termId)+'</select></label><label class="field"><span>Assigned class</span><select id="attendanceClass">'+(classes.length?options(classes,classId):'<option value="">No assigned class</option>')+'</select></label><label class="field"><span>School date</span><input id="attendanceDate" type="date" value="'+esc(date)+'" '+(term?.start_date?'min="'+esc(term.start_date)+'"':"")+' max="'+esc(maxDate)+'"></label></div></section>'+
+        '<section class="panel attendance-weekly-panel" id="attendanceWeeklyHistory">'+loading("Loading weekly attendance records")+'</section>'+
+        '<section class="panel" id="attendanceResults">'+loading("Loading attendance register")+'</section>';
+      byId("attendanceTerm").addEventListener("change",()=>{local.attendance.termId=byId("attendanceTerm").value;local.attendance.classId="";local.attendance.date="";local.attendance.weekStart="";renderAttendance();});
+      byId("attendanceClass").addEventListener("change",()=>{local.attendance.classId=byId("attendanceClass").value;loadAttendanceRegister();loadWeeklyAttendanceHistory();});
+      byId("attendanceDate").addEventListener("change",()=>{local.attendance.date=byId("attendanceDate").value;local.attendance.weekStart=weekMonday(local.attendance.date);loadAttendanceRegister();loadWeeklyAttendanceHistory();});
+      if(classId){await Promise.all([loadAttendanceRegister(),loadWeeklyAttendanceHistory()]);}
+      else {byId("attendanceWeeklyHistory").innerHTML="";byId("attendanceResults").innerHTML='<div class="empty"><strong>No class-teacher assignment</strong><span>Ask the System Administrator to assign you as a class teacher.</span></div>';}
     }catch(error){byId("content").innerHTML=sectionHead("Class Attendance","Mark daily attendance for your assigned class. Term totals update report cards automatically.")+pageError(error);}
   }
 
@@ -312,6 +385,90 @@
     }catch(error){byId("content").innerHTML=sectionHead("Academic Insights","Privacy-aware class, subject, attendance, and report-completion trends")+pageError(error);}
   }
 
+
+  async function renderSchoolCalendar(){
+    byId("content").innerHTML=sectionHead("School Calendar","Manage public holidays, mid-term breaks and non-teaching days")+loading("Loading school calendar");
+    try{
+      if(role()!=="system_admin")throw new Error("Only the School System Administrator may manage school closures.");
+      const cfg=await academicConfig(),terms=arr(cfg?.terms).filter(t=>t.deleted_at==null),
+        chosenId=local.calendar.termId||terms.find(t=>t.is_active)?.id||terms[0]?.id||"",
+        term=terms.find(t=>String(t.id)===String(chosenId))||terms[0];
+      if(!term){byId("content").innerHTML=sectionHead("School Calendar","Manage public holidays, mid-term breaks and non-teaching days")+empty("Configure an academic term before adding holidays.");return;}
+      local.calendar.termId=term.id;
+      const records=arr(await certified("list_school_closures",{target_term_id:term.id}));
+      const types=[["public_holiday","Public holiday"],["midterm_break","Mid-term break"],["school_break","School holiday"],["emergency_closure","Emergency closure"],["other","Other non-teaching day"]];
+      const current=records.find(c=>String(c.id)===String(local.calendar.editId||""));
+      const min=String(term.start_date||""),max=String(term.end_date||"");
+      const fmtDate=value=>value?esc(formatDate(value)):"—";
+      const rows=records.map(c=>{
+        const label=types.find(t=>t[0]===c.closure_type)?.[1]||"Closure";
+        return '<tr><td><strong>'+esc(label)+'</strong><small class="muted">'+esc(c.reason||"")+'</small></td>'+
+          '<td>'+fmtDate(c.start_date)+'</td><td>'+fmtDate(c.end_date)+'</td>'+
+          '<td><div class="button-row"><button type="button" class="button ghost small" data-calendar-edit="'+esc(c.id)+'">Edit</button>'+
+          '<button type="button" class="button outline small" data-calendar-remove="'+esc(c.id)+'">Remove</button></div></td></tr>';
+      }).join("");
+      byId("content").innerHTML=sectionHead("School Calendar","Public holidays, mid-term breaks and approved non-teaching days")+
+        '<section class="panel pad"><div class="section-title"><h4>Select academic term</h4></div>'+
+        '<label class="field"><span>Academic term</span><select id="calendarTermSelect">'+terms.map(t=>'<option value="'+esc(t.id)+'" '+(String(t.id)===String(term.id)?"selected":"")+'>'+esc(t.name||"Term")+' · '+esc(t.start_date||"")+'</option>').join("")+'</select></label>'+
+        '<p class="muted">Teaching weeks start from the opening date '+fmtDate(term.start_date)+'. Weekends and saved closure days are excluded from expected attendance.</p></section>'+
+        '<section class="panel pad"><div class="section-title"><h4>'+(current?"Edit school closure":"Record a school closure")+'</h4></div>'+
+        '<form id="schoolClosureForm" class="form-stack"><div class="form-grid">'+
+        '<label class="field"><span>Closure type</span><select name="closure_type" required>'+types.map(([v,n])=>'<option value="'+v+'" '+(current?.closure_type===v?"selected":"")+'>'+n+'</option>').join("")+'</select></label>'+
+        '<label class="field"><span>Start date</span><input type="date" name="start_date" required min="'+esc(min)+'" max="'+esc(max)+'" value="'+esc(current?.start_date||"")+'"></label>'+
+        '<label class="field"><span>End date</span><input type="date" name="end_date" required min="'+esc(min)+'" max="'+esc(max)+'" value="'+esc(current?.end_date||"")+'"></label>'+
+        '<label class="field full"><span>Reason or holiday name</span><input name="reason" required minlength="3" maxlength="240" placeholder="e.g., Mid-term break or officially announced public holiday" value="'+esc(current?.reason||"")+'"></label></div>'+
+        '<div class="page-actions"><button class="button primary" id="calendarSave" type="submit">'+(current?"Update closure":"Save closure")+'</button>'+
+        (current?'<button class="button ghost" id="calendarReset" type="button">Cancel edit</button>':"")+'</div>'+
+        '<p class="form-message hidden" id="schoolCalendarMessage" role="alert"></p></form></section>'+
+        '<section class="panel"><div class="panel-header"><div><h3>Recorded closures</h3><p>'+records.length+' recorded period'+(records.length===1?"":"s")+' for this term</p></div></div>'+
+        (records.length?'<div class="table-wrap"><table><thead><tr><th>Type and reason</th><th>From</th><th>Until</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>':
+          '<div class="panel-body"><p class="muted">No school closures have been recorded for this term. Regular weekdays remain scheduled school days.</p></div>')+
+        '</section>';
+      byId("calendarTermSelect").addEventListener("change",()=>{local.calendar.termId=byId("calendarTermSelect").value;local.calendar.editId="";renderSchoolCalendar();});
+      byId("schoolClosureForm").addEventListener("submit",async event=>{
+        event.preventDefault();const form=event.currentTarget,button=byId("calendarSave");if(!form.reportValidity())return;
+        const values=Object.fromEntries(new FormData(form).entries());
+        if(values.end_date<values.start_date){notify("Invalid dates","Closure end date must be on or after its start date.","error");return;}
+        button.disabled=true;
+        try{
+          await certified("save_school_closure",{
+            target_term_id:term.id,target_start_date:values.start_date,target_end_date:values.end_date,
+            target_type:values.closure_type,reason_text:String(values.reason||"").trim(),
+            target_closure_id:current?.id||null
+          });
+          notify("School calendar updated","Non-teaching dates will not count towards school attendance.");
+          local.calendar.editId="";await renderSchoolCalendar();
+        }catch(error){notify("Closure not saved",friendly(error),"error");}
+        finally{if(button.isConnected)button.disabled=false;}
+      });
+      byId("calendarReset")?.addEventListener("click",()=>{local.calendar.editId="";renderSchoolCalendar();});
+      byId("content").querySelectorAll("[data-calendar-edit]").forEach(btn=>btn.addEventListener("click",()=>{
+        local.calendar.editId=btn.dataset.calendarEdit;renderSchoolCalendar();
+      }));
+      byId("content").querySelectorAll("[data-calendar-remove]").forEach(btn=>btn.addEventListener("click",()=>{
+        const closure=records.find(c=>String(c.id)===String(btn.dataset.calendarRemove));if(!closure)return;
+        openModal("Remove school closure","Explain why this calendar entry should be removed.",
+          '<form id="removeClosureForm" class="form-stack"><p>'+esc(closure.reason)+' · '+fmtDate(closure.start_date)+' – '+fmtDate(closure.end_date)+'</p>'+
+          '<label class="field"><span>Reason for removal</span><textarea id="calendarRemoveReason" required minlength="3" maxlength="240" placeholder="Why is this closure being removed?"></textarea></label>'+
+          '<p class="form-message hidden" id="calendarRemoveMessage" role="alert"></p></form>',
+          '<button class="button ghost" id="calendarRemoveCancel" type="button">Cancel</button>'+
+          '<button class="button danger" id="calendarRemoveConfirm" type="submit" form="removeClosureForm">Remove closure</button>');
+        byId("calendarRemoveCancel").onclick=closeModal;
+        byId("removeClosureForm").onsubmit=async e=>{
+          e.preventDefault();const reason=String(byId("calendarRemoveReason")?.value||"").trim();
+          if(reason.length<3){notify("A removal reason is required","Enter at least three characters.","error");return;}
+          const b=byId("calendarRemoveConfirm");b.disabled=true;
+          try{
+            await certified("archive_school_closure",{target_closure_id:closure.id,reason_text:reason});
+            closeModal();notify("Closure removed","The calendar entry was archived.");await renderSchoolCalendar();
+          }catch(error){notify("Cannot remove closure",friendly(error),"error");}
+          finally{if(b.isConnected)b.disabled=false;}
+        };
+      }));
+    }catch(error){byId("content").innerHTML=sectionHead("School Calendar","Manage non-teaching days")+pageError(error);}
+  }
+
+  registerView({id:"school_calendar",label:"School Calendar",icon:"▦",subtitle:"Public holidays, mid-term breaks and non-teaching days",roles:["system_admin"],feature:"attendance",render:renderSchoolCalendar});
   registerView({id:"teacher_profile",label:"My Profile",icon:"♙",subtitle:"Teacher profile, photograph, qualifications, and assignments",roles:["class_teacher","subject_teacher"],render:renderTeacherProfile});
   registerView({id:"my_class",label:"My Class",icon:"▣",subtitle:"Assigned class, learners, and report progress",roles:["class_teacher"],render:renderMyClass});
   registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class attendance and automatic term totals",roles:["class_teacher"],feature:"attendance",render:renderAttendance});

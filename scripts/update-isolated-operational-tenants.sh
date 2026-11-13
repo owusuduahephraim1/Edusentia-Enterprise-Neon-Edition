@@ -139,6 +139,8 @@ SQL
   ")"
   test "$migration_count" = "59"
   test "$(psql "$TENANT_DATABASE_URL" -Atc "select count(*) from app.schema_migrations where version='0084_class_teacher_student_edit_scope'")" = "1"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select count(*) from app.schema_migrations where version='0085_report_attendance_and_comment_approval'")" = "1"
+  test "$(psql "$TENANT_DATABASE_URL" -Atc "select count(*) from app.schema_migrations where version='0086_weekly_attendance_school_closures'")" = "1"
 
   grading_scale_contract_ok="$(psql "$TENANT_DATABASE_URL" -Atc "
     select exists(

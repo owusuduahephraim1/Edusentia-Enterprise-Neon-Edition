@@ -1181,3 +1181,43 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   border-color:#86efac;
   color:#166534;
 }
+
+
+/* Weekly class attendance and closure calendar. Historical attendance is read only. */
+.attendance-weekly-panel{overflow:hidden}
+.attendance-week-header{align-items:flex-end;gap:14px;flex-wrap:wrap}
+.attendance-week-picker{width:min(330px,100%);margin-left:auto}
+.attendance-week-body{display:grid;gap:18px}
+.attendance-week-totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.attendance-week-totals>div{display:grid;gap:6px;padding:13px 16px;border-radius:12px;background:#f2f6fc;border:1px solid #e1e8f2}
+.attendance-week-totals span{font-size:12px;color:#526780;font-weight:650}
+.attendance-week-totals strong{font-size:24px;color:#12284e;font-variant-numeric:tabular-nums}
+.attendance-week-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.attendance-week-day{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-height:104px;padding:12px 10px;border-radius:12px;border:1px solid #d7e2ee;background:#fff;text-align:left;color:#173354;cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease}
+.attendance-week-day strong{font-size:12px;line-height:1.4}
+.attendance-week-day span{display:inline-block;padding:3px 7px;border-radius:999px;background:#edf2f8;font-size:11px;font-weight:750}
+.attendance-week-day small{font-size:11px;line-height:1.5;color:#576881}
+.attendance-week-day:not(:disabled):hover{border-color:#3463b1;box-shadow:0 3px 12px #12385b16}
+.attendance-week-day:focus-visible{outline:3px solid #2d62b9;outline-offset:2px}
+.attendance-week-day[data-week-state="recorded"]{border-color:#86efac;background:#f0fdf4}
+.attendance-week-day[data-week-state="recorded"] span{background:#dcfce7;color:#166534}
+.attendance-week-day[data-week-state="unrecorded"]{border-color:#fcd34d;background:#fffbeb}
+.attendance-week-day[data-week-state="unrecorded"] span{background:#fef3c7;color:#92400e}
+.attendance-week-day[data-week-state="closed"]{border-color:#d8b4fe;background:#faf5ff}
+.attendance-week-day[data-week-state="closed"] span{background:#f3e8ff;color:#6b21a8}
+.attendance-week-day[data-week-state="weekend"],.attendance-week-day[data-week-state="upcoming"]{border-color:#d4dce7;background:#f8fafc}
+.attendance-week-day[data-week-state="weekend"] span,.attendance-week-day[data-week-state="upcoming"] span{background:#e2e8f0;color:#475569}
+.attendance-week-day:disabled{cursor:default;opacity:1}
+.attendance-week-students td small{display:block;margin-top:4px;font-size:11px}
+.attendance-week-footnote{font-size:12px;margin:0}
+.attendance-closure-notice{border:1px solid #d8b4fe;background:#faf5ff;color:#5b2580;padding:20px;border-radius:14px;display:grid;gap:8px}
+.attendance-closure-notice strong{font-size:17px}
+.attendance-closure-notice p{margin:0;font-weight:650}
+.attendance-closure-notice span{font-size:12px}
+@media(max-width:1120px){.attendance-week-days{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){
+  .attendance-week-picker{margin-left:0;width:100%}
+  .attendance-week-totals{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .attendance-week-days{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .attendance-week-day{min-height:96px}
+}
