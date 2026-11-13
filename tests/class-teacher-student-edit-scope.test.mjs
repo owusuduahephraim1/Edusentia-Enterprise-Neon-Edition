@@ -27,3 +27,10 @@ test("student editor requires backend authorization and excludes protected teach
   assert.match(ui,/teacherEdit\?'disabled style="display:none"'/);
   assert.match(gateway,/case "can_edit_student_record":/);
 });
+
+test('teacher permission is limited to active academic year and protects status and photograph',()=>{
+  assert.match(sql,/y\.is_active and y\.deleted_at is null/);
+  assert.match(sql,/then students\.photo_url else/);
+  assert.match(sql,/then students\.status else/);
+  assert.match(sql,/current_app_role\(\) <> 'system_admin' and guardian_data/);
+});
