@@ -43,3 +43,12 @@ test("subject assessment saves cannot erase another role's report profile fields
   assert.match(migration,/promoted_to_class_id=case when canreportfields/);
   assert.match(installer,/0085_report_attendance_and_comment_approval/);
 });
+
+test("the class selector never exposes unassigned classes to either teacher role",()=>{
+  assert.match(ui,/currentRole\(\)==="class_teacher"/);
+  assert.match(ui,/const assigned=await certified\("list_my_attendance_classes"/);
+  assert.match(ui,/const workspace=await certified\("get_role_workspace",\{\}\)/);
+  assert.match(ui,/workspace\?\.subjects/);
+  assert.match(ui,/configuredClasses\.filter\(c=>allowed\.has\(String\(c\.id\)\)\)/);
+  assert.match(ui,/teacherScoped&&classes\.length===1/);
+});

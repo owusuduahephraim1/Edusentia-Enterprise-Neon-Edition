@@ -141,13 +141,23 @@
       const terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[];
       const activeTerm=terms.find(t=>t.is_active);
       const configuredClasses=Array.isArray(reportConfig?.classes)?reportConfig.classes.filter(c=>c.active!==false):[];
-      const permitted=currentRole()==="class_teacher"
-        ?await certified("list_my_attendance_classes",{target_term_id:activeTerm?.id||null})
-        :configuredClasses;
-      const classes=Array.isArray(permitted)?permitted:[];
+      const teacherScoped=["class_teacher","subject_teacher"].includes(currentRole());
+      let permitted=configuredClasses;
+      if(currentRole()==="class_teacher"){
+        // Only the official main class teacher's live assignments, never the school-wide list.
+        const assigned=await certified("list_my_attendance_classes",{target_term_id:activeTerm?.id||null});
+        const allowed=new Set((Array.isArray(assigned)?assigned:[]).map(c=>String(c.id)));
+        permitted=configuredClasses.filter(c=>allowed.has(String(c.id)));
+      }else if(currentRole()==="subject_teacher"){
+        // Subject teachers may create assessment drafts only for classes in their assigned subjects.
+        const workspace=await certified("get_role_workspace",{});
+        const allowed=new Set((Array.isArray(workspace?.subjects)?workspace.subjects:[]).map(s=>String(s.class_id)));
+        permitted=configuredClasses.filter(c=>allowed.has(String(c.id)));
+      }
+      const classes=permitted;
       if(!classes.length){alert("No eligible classes are assigned for report creation.");return;}
       const selectedFilter=String(shellState().reportClassFilter||byId("reportClass")?.value||"");
-      const initialClass=classes.some(c=>String(c.id)===selectedFilter)?selectedFilter:(currentRole()==="class_teacher"&&classes.length===1?String(classes[0].id):"");
+      const initialClass=classes.some(c=>String(c.id)===selectedFilter)?selectedFilter:(teacherScoped&&classes.length===1?String(classes[0].id):"");
       const html=[
         '<form id="newReportForm" class="form-stack">',
         '<label class="field"><span>Class</span><select name="class_id" required><option value="">Select a class</option>',
