@@ -10,7 +10,8 @@ returns boolean language sql stable security definer set search_path to 'public'
       join public.classes c on c.id=e.class_id
       where e.student_id=target_student_id and e.active and e.deleted_at is null
         and c.active and c.deleted_at is null
-        and c.class_teacher_id=auth.uid()
+        and c.class_teacher_id=(select id from public.profiles where id=auth.uid() and active)
+        and exists (select 1 from public.academic_years y where y.id=e.academic_year_id and y.is_active and y.deleted_at is null)
     )
   );
 $scope$;
@@ -35,7 +36,13 @@ begin
   if public.current_app_role()='class_teacher' and sid is null then
     raise exception 'Only the School System Administrator may register students' using errcode='42501';
   end if;
+  if public.current_app_role()='class_teacher' and (coalesce(student_data->>'status','active') <> 'active' or nullif(student_data->>'photo_url','') is not null) then
+    raise exception 'Student status and photograph changes require the School System Administrator' using errcode='42501';
+  end if;
   if public.current_app_role()='class_teacher' and guardian_data <> '{}'::jsonb then
+    raise exception 'Guardian details are managed only by the School System Administrator' using errcode='42501';
+  end if;
+  if public.current_app_role() <> 'system_admin' and guardian_data <> '{}'::jsonb then
     raise exception 'Guardian details are managed only by the School System Administrator' using errcode='42501';
   end if;
   if not public.can_edit_student_record(sid) then
@@ -98,8 +105,8 @@ begin
         last_name=btrim(student_data->>'last_name'),
         gender=coalesce(student_data->>'gender','Other'),
         date_of_birth=nullif(student_data->>'date_of_birth','')::date,
-        photo_url=coalesce(student_data->>'photo_url',''),
-        status=coalesce(nullif(student_data->>'status',''),'active')::public.student_status
+        photo_url=case when public.current_app_role()='class_teacher' then students.photo_url else coalesce(student_data->>'photo_url','') end,
+        status=case when public.current_app_role()='class_teacher' then students.status else coalesce(nullif(student_data->>'status',''),'active')::public.student_status end
     where id=sid and deleted_at is null;
   end if;
 
