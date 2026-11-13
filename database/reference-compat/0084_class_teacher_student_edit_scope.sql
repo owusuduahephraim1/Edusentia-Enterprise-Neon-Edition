@@ -16,6 +16,35 @@ returns boolean language sql stable security definer set search_path to 'public'
   );
 $scope$;
 
+
+-- Existing identity-write trigger must enforce the same narrowly scoped teacher policy.
+CREATE OR REPLACE FUNCTION public.enforce_student_management_aal2_write()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public','extensions' AS $guard$
+begin
+  if auth.role() in ('service_role','supabase_admin') or auth.role() is null then
+    if tg_op='DELETE' then return old; end if;
+    return new;
+  end if;
+  if public.current_app_role()='class_teacher' and tg_op='UPDATE' then
+    if not public.can_edit_student_record(old.id) then
+      raise exception 'Class teacher is not assigned to this student' using errcode='42501';
+    end if;
+    if (to_jsonb(new) - array['first_name','middle_name','last_name','gender','date_of_birth','updated_at'])
+       is distinct from
+       (to_jsonb(old) - array['first_name','middle_name','last_name','gender','date_of_birth','updated_at']) then
+      raise exception 'Class teacher may update student profile fields only' using errcode='42501';
+    end if;
+    return new;
+  end if;
+  if public.current_app_role()::text<>'system_admin' then
+    raise exception 'Only the System Administrator can modify student identity records' using errcode='42501';
+  end if;
+  perform public.require_sensitive_access();
+  if tg_op='DELETE' then return old; end if;
+  return new;
+end
+$guard$;
+
 CREATE OR REPLACE FUNCTION public.save_student(payload jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
