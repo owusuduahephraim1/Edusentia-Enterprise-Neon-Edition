@@ -85,7 +85,7 @@ function textArg(args:Args,name:string,{required=false,max=1000}:{required?:bool
 }
 function dateArg(args:Args,name:string,required=false){
   const value=textArg(args,name,{required,max:10});
-  if(value!==null&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))throw Object.assign(new Error(`${name} must use YYYY-MM-DD`),{code:"invalid_rpc_arguments",status:422});
+  if(value!==null&&!/^\d{4}-\d{2}-\d{2}$/.test(value))throw Object.assign(new Error(`${name} must use YYYY-MM-DD`),{code:"invalid_rpc_arguments",status:422});
   return value;
 }
 function uuidArg(args:Args,name:string,required=false){
