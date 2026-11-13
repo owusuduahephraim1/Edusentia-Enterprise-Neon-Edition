@@ -142,16 +142,18 @@
       const activeTerm=terms.find(t=>t.is_active);
       const configuredClasses=Array.isArray(reportConfig?.classes)?reportConfig.classes.filter(c=>c.active!==false):[];
       const teacherScoped=["class_teacher","subject_teacher"].includes(currentRole());
+      const mainClassIds=new Set();
       let permitted=configuredClasses;
-      if(currentRole()==="class_teacher"){
-        // Only the official main class teacher's live assignments, never the school-wide list.
-        const assigned=await certified("list_my_attendance_classes",{target_term_id:activeTerm?.id||null});
-        const allowed=new Set((Array.isArray(assigned)?assigned:[]).map(c=>String(c.id)));
-        permitted=configuredClasses.filter(c=>allowed.has(String(c.id)));
-      }else if(currentRole()==="subject_teacher"){
-        // Subject teachers may create assessment drafts only for classes in their assigned subjects.
+      if(teacherScoped){
+        // One person can be the main class teacher in one class and teach subjects in other classes.
+        // The server returns only subject assignments authorized for this teacher and active term.
         const workspace=await certified("get_role_workspace",{});
-        const allowed=new Set((Array.isArray(workspace?.subjects)?workspace.subjects:[]).map(s=>String(s.class_id)));
+        const subjectClassIds=new Set((Array.isArray(workspace?.subjects)?workspace.subjects:[]).map(s=>String(s.class_id)));
+        if(currentRole()==="class_teacher"){
+          const assigned=await certified("list_my_attendance_classes",{target_term_id:activeTerm?.id||null});
+          (Array.isArray(assigned)?assigned:[]).forEach(c=>mainClassIds.add(String(c.id)));
+        }
+        const allowed=new Set([...mainClassIds,...subjectClassIds]);
         permitted=configuredClasses.filter(c=>allowed.has(String(c.id)));
       }
       const classes=permitted;
@@ -161,7 +163,7 @@
       const html=[
         '<form id="newReportForm" class="form-stack">',
         '<label class="field"><span>Class</span><select name="class_id" required><option value="">Select a class</option>',
-        classes.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join(""),
+        classes.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+(currentRole()==="class_teacher"?(mainClassIds.has(String(c.id))?" • Main class":" • Subject class"):"")+'</option>').join(""),
         '</select></label>',
         '<label class="field"><span>Find student</span><input name="student_search" type="search" placeholder="Search by name or admission number" autocomplete="off"></label>',
         '<label class="field"><span>Student</span><select name="enrollment_id" required disabled><option value="">Select a class first</option></select></label>',
