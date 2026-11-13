@@ -160,7 +160,7 @@
         <label class="field"><span>Academic year</span><select name="academic_year_id" ${teacherEdit?"disabled":""}>${optionRows(ctx.years,"id","name",latest.academic_year_id||"","No enrolment")}</select></label>
         <label class="field"><span>Class</span><select name="class_id" ${teacherEdit?"disabled":""}>${optionRows(ctx.classes,"id","name",latest.class_id||"","No enrolment")}</select></label>
         <label class="field"><span>Roll number</span><input type="number" min="1" name="roll_number" ${teacherEdit?"disabled":""} value="${esc(latest.roll_number||"")}"></label>
-      </div>${teacherEdit?'<p class="help-text">Guardian details and class placement can only be changed by the School System Administrator.</p>':'<div class="section-title"><h4>Primary Guardian</h4></div><div class="form-grid three"><input type="hidden" name="guardian_id" value="${esc(guardian.id||"")}">
+      </div>${teacherEdit?'<p class="help-text">Guardian details and class placement can only be changed by the School System Administrator.</p>':""}<fieldset ${teacherEdit?'disabled style="display:none"':""}><div class="section-title"><h4>Primary Guardian</h4></div><div class="form-grid three"><input type="hidden" name="guardian_id" value="${esc(guardian.id||"")}">
         <label class="field"><span>Full name</span><input name="guardian_name" value="${esc(guardian.full_name||student.guardian_name||"")}"></label>
         <label class="field"><span>Relationship</span><input name="relationship" value="${esc(guardian.relationship||"Guardian")}"></label>
         <label class="field"><span>Telephone</span><input name="guardian_phone" value="${esc(guardian.phone||student.guardian_phone||"")}"></label>
@@ -168,7 +168,7 @@
         <label class="field"><span>Portal account</span><select name="guardian_auth_user_id"><option value="">No linked account</option>${(Array.isArray(guardians)?guardians:[]).map(item=>'<option value="'+esc(item.id||"")+'" '+(String(item.id||"")===String(guardian.auth_user_id||"")?"selected":"")+'>'+esc(item.full_name||item.email||"Guardian")+(item.email?" • "+esc(item.email):"")+'</option>').join("")}</select></label>
         <label class="field"><span>Address</span><input name="guardian_address" value="${esc(guardian.address||"")}"></label>
         <label class="check-field"><input type="checkbox" name="guardian_notify" ${guardian.can_receive_notifications!==false?"checked":""}><span>Receive notifications</span></label>
-      </div>'}<p id="studentCertifiedMessage" class="form-message hidden" role="alert"></p></form>`,
+      </div></fieldset><p id="studentCertifiedMessage" class="form-message hidden" role="alert"></p></form>`,
       '<button id="studentCertifiedCancel" class="button ghost" type="button">Cancel</button><button id="studentCertifiedSave" class="button primary" type="submit" form="studentCertifiedForm">Save student</button>');
     const studentForm=byId("studentCertifiedForm");
     const refreshAdmissionHint=()=>{
