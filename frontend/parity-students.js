@@ -30,7 +30,7 @@
       catch(error){console.warn("student_photo_display_failed",error);}
     }));
   }
-  const canEditStudent=async id=>Boolean(id)&&Boolean(await certified("can_manage_student",{target_student_id:id}));
+  const canEditStudent=async id=>Boolean(id)&&Boolean(await certified("can_edit_student_record",{target_student_id:id}));
   async function renderStudents(){
     byId("content").innerHTML=`<div class="page-head"><div><h3>Students</h3><p>Certified student directory, enrolment and bulk admission tools.</p></div></div>${loading("Loading certified student workspace")}`;
     let config;
