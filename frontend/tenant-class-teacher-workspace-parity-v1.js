@@ -133,6 +133,67 @@
       updateAttendanceSummary();
     }catch(error){root.innerHTML=pageError(error);}
   }
+  const weekMonday=value=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||"")))return "";
+    const date=new Date(value+"T12:00:00Z");
+    if(Number.isNaN(date.getTime()))return "";
+    const weekday=date.getUTCDay();
+    date.setUTCDate(date.getUTCDate()-(weekday===0?6:weekday-1));
+    return date.toISOString().slice(0,10);
+  };
+  async function loadWeeklyAttendanceHistory(){
+    const root=byId("attendanceWeeklyHistory"),a=local.attendance;
+    if(!root||!a.termId||!a.classId)return;
+    const loadId=(a.historyLoadId||0)+1;a.historyLoadId=loadId;
+    root.innerHTML=loading("Loading weekly attendance records");
+    try{
+      const data=await certified("get_attendance_weekly_history",{
+        target_term_id:a.termId,target_class_id:a.classId,target_week_start:a.weekStart||null
+      });
+      if(a.historyLoadId!==loadId||!root.isConnected)return;
+      a.weekStart=String(data?.week_start||a.weekStart||"");
+      const weeks=arr(data?.weeks),days=arr(data?.days),students=arr(data?.students);
+      const weekOptions=weeks.map(w=>'<option value="'+esc(w.week_start)+'" '+(String(w.week_start)===String(a.weekStart)?"selected":"")+'>'+
+        'Week '+Number(w.week_number||0)+' · '+esc(formatDate(w.start_date))+' – '+esc(formatDate(w.end_date))+'</option>').join("");
+      const daysMarkup=days.map(day=>{
+        const type=String(day.day_status||"unrecorded");
+        const text={recorded:"Recorded",unrecorded:"Not recorded",closed:"School closed",weekend:"Weekend",upcoming:"Upcoming"}[type]||"Not recorded";
+        const note=type==="closed"?(day.closure_reason||"School holiday"):
+          type==="recorded"?"Present "+Number(day.present||0)+" · Absent "+Number(day.absent||0)+" · Late "+Number(day.late||0)+" · Excused "+Number(day.excused||0):
+          type==="unrecorded"?"No attendance register saved":"";
+        const selectable=["recorded","unrecorded"].includes(type);
+        return '<button class="attendance-week-day" type="button" data-week-day="'+esc(day.date||"")+
+          '" data-week-state="'+esc(type)+'" '+(selectable?"":"disabled")+
+          ' aria-label="'+esc(formatDate(day.date)+": "+text+(day.closure_reason?", "+day.closure_reason:""))+'">'+
+          '<strong>'+esc(formatDate(day.date))+'</strong><span>'+esc(text)+'</span>'+
+          (note?'<small>'+esc(note)+'</small>':"")+'</button>';
+      }).join("");
+      const studentsMarkup=students.length?'<div class="table-wrap attendance-week-students"><table><thead><tr><th>Student</th><th>Days present</th><th>Absent</th><th>Late</th><th>Excused</th></tr></thead><tbody>'+
+        students.map(st=>'<tr><td><strong>'+esc(st.student_name||"Student")+'</strong><small class="muted">'+esc(st.admission_no||"")+'</small></td>'+
+          '<td>'+Number(st.days_present||0)+' / '+Number(data?.recorded_days||0)+'</td>'+
+          '<td>'+Number(st.absent||0)+'</td><td>'+Number(st.late||0)+'</td><td>'+Number(st.excused||0)+'</td></tr>').join("")+'</tbody></table></div>':
+        '<p class="muted">No active students are enrolled in this class for this term.</p>';
+      root.innerHTML='<div class="panel-header attendance-week-header"><div><h3>Weekly Attendance History</h3><p>Week '+Number(data?.week_number||0)+' · '+esc(formatDate(data?.start_date))+' to '+esc(formatDate(data?.end_date))+'</p></div>'+
+        '<label class="field attendance-week-picker"><span>Attendance week</span><select id="attendanceWeekSelect" aria-label="Select attendance week">'+weekOptions+'</select></label></div>'+
+        '<div class="panel-body attendance-week-body"><div class="attendance-week-totals">'+
+        '<div><span>Scheduled teaching days</span><strong>'+Number(data?.scheduled_days||0)+'</strong></div>'+
+        '<div><span>Days recorded</span><strong>'+Number(data?.recorded_days||0)+'</strong></div>'+
+        '<div><span>School closure days</span><strong>'+Number(data?.closed_days||0)+'</strong></div>'+
+        '<div><span>Unrecorded past days</span><strong>'+Number(data?.unrecorded_days||0)+'</strong></div></div>'+
+        '<div class="attendance-week-days">'+daysMarkup+'</div>'+
+        '<div class="section-title"><h4>Student attendance for selected week</h4></div>'+studentsMarkup+
+        '<p class="muted attendance-week-footnote">Scheduled days exclude weekends and school holidays. Unrecorded days are not absences. Attendance totals use saved daily registers only.</p></div>';
+      byId("attendanceWeekSelect")?.addEventListener("change",()=>{a.weekStart=byId("attendanceWeekSelect").value;loadWeeklyAttendanceHistory();});
+      root.querySelectorAll("[data-week-day]").forEach(btn=>btn.addEventListener("click",()=>{
+        a.date=btn.dataset.weekDay;
+        if(byId("attendanceDate"))byId("attendanceDate").value=a.date;
+        loadAttendanceRegister();
+      }));
+    }catch(error){
+      if(a.historyLoadId===loadId)root.innerHTML=pageError(error);
+    }
+  }
+
   async function saveAttendance(){
     const root=byId("attendanceResults"),a=local.attendance;if(!root)return;
     const entries=[...root.querySelectorAll("[data-attendance-enrollment]")].map(select=>({enrollment_id:select.dataset.attendanceEnrollment,attendance_status:select.value}));if(!entries.length)return;
