@@ -113,6 +113,109 @@ BEGIN
 END
 $body$;
 
--- Weekly read model and attendance reconciliation functions follow.
+CREATE OR REPLACE FUNCTION public.get_attendance_weekly_history(target_term_id uuid,target_class_id uuid,target_week_start date DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO 'public','extensions' AS $body$
+DECLARE first_day date;last_day date;week_zero date;last_week date;selected_week date;selected_first date;selected_last date;
+BEGIN
+  IF NOT public.is_assigned_class_teacher(target_class_id) THEN
+    RAISE EXCEPTION 'Only the assigned main class teacher can view this class attendance history' USING errcode='42501';
+  END IF;
+  SELECT t.start_date,t.end_date INTO first_day,last_day FROM public.terms t WHERE t.id=target_term_id AND t.deleted_at IS NULL;
+  IF first_day IS NULL OR last_day IS NULL THEN
+    RAISE EXCEPTION 'Select a term with configured opening and closing dates' USING errcode='22023';
+  END IF;
+  week_zero:=first_day-(extract(isodow from first_day)::integer-1);
+  last_week:=last_day-(extract(isodow from last_day)::integer-1);
+  IF target_week_start IS NOT NULL AND extract(isodow from target_week_start)::integer<>1 THEN
+    RAISE EXCEPTION 'Selected week must start on Monday' USING errcode='22023';
+  END IF;
+  selected_week:=coalesce(target_week_start,current_date-(extract(isodow from current_date)::integer-1));
+  selected_week:=greatest(week_zero,least(last_week,selected_week));
+  selected_first:=greatest(selected_week,first_day);
+  selected_last:=least(selected_week+6,last_day);
+
+  RETURN jsonb_build_object(
+    'term_id',target_term_id,'class_id',target_class_id,
+    'class_name',(SELECT c.name FROM public.classes c WHERE c.id=target_class_id),
+    'week_start',selected_week,'week_end',selected_last,
+    'week_number',(selected_week-week_zero)/7+1,
+    'weeks',coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'week_number',(g.d::date-week_zero)/7+1,
+      'week_start',g.d::date,'start_date',greatest(g.d::date,first_day),
+      'end_date',least(g.d::date+6,last_day)
+    ) ORDER BY g.d) FROM generate_series(week_zero::timestamp,last_week::timestamp,'7 days') g(d)),'[]'::jsonb),
+
+    'days',coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'date',g.d::date,
+      'day_status',CASE WHEN cl.id IS NOT NULL THEN 'closed'
+        WHEN extract(isodow from g.d)::integer>5 THEN 'weekend'
+        WHEN g.d::date>current_date THEN 'upcoming'
+        WHEN r.id IS NULL OR NOT EXISTS(SELECT 1 FROM public.student_attendance_entries se WHERE se.register_id=r.id)
+          THEN 'unrecorded' ELSE 'recorded' END,
+      'closure_reason',cl.reason,'closure_type',cl.closure_type,
+      'present',coalesce(a.present,0),'absent',coalesce(a.absent,0),
+      'late',coalesce(a.late,0),'excused',coalesce(a.excused,0)
+    ) ORDER BY g.d)
+    FROM generate_series(selected_first::timestamp,selected_last::timestamp,'1 day') g(d)
+    LEFT JOIN LATERAL(SELECT c.id,c.reason,c.closure_type FROM public.school_closures c
+      WHERE c.term_id=target_term_id AND c.deleted_at IS NULL
+        AND g.d::date BETWEEN c.start_date AND c.end_date LIMIT 1) cl ON true
+    LEFT JOIN public.class_attendance_registers r ON r.term_id=target_term_id
+      AND r.class_id=target_class_id AND r.attendance_date=g.d::date
+    LEFT JOIN LATERAL(SELECT count(*) FILTER(WHERE x.attendance_status='present')::integer present,
+      count(*) FILTER(WHERE x.attendance_status='absent')::integer absent,
+      count(*) FILTER(WHERE x.attendance_status='late')::integer late,
+      count(*) FILTER(WHERE x.attendance_status='excused')::integer excused
+      FROM public.student_attendance_entries x WHERE x.register_id=r.id) a ON true),'[]'::jsonb),
+
+    'scheduled_days',(SELECT count(*)::integer FROM generate_series(selected_first::timestamp,selected_last::timestamp,'1 day') g(d)
+      WHERE extract(isodow from g.d)::integer<=5 AND NOT EXISTS(
+        SELECT 1 FROM public.school_closures c WHERE c.term_id=target_term_id AND c.deleted_at IS NULL
+          AND g.d::date BETWEEN c.start_date AND c.end_date)),
+    'closed_days',(SELECT count(*)::integer FROM generate_series(selected_first::timestamp,selected_last::timestamp,'1 day') g(d)
+      WHERE extract(isodow from g.d)::integer<=5 AND EXISTS(
+        SELECT 1 FROM public.school_closures c WHERE c.term_id=target_term_id AND c.deleted_at IS NULL
+          AND g.d::date BETWEEN c.start_date AND c.end_date)),
+    'recorded_days',(SELECT count(distinct r.id)::integer FROM public.class_attendance_registers r
+      WHERE r.term_id=target_term_id AND r.class_id=target_class_id
+        AND r.attendance_date BETWEEN selected_first AND selected_last
+        AND extract(isodow from r.attendance_date)::integer<=5
+        AND NOT EXISTS(SELECT 1 FROM public.school_closures c WHERE c.term_id=r.term_id
+          AND c.deleted_at IS NULL AND r.attendance_date BETWEEN c.start_date AND c.end_date)
+        AND EXISTS(SELECT 1 FROM public.student_attendance_entries se WHERE se.register_id=r.id)),
+    'unrecorded_days',(SELECT count(*)::integer FROM generate_series(selected_first::timestamp,selected_last::timestamp,'1 day') g(d)
+      WHERE g.d::date<=current_date AND extract(isodow from g.d)::integer<=5
+        AND NOT EXISTS(SELECT 1 FROM public.school_closures c WHERE c.term_id=target_term_id AND c.deleted_at IS NULL
+          AND g.d::date BETWEEN c.start_date AND c.end_date)
+        AND NOT EXISTS(SELECT 1 FROM public.class_attendance_registers r WHERE r.term_id=target_term_id
+          AND r.class_id=target_class_id AND r.attendance_date=g.d::date
+          AND EXISTS(SELECT 1 FROM public.student_attendance_entries se WHERE se.register_id=r.id))),
+    'students',coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'enrollment_id',e.id,
+      'student_name',concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name),
+      'admission_no',s.admission_no,
+      'present',sum1.present,'absent',sum1.absent,'late',sum1.late,'excused',sum1.excused,
+      'days_present',sum1.present+sum1.late
+    ) ORDER BY lower(concat_ws(' ',s.first_name,nullif(s.middle_name,''),s.last_name)),s.admission_no::text)
+    FROM public.enrollments e
+    JOIN public.students s ON s.id=e.student_id AND s.deleted_at IS NULL AND s.status='active'
+    JOIN public.terms t ON t.id=target_term_id AND t.academic_year_id=e.academic_year_id
+    LEFT JOIN LATERAL(SELECT count(*) FILTER(WHERE a.attendance_status='present')::integer present,
+      count(*) FILTER(WHERE a.attendance_status='absent')::integer absent,
+      count(*) FILTER(WHERE a.attendance_status='late')::integer late,
+      count(*) FILTER(WHERE a.attendance_status='excused')::integer excused
+      FROM public.student_attendance_entries a
+      JOIN public.class_attendance_registers r ON r.id=a.register_id
+      WHERE a.enrollment_id=e.id AND r.term_id=target_term_id AND r.class_id=target_class_id
+        AND r.attendance_date BETWEEN selected_first AND selected_last
+        AND extract(isodow from r.attendance_date)::integer<=5
+        AND NOT EXISTS(SELECT 1 FROM public.school_closures c WHERE c.term_id=r.term_id
+          AND c.deleted_at IS NULL AND r.attendance_date BETWEEN c.start_date AND c.end_date)) sum1 ON true
+    WHERE e.class_id=target_class_id AND e.active AND e.deleted_at IS NULL),'[]'::jsonb)
+  );
+END
+$body$;
+
+-- Attendance reconciliation functions follow.
 
 COMMIT;
