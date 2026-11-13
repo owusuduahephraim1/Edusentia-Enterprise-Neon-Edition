@@ -2335,7 +2335,7 @@ const CERTIFIED_RPC_REGISTRY_BASE=Object.freeze({
     "resultType": "jsonb",
     "setof": false
   },
-  "can_manage_student": {
+  "can_edit_student_record": {
     "args": [{"name":"target_student_id","type":"uuid","required":true}],
     "resultType":"boolean",
     "setof":false
