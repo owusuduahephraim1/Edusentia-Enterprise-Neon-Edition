@@ -36,9 +36,6 @@ begin
   if public.current_app_role()='class_teacher' and sid is null then
     raise exception 'Only the School System Administrator may register students' using errcode='42501';
   end if;
-  if public.current_app_role()='class_teacher' and (coalesce(student_data->>'status','active') <> 'active' or nullif(student_data->>'photo_url','') is not null) then
-    raise exception 'Student status and photograph changes require the School System Administrator' using errcode='42501';
-  end if;
   if public.current_app_role()='class_teacher' and guardian_data <> '{}'::jsonb then
     raise exception 'Guardian details are managed only by the School System Administrator' using errcode='42501';
   end if;
