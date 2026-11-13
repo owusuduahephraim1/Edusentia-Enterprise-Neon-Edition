@@ -5,8 +5,8 @@
 
   const P=window.EdusentiaParity,S=window.EdusentiaShell;
   if(!P||!S)return;
-  const {registerView,api,certified,certifiedAllRows,role,esc,formatDate,formatDateTime,status,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig}=P;
-  const local={attendance:{},insights:{},history:{}};
+  const {registerView,api,certified,certifiedAllRows,role,esc,formatDate,formatDateTime,status,loading,empty,pageError,byId,friendly,downloadBlob,academicConfig,openModal,closeModal}=P;
+  const local={attendance:{},insights:{},history:{},calendar:{}};
   const arr=value=>Array.isArray(value)?value:[];
   const obj=value=>value&&typeof value==="object"&&!Array.isArray(value)?value:{};
   const state=()=>S.state||{};
@@ -385,6 +385,90 @@
     }catch(error){byId("content").innerHTML=sectionHead("Academic Insights","Privacy-aware class, subject, attendance, and report-completion trends")+pageError(error);}
   }
 
+
+  async function renderSchoolCalendar(){
+    byId("content").innerHTML=sectionHead("School Calendar","Manage public holidays, mid-term breaks and non-teaching days")+loading("Loading school calendar");
+    try{
+      if(role()!=="system_admin")throw new Error("Only the School System Administrator may manage school closures.");
+      const cfg=await academicConfig(),terms=arr(cfg?.terms).filter(t=>t.deleted_at==null),
+        chosenId=local.calendar.termId||terms.find(t=>t.is_active)?.id||terms[0]?.id||"",
+        term=terms.find(t=>String(t.id)===String(chosenId))||terms[0];
+      if(!term){byId("content").innerHTML=sectionHead("School Calendar","Manage public holidays, mid-term breaks and non-teaching days")+empty("Configure an academic term before adding holidays.");return;}
+      local.calendar.termId=term.id;
+      const records=arr(await certified("list_school_closures",{target_term_id:term.id}));
+      const types=[["public_holiday","Public holiday"],["midterm_break","Mid-term break"],["school_break","School holiday"],["emergency_closure","Emergency closure"],["other","Other non-teaching day"]];
+      const current=records.find(c=>String(c.id)===String(local.calendar.editId||""));
+      const min=String(term.start_date||""),max=String(term.end_date||"");
+      const fmtDate=value=>value?esc(formatDate(value)):"—";
+      const rows=records.map(c=>{
+        const label=types.find(t=>t[0]===c.closure_type)?.[1]||"Closure";
+        return '<tr><td><strong>'+esc(label)+'</strong><small class="muted">'+esc(c.reason||"")+'</small></td>'+
+          '<td>'+fmtDate(c.start_date)+'</td><td>'+fmtDate(c.end_date)+'</td>'+
+          '<td><div class="button-row"><button type="button" class="button ghost small" data-calendar-edit="'+esc(c.id)+'">Edit</button>'+
+          '<button type="button" class="button outline small" data-calendar-remove="'+esc(c.id)+'">Remove</button></div></td></tr>';
+      }).join("");
+      byId("content").innerHTML=sectionHead("School Calendar","Public holidays, mid-term breaks and approved non-teaching days")+
+        '<section class="panel pad"><div class="section-title"><h4>Select academic term</h4></div>'+
+        '<label class="field"><span>Academic term</span><select id="calendarTermSelect">'+terms.map(t=>'<option value="'+esc(t.id)+'" '+(String(t.id)===String(term.id)?"selected":"")+'>'+esc(t.name||"Term")+' · '+esc(t.start_date||"")+'</option>').join("")+'</select></label>'+
+        '<p class="muted">Teaching weeks start from the opening date '+fmtDate(term.start_date)+'. Weekends and saved closure days are excluded from expected attendance.</p></section>'+
+        '<section class="panel pad"><div class="section-title"><h4>'+(current?"Edit school closure":"Record a school closure")+'</h4></div>'+
+        '<form id="schoolClosureForm" class="form-stack"><div class="form-grid">'+
+        '<label class="field"><span>Closure type</span><select name="closure_type" required>'+types.map(([v,n])=>'<option value="'+v+'" '+(current?.closure_type===v?"selected":"")+'>'+n+'</option>').join("")+'</select></label>'+
+        '<label class="field"><span>Start date</span><input type="date" name="start_date" required min="'+esc(min)+'" max="'+esc(max)+'" value="'+esc(current?.start_date||"")+'"></label>'+
+        '<label class="field"><span>End date</span><input type="date" name="end_date" required min="'+esc(min)+'" max="'+esc(max)+'" value="'+esc(current?.end_date||"")+'"></label>'+
+        '<label class="field full"><span>Reason or holiday name</span><input name="reason" required minlength="3" maxlength="240" placeholder="e.g., Mid-term break or officially announced public holiday" value="'+esc(current?.reason||"")+'"></label></div>'+
+        '<div class="page-actions"><button class="button primary" id="calendarSave" type="submit">'+(current?"Update closure":"Save closure")+'</button>'+
+        (current?'<button class="button ghost" id="calendarReset" type="button">Cancel edit</button>':"")+'</div>'+
+        '<p class="form-message hidden" id="schoolCalendarMessage" role="alert"></p></form></section>'+
+        '<section class="panel"><div class="panel-header"><div><h3>Recorded closures</h3><p>'+records.length+' recorded period'+(records.length===1?"":"s")+' for this term</p></div></div>'+
+        (records.length?'<div class="table-wrap"><table><thead><tr><th>Type and reason</th><th>From</th><th>Until</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>':
+          '<div class="panel-body"><p class="muted">No school closures have been recorded for this term. Regular weekdays remain scheduled school days.</p></div>')+
+        '</section>';
+      byId("calendarTermSelect").addEventListener("change",()=>{local.calendar.termId=byId("calendarTermSelect").value;local.calendar.editId="";renderSchoolCalendar();});
+      byId("schoolClosureForm").addEventListener("submit",async event=>{
+        event.preventDefault();const form=event.currentTarget,button=byId("calendarSave");if(!form.reportValidity())return;
+        const values=Object.fromEntries(new FormData(form).entries());
+        if(values.end_date<values.start_date){notify("Invalid dates","Closure end date must be on or after its start date.","error");return;}
+        button.disabled=true;
+        try{
+          await certified("save_school_closure",{
+            target_term_id:term.id,target_start_date:values.start_date,target_end_date:values.end_date,
+            target_type:values.closure_type,reason_text:String(values.reason||"").trim(),
+            target_closure_id:current?.id||null
+          });
+          notify("School calendar updated","Non-teaching dates will not count towards school attendance.");
+          local.calendar.editId="";await renderSchoolCalendar();
+        }catch(error){notify("Closure not saved",friendly(error),"error");}
+        finally{if(button.isConnected)button.disabled=false;}
+      });
+      byId("calendarReset")?.addEventListener("click",()=>{local.calendar.editId="";renderSchoolCalendar();});
+      byId("content").querySelectorAll("[data-calendar-edit]").forEach(btn=>btn.addEventListener("click",()=>{
+        local.calendar.editId=btn.dataset.calendarEdit;renderSchoolCalendar();
+      }));
+      byId("content").querySelectorAll("[data-calendar-remove]").forEach(btn=>btn.addEventListener("click",()=>{
+        const closure=records.find(c=>String(c.id)===String(btn.dataset.calendarRemove));if(!closure)return;
+        openModal("Remove school closure","Explain why this calendar entry should be removed.",
+          '<form id="removeClosureForm" class="form-stack"><p>'+esc(closure.reason)+' · '+fmtDate(closure.start_date)+' – '+fmtDate(closure.end_date)+'</p>'+
+          '<label class="field"><span>Reason for removal</span><textarea id="calendarRemoveReason" required minlength="3" maxlength="240" placeholder="Why is this closure being removed?"></textarea></label>'+
+          '<p class="form-message hidden" id="calendarRemoveMessage" role="alert"></p></form>',
+          '<button class="button ghost" id="calendarRemoveCancel" type="button">Cancel</button>'+
+          '<button class="button danger" id="calendarRemoveConfirm" type="submit" form="removeClosureForm">Remove closure</button>');
+        byId("calendarRemoveCancel").onclick=closeModal;
+        byId("removeClosureForm").onsubmit=async e=>{
+          e.preventDefault();const reason=String(byId("calendarRemoveReason")?.value||"").trim();
+          if(reason.length<3){notify("A removal reason is required","Enter at least three characters.","error");return;}
+          const b=byId("calendarRemoveConfirm");b.disabled=true;
+          try{
+            await certified("archive_school_closure",{target_closure_id:closure.id,reason_text:reason});
+            closeModal();notify("Closure removed","The calendar entry was archived.");await renderSchoolCalendar();
+          }catch(error){notify("Cannot remove closure",friendly(error),"error");}
+          finally{if(b.isConnected)b.disabled=false;}
+        };
+      }));
+    }catch(error){byId("content").innerHTML=sectionHead("School Calendar","Manage non-teaching days")+pageError(error);}
+  }
+
+  registerView({id:"school_calendar",label:"School Calendar",icon:"▦",subtitle:"Public holidays, mid-term breaks and non-teaching days",roles:["system_admin"],feature:"attendance",render:renderSchoolCalendar});
   registerView({id:"teacher_profile",label:"My Profile",icon:"♙",subtitle:"Teacher profile, photograph, qualifications, and assignments",roles:["class_teacher","subject_teacher"],render:renderTeacherProfile});
   registerView({id:"my_class",label:"My Class",icon:"▣",subtitle:"Assigned class, learners, and report progress",roles:["class_teacher"],render:renderMyClass});
   registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class attendance and automatic term totals",roles:["class_teacher"],feature:"attendance",render:renderAttendance});
