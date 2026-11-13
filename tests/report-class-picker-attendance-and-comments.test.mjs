@@ -52,3 +52,14 @@ test("the class selector never exposes unassigned classes to either teacher role
   assert.match(ui,/configuredClasses\.filter\(c=>allowed\.has\(String\(c\.id\)\)\)/);
   assert.match(ui,/teacherScoped&&classes\.length===1/);
 });
+
+test("a main class teacher sees the union of main and subject-taught classes",()=>{
+  assert.match(ui,/if\(teacherScoped\)\{/);
+  assert.match(ui,/const subjectClassIds=new Set\(/);
+  assert.match(ui,/const assigned=await certified\("list_my_attendance_classes"/);
+  assert.match(ui,/mainClassIds\.add\(String\(c\.id\)\)/);
+  assert.match(ui,/const allowed=new Set\(\[\.\.\.mainClassIds,\.\.\.subjectClassIds\]\)/);
+  assert.match(ui,/permitted=configuredClasses\.filter\(c=>allowed\.has\(String\(c\.id\)\)\)/);
+  assert.match(ui,/Main class/);
+  assert.match(ui,/Subject class/);
+});
