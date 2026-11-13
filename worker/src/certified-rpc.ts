@@ -7,6 +7,10 @@ const EXPLICIT_CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_bootstrap_data",
   "get_academic_configuration",
   "get_academic_calendar_context",
+  "get_attendance_weekly_history",
+  "list_school_closures",
+  "save_school_closure",
+  "archive_school_closure",
   "get_my_emergency_academic_delegations",
   "academic_configuration_readiness",
   "set_active_period",
@@ -78,6 +82,11 @@ function textArg(args:Args,name:string,{required=false,max=1000}:{required?:bool
   if(raw==null||raw===""){if(required)throw Object.assign(new Error(`${name} is required`),{code:"invalid_rpc_arguments",status:422});return null;}
   if(typeof raw!=="string"||raw.length>max)throw Object.assign(new Error(`${name} is invalid`),{code:"invalid_rpc_arguments",status:422});
   return raw;
+}
+function dateArg(args:Args,name:string,required=false){
+  const value=textArg(args,name,{required,max:10});
+  if(value!==null&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))throw Object.assign(new Error(`${name} must use YYYY-MM-DD`),{code:"invalid_rpc_arguments",status:422});
+  return value;
 }
 function uuidArg(args:Args,name:string,required=false){
   const value=textArg(args,name,{required,max:64});
@@ -154,6 +163,30 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       noArguments(args);
       return singleResult(sql,ctx,txn=>txn`select public.get_academic_calendar_context() result`);
 
+    case "get_attendance_weekly_history":{
+      const termId=uuidArg(args,"target_term_id",true);
+      const classId=uuidArg(args,"target_class_id",true);
+      const weekStart=dateArg(args,"target_week_start");
+      return singleResult(sql,ctx,txn=>txn`select public.get_attendance_weekly_history(${termId}::uuid,${classId}::uuid,${weekStart}::date) result`);
+    }
+    case "list_school_closures":{
+      const termId=uuidArg(args,"target_term_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.list_school_closures(${termId}::uuid) result`);
+    }
+    case "save_school_closure":{
+      const termId=uuidArg(args,"target_term_id",true);
+      const startDate=dateArg(args,"target_start_date",true);
+      const endDate=dateArg(args,"target_end_date",true);
+      const type=textArg(args,"target_type",{required:true,max:40});
+      const reason=textArg(args,"reason_text",{required:true,max:240});
+      const closureId=uuidArg(args,"target_closure_id");
+      return singleResult(sql,ctx,txn=>txn`select public.save_school_closure(${termId}::uuid,${startDate}::date,${endDate}::date,${type},${reason},${closureId}::uuid) result`);
+    }
+    case "archive_school_closure":{
+      const closureId=uuidArg(args,"target_closure_id",true);
+      const reason=textArg(args,"reason_text",{required:true,max:240});
+      return singleResult(sql,ctx,txn=>txn`select public.archive_school_closure(${closureId}::uuid,${reason}) result`);
+    }
     case "get_my_emergency_academic_delegations":{
       const classId=uuidArg(args,"target_class_id");
       const termId=uuidArg(args,"target_term_id");
