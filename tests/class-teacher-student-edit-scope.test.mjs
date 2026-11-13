@@ -9,7 +9,7 @@ const gateway=read("worker/src/certified-rpc.ts");
 test("student edit permission is separate from general management permission",()=>{
   assert.match(sql,/create or replace function public\.can_edit_student_record\(target_student_id uuid\)/i);
   assert.doesNotMatch(sql,/create or replace function public\.can_manage_student\(/i);
-  assert.match(sql,/c\.class_teacher_id=auth\.uid\(\)/);
+  assert.match(sql,/c\.class_teacher_id=\(select id from public\.profiles where id=auth\.uid\(\) and active\)/);
   assert.match(sql,/e\.active and e\.deleted_at is null/);
   assert.match(sql,/public\.is_records_manager\(\)/);
 });
