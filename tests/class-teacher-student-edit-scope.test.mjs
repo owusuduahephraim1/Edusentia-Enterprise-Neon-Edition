@@ -34,3 +34,10 @@ test('teacher permission is limited to active academic year and protects status 
   assert.match(sql,/then students\.status else/);
   assert.match(sql,/current_app_role\(\) <> 'system_admin' and guardian_data/);
 });
+
+test('database trigger allows scoped profile fields but blocks protected field mutations',()=>{
+  assert.match(sql,/CREATE OR REPLACE FUNCTION public\.enforce_student_management_aal2_write/);
+  assert.match(sql,/tg_op='UPDATE'/);
+  assert.match(sql,/not public\.can_edit_student_record\(old\.id\)/);
+  assert.match(sql,/to_jsonb\(new\) - array\['first_name','middle_name','last_name','gender','date_of_birth','updated_at'\]/);
+});
