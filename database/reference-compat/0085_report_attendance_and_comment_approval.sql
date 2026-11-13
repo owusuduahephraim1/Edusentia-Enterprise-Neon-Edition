@@ -36,7 +36,7 @@ begin
     and r.term_id=target_term_id
     and e.class_id=target_class_id
     and r.deleted_at is null
-    ;
+    and r.status in ('draft','returned','submitted','class_reviewed');
   get diagnostics affected=row_count;
   return affected;
 end $function$
@@ -105,7 +105,7 @@ begin
     or (rid is not null and public.has_approved_report_correction(rid) and public.can_manage_class_report_fields_scope(classid,termid)))
     and coalesce(report_json->>'status','draft') in ('draft','returned','withdrawn');
 
-  if coalesce(report_json->>'status','draft') not in ('published','withdrawn') then
+  if coalesce(report_json->>'status','draft') in ('draft','returned','submitted','class_reviewed') then
     report_json := report_json || (
       select jsonb_build_object('days_school_opened',ac.days_school_opened,'days_present',least(ac.days_present,ac.days_school_opened))
       from public.attendance_counts_for_enrollment(enrollmentid,termid) ac
@@ -218,10 +218,13 @@ begin
     update public.student_reports set
       days_school_opened=opened_count,
       days_present=present_count,
-      attitude=coalesce(report_fields->>'attitude',''),conduct=coalesce(report_fields->>'conduct',''),
-      interest=coalesce(report_fields->>'interest',''),teacher_comment=coalesce(report_fields->>'teacher_comment',''),
+      attitude=case when canreportfields then coalesce(report_fields->>'attitude',attitude) else attitude end,
+      conduct=case when canreportfields then coalesce(report_fields->>'conduct',conduct) else conduct end,
+      interest=case when canreportfields then coalesce(report_fields->>'interest',interest) else interest end,
+      teacher_comment=case when canreportfields then coalesce(report_fields->>'teacher_comment',teacher_comment) else teacher_comment end,
       head_comment=head_comment,
-      promoted_to_class_id=nullif(report_fields->>'promoted_to_class_id','')::uuid,
+      promoted_to_class_id=case when canreportfields and report_fields ? 'promoted_to_class_id'
+        then nullif(report_fields->>'promoted_to_class_id','')::uuid else promoted_to_class_id end,
       version=version+1,updated_at=now()
     where id=rid returning version,status into current_version,current_status;
   end if;
@@ -305,6 +308,9 @@ begin
   end if;
 
   if target_status='submitted' then
+    if not exists(select 1 from public.student_reports r where r.id=target_report_id and btrim(coalesce(r.teacher_comment,''))<>'') then
+      raise exception 'Class teacher comment must be reviewed and saved before submission' using errcode='23514';
+    end if;
     if exists(
       select 1 from public.class_subjects cs
       join public.student_reports r on r.id=target_report_id
