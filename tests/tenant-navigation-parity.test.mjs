@@ -7,7 +7,7 @@ const read=p=>fs.readFileSync(p,"utf8");
 test("tenant shell follows reference role, permission and feature navigation contract",()=>{
   const app=read("frontend/app.js");
   assert.match(app,/const ROLE_NAV_IDS=Object\.freeze\(/);
-  assert.match(app,/system_admin:\["dashboard","operations","students","student_services","staff","history","teachers","headteachers","academics","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
+  assert.match(app,/system_admin:\["dashboard","operations","students","student_services","staff","history","teachers","headteachers","academics","school_calendar","timetable","prospectus","delegations","reports","certificates","id_cards","insights","users","compliance","audit","backup_restore","plan_upgrade","license_capacity","notifications","settings"\]/);
   assert.match(app,/principal:\["dashboard","operations","student_services","staff","history","timetable","delegations","reports","certificates","insights","notifications","compliance"\]/);
   assert.match(app,/class_teacher:\["dashboard","teacher_profile","my_class","attendance","my_subjects","students","student_services","history","timetable","reports","insights","notifications"\]/);
   assert.match(app,/subject_teacher:\["dashboard","teacher_profile","my_subjects","students","student_services","history","timetable","reports","insights","notifications"\]/);
