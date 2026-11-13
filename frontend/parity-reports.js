@@ -135,12 +135,88 @@
     };
   }
 
+
   async function openNewReportPicker(preselectedEnrollmentId=""){
     try{
-      const students=await certifiedAllRows("search_students_v5",{search_text:"",target_class_id:null,target_status:"active",archive_filter:"active"}),rows=Array.isArray(students?.rows)?students.rows:[],terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[];
-      openModal("New Report Card","Select a current student enrolment and term.",`<form id="newReportForm" class="form-stack"><label class="field"><span>Student</span><select name="enrollment_id" size="10" required><option value="">Select student</option>${rows.filter(x=>x.enrollment_id).map(x=>`<option value="${esc(x.enrollment_id)}" data-year="${esc(x.academic_year_id||"")}">${esc([x.first_name,x.middle_name,x.last_name].filter(Boolean).join(" "))} • ${esc(x.class_name||"No class")}</option>`).join("")}</select></label><label class="field"><span>Term</span><select name="term_id" required>${optionRows(terms,"id","name",terms.find(x=>x.is_active)?.id||"")}</select></label><p id="newReportMessage" class="form-message hidden"></p></form>`,'<button class="button ghost" id="newReportCancel">Cancel</button><button class="button primary" id="newReportOpen">Open report</button>');
-      const form=byId("newReportForm");byId("newReportCancel").onclick=closeModal;const syncTerms=()=>{const year=form.elements.enrollment_id.selectedOptions[0]?.dataset.year||"";form.elements.term_id.innerHTML=optionRows(terms.filter(t=>!year||String(t.academic_year_id)===String(year)),"id","name",terms.find(t=>t.is_active&&(!year||String(t.academic_year_id)===String(year)))?.id||"");};form.elements.enrollment_id.onchange=syncTerms;if(preselectedEnrollmentId){form.elements.enrollment_id.value=preselectedEnrollmentId;syncTerms();}
-      byId("newReportOpen").onclick=async()=>{if(!form.reportValidity())return;const v=formValues(form);closeModal();await openReportEditor(null,v.enrollment_id,v.term_id);};
+      const terms=Array.isArray(reportConfig?.terms)?reportConfig.terms:[];
+      const activeTerm=terms.find(t=>t.is_active);
+      const configuredClasses=Array.isArray(reportConfig?.classes)?reportConfig.classes.filter(c=>c.active!==false):[];
+      const permitted=currentRole()==="class_teacher"
+        ?await certified("list_my_attendance_classes",{target_term_id:activeTerm?.id||null})
+        :configuredClasses;
+      const classes=Array.isArray(permitted)?permitted:[];
+      if(!classes.length){alert("No eligible classes are assigned for report creation.");return;}
+      const selectedFilter=String(shellState().reportClassFilter||byId("reportClass")?.value||"");
+      const initialClass=classes.some(c=>String(c.id)===selectedFilter)?selectedFilter:(currentRole()==="class_teacher"&&classes.length===1?String(classes[0].id):"");
+      const html=[
+        '<form id="newReportForm" class="form-stack">',
+        '<label class="field"><span>Class</span><select name="class_id" required><option value="">Select a class</option>',
+        classes.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join(""),
+        '</select></label>',
+        '<label class="field"><span>Find student</span><input name="student_search" type="search" placeholder="Search by name or admission number" autocomplete="off"></label>',
+        '<label class="field"><span>Student</span><select name="enrollment_id" required disabled><option value="">Select a class first</option></select></label>',
+        '<p id="newReportStudentCount" class="muted" aria-live="polite">Select a class to load current students.</p>',
+        '<label class="field"><span>Term</span><select name="term_id" required disabled><option value="">Select a student first</option></select></label>',
+        '<p id="newReportMessage" class="form-message hidden" role="alert"></p></form>'
+      ].join("");
+      openModal("New Report Card","Choose a class, then a current student and matching academic term.",html,
+        '<button class="button ghost" id="newReportCancel" type="button">Cancel</button><button class="button primary" id="newReportOpen" type="button" disabled>Open report</button>');
+      const form=byId("newReportForm"),openButton=byId("newReportOpen");
+      byId("newReportCancel").onclick=closeModal;
+      let rows=[],requestToken=0;
+      const syncTerms=()=>{
+        const selected=form.elements.enrollment_id.selectedOptions[0];
+        const year=selected?.dataset.year||"";
+        const filtered=terms.filter(t=>year&&String(t.academic_year_id)===String(year));
+        form.elements.term_id.innerHTML='<option value="">Select term</option>'+
+          filtered.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>').join("");
+        const preferred=filtered.find(t=>t.is_active)||filtered[0];
+        if(preferred)form.elements.term_id.value=preferred.id;
+        form.elements.term_id.disabled=!filtered.length;
+        openButton.disabled=!selected?.value||!form.elements.term_id.value;
+      };
+      const renderStudents=(preferredId="")=>{
+        const search=String(form.elements.student_search.value||"").toLocaleLowerCase().trim();
+        const matching=rows.filter(st=>[st.first_name,st.middle_name,st.last_name,st.admission_no].join(" ").toLocaleLowerCase().includes(search));
+        const previous=preferredId||form.elements.enrollment_id.value;
+        form.elements.enrollment_id.innerHTML='<option value="">Select student</option>'+
+          matching.map(st=>'<option value="'+esc(st.enrollment_id)+'" data-year="'+esc(st.academic_year_id)+'">'+esc([st.first_name,st.middle_name,st.last_name].filter(Boolean).join(" "))+' • '+esc(st.admission_no||"")+'</option>').join("");
+        if(matching.some(st=>String(st.enrollment_id)===String(previous)))form.elements.enrollment_id.value=previous;
+        form.elements.enrollment_id.disabled=!matching.length;
+        byId("newReportStudentCount").textContent=matching.length+' of '+rows.length+' current student(s) in the selected class';
+        syncTerms();
+      };
+      const loadClass=async()=>{
+        const classId=form.elements.class_id.value,token=++requestToken;
+        rows=[];form.elements.enrollment_id.disabled=true;
+        form.elements.enrollment_id.innerHTML='<option value="">Loading students...</option>';
+        form.elements.term_id.disabled=true;openButton.disabled=true;
+        if(!classId){form.elements.enrollment_id.innerHTML='<option value="">Select a class first</option>';byId("newReportStudentCount").textContent="Select a class to load current students.";return;}
+        byId("newReportStudentCount").textContent="Loading current enrolments...";
+        try{
+          const data=await certifiedAllRows("search_students_v5",{search_text:"",target_class_id:classId,target_status:"active",archive_filter:"active"});
+          if(token!==requestToken||!form.isConnected)return;
+          const activeYear=reportConfig?.academic_years?.find(y=>y.is_active)?.id;
+          rows=(Array.isArray(data?.rows)?data.rows:[]).filter(st=>st.enrollment_id&&String(st.class_id)===String(classId)&&(!activeYear||String(st.academic_year_id)===String(activeYear)));
+          rows.sort((a,b)=>[a.first_name,a.last_name].join(" ").localeCompare([b.first_name,b.last_name].join(" ")));
+          renderStudents(preselectedEnrollmentId);
+        }catch(error){
+          if(token!==requestToken||!form.isConnected)return;
+          form.elements.enrollment_id.innerHTML='<option value="">Unable to load students</option>';
+          byId("newReportStudentCount").textContent=friendly(error);
+        }
+      };
+      form.elements.class_id.onchange=()=>{preselectedEnrollmentId="";loadClass();};
+      form.elements.student_search.oninput=()=>renderStudents();
+      form.elements.enrollment_id.onchange=syncTerms;
+      form.elements.term_id.onchange=()=>{openButton.disabled=!form.elements.enrollment_id.value||!form.elements.term_id.value;};
+      if(initialClass){form.elements.class_id.value=initialClass;await loadClass();}
+      openButton.onclick=async()=>{
+        if(!form.reportValidity())return;
+        const v=formValues(form);
+        closeModal();
+        await openReportEditor(null,v.enrollment_id,v.term_id);
+      };
     }catch(error){alert(friendly(error));}
   }
   async function exportReportList(){
