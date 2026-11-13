@@ -180,7 +180,9 @@ begin
     from public.attendance_counts_for_enrollment(enrollmentid,termid) ac;
   opened_count:=coalesce(opened_count,0);
   present_count:=coalesce(present_count,0);
-  canreportfields:=public.can_manage_class_report_fields_for_term(classid,termid);
+  canreportfields:=public.can_manage_class_report_fields_for_term(classid,termid)
+    or (rid is not null and public.has_approved_report_correction(rid)
+        and public.can_manage_class_report_fields_scope(classid,termid));
   if report_fields <> '{}'::jsonb and not canreportfields then
     raise exception 'Only the assigned Class Teacher may save report profile fields' using errcode='42501';
   end if;
