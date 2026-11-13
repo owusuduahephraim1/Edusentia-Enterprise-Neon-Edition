@@ -28,8 +28,8 @@ test("Calendar workspace is registered only for school administrators and has th
 test("Calendar is absent from non-administrator sidebar allowlists",()=>{
   const nav=shell.slice(shell.indexOf("const ROLE_NAV_IDS"),shell.indexOf("const LEGACY_LICENSE_FEATURE_FALLBACKS"));
   for(const role of ["principal","class_teacher","subject_teacher","parent_guardian","accountant","accounts_office","student"]){
-    const match=nav.match(new RegExp(role+":\\\\[([^\\\\]]+)\\\\]"));
-    assert.ok(match,"Missing role navigation: "+role);
-    assert.doesNotMatch(match[1],/"school_calendar"/,"Calendar should not be advertised to "+role);
+    const roleLine=nav.split("\n").find(line=>line.trim().startsWith(role+":"));
+    assert.ok(roleLine,"Missing role navigation: "+role);
+    assert.doesNotMatch(roleLine,/"school_calendar"/,"Calendar should not be advertised to "+role);
   }
 });
