@@ -249,31 +249,63 @@
       box.scrollIntoView({behavior:"smooth",block:"start"});
     }catch(error){box.innerHTML=pageError(error);}
   }
+
+  function suggestedReportComments(editor){
+    const subjects=Array.isArray(editor?.subjects)?editor.subjects:[];
+    const recorded=subjects.filter(s=>s.result_id&&Number.isFinite(Number(s.total_score)));
+    if(!recorded.length)return {teacher:"",principal:"",note:"Enter subject assessment results and save the report before generating academic comments."};
+    const average=recorded.reduce((n,s)=>n+Number(s.total_score),0)/recorded.length;
+    const displayAverage=average.toFixed(1);
+    const name=String(editor?.student?.first_name||"The learner").trim();
+    const evidence=recorded.length+" recorded subject result(s)";
+    const completeness=recorded.length<subjects.length?" Some subjects have no saved results, so this suggestion is provisional.":"";
+    const level=average>=80?"excellent":average>=70?"very good":average>=60?"good":average>=50?"developing": "below the expected threshold";
+    const guidance=average>=80?"Maintain this high standard through continued independent practice.":average>=70?"Continued practice can strengthen consistency across subjects.":average>=60?"Targeted revision should help consolidate the areas needing improvement.":average>=50?"A structured revision plan and additional support are recommended.":"Focused academic support and close monitoring of progress are recommended.";
+    return {
+      teacher:name+" has an average of "+displayAverage+"% across "+evidence+", reflecting "+level+" academic performance. "+guidance,
+      principal:"The recorded assessment results show an average of "+displayAverage+"% across "+evidence+". "+guidance,
+      note:"Suggested from saved scores in "+evidence+". Review and edit before saving."+completeness
+    };
+  }
   function renderReportEditor(editor){
     const box=byId("reportWorkspace");if(!box)return;
     const report=editor?.report||{},student=editor?.student||{},subjects=Array.isArray(editor?.subjects)?editor.subjects:[],publication=(editor?.publications||[]).find(p=>!p.revoked_at);
+    const canTeacherComment=Boolean(editor?.can_edit_teacher_comment);
+    const canPrincipalComment=Boolean(editor?.can_edit_principal_comment);
+    const suggestions=suggestedReportComments(editor);
+    const proposedTeacher=canTeacherComment&&!String(report.teacher_comment||"").trim()?suggestions.teacher:report.teacher_comment||"";
+    const proposedPrincipal=canPrincipalComment&&!String(report.head_comment||"").trim()?suggestions.principal:report.head_comment||"";
     const reportPhoto=student.photo_url?`<span class="staff-avatar-photo"><img id="reportStudentPhoto" alt="Student photograph"><span>${esc(reportStudentInitials(student))}</span></span>`:`<span class="avatar">${esc(reportStudentInitials(student))}</span>`;
     box.innerHTML=`<div class="panel-header"><div class="cell-main">${reportPhoto}<span class="cell-copy"><h3>${esc(student.full_name||"Student report")}</h3><p>${esc(student.admission_no||"")} • ${esc(student.class_name||"")} • ${esc(student.term_name||"")} • ${status(report.status||"draft")}</p></span></div><div class="page-actions">${report.id?'<button id="reportRefresh" class="button ghost small" type="button">Refresh</button><button id="reportPrintLatest" class="button outline small" type="button">Print / Save PDF</button>':""}${publication?'<button id="reportPdfDownload" class="button secondary small" type="button">Download official PDF</button>':""}${report.id&&report.status==="published"?'<button id="reportPdfUpload" class="button secondary small" type="button">Upload official PDF</button>':""}</div></div>
       <div class="panel-body"><form id="reportEditorForm" class="form-stack"><div class="form-grid">
-        <label class="field"><span>Days school opened</span><input name="days_school_opened" type="number" min="0" value="${esc(report.days_school_opened||0)}" ${editor.can_edit_fields?"":"disabled"}></label>
-        <label class="field"><span>Days present</span><input name="days_present" type="number" min="0" value="${esc(report.days_present||0)}" ${editor.can_edit_fields?"":"disabled"}></label>
+        <label class="field"><span>Days school opened</span><input name="days_school_opened" type="number" min="0" readonly aria-readonly="true" value="${esc(report.days_school_opened??0)}"></label>
+        <label class="field"><span>Days present</span><input name="days_present" type="number" min="0" readonly aria-readonly="true" value="${esc(report.days_present??0)}"></label><p class="muted form-grid full" style="grid-column:1/-1">Automatically calculated from saved class attendance for this student and term. Present and late count as days present; attendance cannot be edited through report cards.</p>
         <label class="field"><span>Attitude</span><input name="attitude" value="${esc(report.attitude||"")}" ${editor.can_edit_fields?"":"disabled"}></label>
         <label class="field"><span>Conduct</span><input name="conduct" value="${esc(report.conduct||"")}" ${editor.can_edit_fields?"":"disabled"}></label>
         <label class="field full"><span>Interest / talent</span><input name="interest" value="${esc(report.interest||"")}" ${editor.can_edit_fields?"":"disabled"}></label>
-        <label class="field full"><span>Class teacher comment</span><textarea name="teacher_comment" ${editor.can_edit_fields?"":"disabled"}>${esc(report.teacher_comment||"")}</textarea></label>
-        <label class="field full"><span>Principal comment</span><textarea name="head_comment" ${editor.can_edit_fields?"":"disabled"}>${esc(report.head_comment||"")}</textarea></label>
+        <label class="field full"><span>Class teacher comment ${canTeacherComment?\'<button id="reportSuggestTeacher" type="button" class="button ghost small">Use academic suggestion</button>\':""}</span><textarea name="teacher_comment" ${canTeacherComment?"":"disabled"}>${esc(proposedTeacher)}</textarea></label>
+        <label class="field full"><span>Principal comment ${canPrincipalComment?\'<button id="reportSuggestPrincipal" type="button" class="button ghost small">Use academic suggestion</button>\':""}</span><textarea name="head_comment" ${canPrincipalComment?"":"disabled"}>${esc(proposedPrincipal)}</textarea></label><p class="muted" style="grid-column:1/-1">${esc(suggestions.note)} Principal comments must be saved separately before approval.</p>
       </div>
       <div class="section-title"><h4>Subject results</h4><span class="chip">${subjects.length} subjects</span></div>
       <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Components</th><th>Total</th><th>Grade</th><th>Initials</th></tr></thead><tbody>${subjects.map((s,i)=>`<tr><td><strong>${esc(s.subject_name||"")}</strong><br><small>${esc(s.subject_code||"")}</small></td><td>${(s.components||[]).map(c=>`<label class="chip">${esc(c.code||c.name)} <input class="score-input" data-report-subject="${i}" data-component-id="${esc(c.component_id)}" type="number" min="0" max="${esc(c.maximum_score)}" step=".01" value="${esc(c.raw_score||0)}" ${s.can_score?"":"disabled"}></label>`).join("")}</td><td>${esc(s.total_score||0)}</td><td>${esc(s.grade||"—")}</td><td><input class="score-input" data-report-initials="${i}" value="${esc(s.teacher_initials||"")}" ${s.can_score?"":"disabled"}></td></tr>`).join("")}</tbody></table></div>
-      <div class="page-actions">${editor.can_edit?'<button id="reportSaveAdvanced" class="button primary" type="submit">Save report</button>':""}${(editor.allowed_transitions||[]).map(t=>`<button class="button secondary report-transition" type="button" data-transition="${esc(t)}">${esc(String(t).replaceAll("_"," "))}</button>`).join("")}${report.id&&["draft","returned"].includes(report.status||"")?'<button id="reportDeleteDraft" class="button danger" type="button">Delete draft</button>':""}</div><p id="reportEditorMessage" class="form-message hidden" role="alert"></p></form></div>
+      <div class="page-actions">${editor.can_edit?'<button id="reportSaveAdvanced" class="button primary" type="submit">Save report</button>':""}${canPrincipalComment?'<button id="reportSavePrincipalComment" class="button primary" type="button">Save principal comment</button>':""}${(editor.allowed_transitions||[]).map(t=>`<button class="button secondary report-transition" type="button" data-transition="${esc(t)}">${esc(String(t).replaceAll("_"," "))}</button>`).join("")}${report.id&&["draft","returned"].includes(report.status||"")?'<button id="reportDeleteDraft" class="button danger" type="button">Delete draft</button>':""}</div><p id="reportEditorMessage" class="form-message hidden" role="alert"></p></form></div>
       ${report.id?`<section class="panel pad"><h4>Workflow history</h4><div class="timeline">${(editor.workflow||[]).slice(0,10).map(w=>`<div class="timeline-item"><span class="timeline-dot"></span><div class="timeline-copy"><strong>${esc(w.to_status||w.action||"Update")}</strong><small>${formatDateTime(w.created_at)}${w.comment?` • ${esc(w.comment)}`:""}</small></div></div>`).join("")||'<p class="muted">No workflow events.</p>'}</div></section>`:""}`;
     const collect=()=>{
       const v=formValues(byId("reportEditorForm"));
       const scored=subjects.filter(s=>s.can_score).map(s=>({subject_id:s.subject_id,scheme_id:s.scheme_id,teacher_initials:byId("reportWorkspace").querySelector(`[data-report-initials="${subjects.indexOf(s)}"]`)?.value?.trim()||"",components:(s.components||[]).map(c=>({component_id:c.component_id,raw_score:Number(byId("reportWorkspace").querySelector(`[data-report-subject="${subjects.indexOf(s)}"][data-component-id="${c.component_id}"]`)?.value||0)}))}));
-      return {report_id:report.id||null,enrollment_id:report.enrollment_id,term_id:report.term_id,fields:editor.can_edit_fields?{days_school_opened:Number(v.days_school_opened||0),days_present:Number(v.days_present||0),attitude:v.attitude||"",conduct:v.conduct||"",interest:v.interest||"",teacher_comment:v.teacher_comment||"",head_comment:v.head_comment||"",promoted_to_class_id:report.promoted_to_class_id||null}:{},subjects:scored,reason:"Report assessment updated from Neon testing workspace"};
+      return {report_id:report.id||null,enrollment_id:report.enrollment_id,term_id:report.term_id,fields:editor.can_edit_fields?{attitude:v.attitude||"",conduct:v.conduct||"",interest:v.interest||"",teacher_comment:canTeacherComment?v.teacher_comment||"":report.teacher_comment||"",promoted_to_class_id:report.promoted_to_class_id||null}:{},subjects:scored,reason:"Report assessment updated from Neon testing workspace"};
     };
     byId("reportEditorForm").onsubmit=async e=>{e.preventDefault();const button=byId("reportSaveAdvanced");if(button)button.disabled=true;try{const saved=await certified("save_report_card",{payload:collect(),expected_version:Number(report.version||0)});renderReportEditor(saved);}catch(error){showMessage("reportEditorMessage",friendly(error));}finally{if(button)button.disabled=false;}};
-    box.querySelectorAll(".report-transition").forEach(button=>button.onclick=async()=>{button.disabled=true;try{const updated=await certified("transition_report_status",{target_report_id:report.id,target_status:button.dataset.transition,comment_text:"Workflow transition from Neon testing workspace",expected_version:Number(report.version||0)});renderReportEditor(updated);}catch(error){showMessage("reportEditorMessage",friendly(error));}finally{button.disabled=false;}});
+    byId("reportSuggestTeacher")?.addEventListener("click",()=>{if(suggestions.teacher)byId("reportEditorForm").elements.teacher_comment.value=suggestions.teacher;else showMessage("reportEditorMessage",suggestions.note);});
+    byId("reportSuggestPrincipal")?.addEventListener("click",()=>{if(suggestions.principal)byId("reportEditorForm").elements.head_comment.value=suggestions.principal;else showMessage("reportEditorMessage",suggestions.note);});
+    byId("reportSavePrincipalComment")?.addEventListener("click",async()=>{
+      const button=byId("reportSavePrincipalComment");button.disabled=true;
+      try{
+        const updated=await certified("save_report_comments",{target_report_id:report.id,head_comment_text:byId("reportEditorForm").elements.head_comment.value,expected_version:Number(report.version||0)});
+        renderReportEditor(updated);
+      }catch(error){showMessage("reportEditorMessage",friendly(error));}finally{if(button.isConnected)button.disabled=false;}
+    });
+    box.querySelectorAll(".report-transition").forEach(button=>button.onclick=async()=>{button.disabled=true;try{if(button.dataset.transition==="approved"&&canPrincipalComment&&byId("reportEditorForm").elements.head_comment.value!==String(report.head_comment||""))throw new Error("Save the principal comment before approving the report.");const updated=await certified("transition_report_status",{target_report_id:report.id,target_status:button.dataset.transition,comment_text:"Report workflow transition",expected_version:Number(report.version||0)});renderReportEditor(updated);}catch(error){showMessage("reportEditorMessage",friendly(error));}finally{button.disabled=false;}});
     hydrateReportStudentPhoto(student);
     byId("reportRefresh")?.addEventListener("click",()=>openReportEditor(report.id,null,null));
     byId("reportPrintLatest")?.addEventListener("click",()=>openPrintableReport(editor));
