@@ -161,6 +161,11 @@
       if(a.historyLoadId!==loadId||!root.isConnected)return;
       a.weekStart=String(data?.week_start||a.weekStart||"");
       const weeks=arr(data?.weeks),days=arr(data?.days),students=arr(data?.students);
+      const selectedWeek=weeks.find(w=>String(w.week_start)===String(a.weekStart));
+      // The weekly API returns the range in "weeks" rather than on the top-level
+      // object. Prefer the term-clipped range (important for the first and last week).
+      const displayedWeekStart=selectedWeek?.start_date||days[0]?.date||data?.week_start||"";
+      const displayedWeekEnd=selectedWeek?.end_date||days[days.length-1]?.date||data?.week_end||"";
       const weekOptions=weeks.map(w=>'<option value="'+esc(w.week_start)+'" '+(String(w.week_start)===String(a.weekStart)?"selected":"")+'>'+
         'Week '+Number(w.week_number||0)+' · '+esc(formatDate(w.start_date))+' – '+esc(formatDate(w.end_date))+'</option>').join("");
       const daysMarkup=days.map(day=>{
@@ -178,10 +183,15 @@
       }).join("");
       const studentsMarkup=students.length?'<div class="table-wrap attendance-week-students"><table><thead><tr><th>Student</th><th>Days present</th><th>Absent</th><th>Late</th><th>Excused</th></tr></thead><tbody>'+
         students.map(st=>'<tr><td><strong>'+esc(st.student_name||"Student")+'</strong><small class="muted">'+esc(st.admission_no||"")+'</small></td>'+
-          '<td>'+Number(st.days_present||0)+' / '+Number(data?.recorded_days||0)+'</td>'+
-          '<td>'+Number(st.absent||0)+'</td><td>'+Number(st.late||0)+'</td><td>'+Number(st.excused||0)+'</td></tr>').join("")+'</tbody></table></div>':
+          '<td><span class="attendance-week-ratio" aria-label="'+Number(st.days_present||0)+' of '+Number(data?.recorded_days||0)+' recorded school days">'+
+            '<span class="attendance-week-value attendance-week-value--present">'+Number(st.days_present||0)+'</span>'+
+            '<span class="attendance-week-ratio-divider" aria-hidden="true">/</span>'+
+            '<span class="attendance-week-value attendance-week-value--recorded">'+Number(data?.recorded_days||0)+'</span></span></td>'+
+          '<td><span class="attendance-week-value attendance-week-value--absent">'+Number(st.absent||0)+'</span></td>'+
+          '<td><span class="attendance-week-value attendance-week-value--late">'+Number(st.late||0)+'</span></td>'+
+          '<td><span class="attendance-week-value attendance-week-value--excused">'+Number(st.excused||0)+'</span></td></tr>').join("")+'</tbody></table></div>':
         '<p class="muted">No active students are enrolled in this class for this term.</p>';
-      root.innerHTML='<div class="panel-header attendance-week-header"><div><h3>Weekly Attendance History</h3><p>Week '+Number(data?.week_number||0)+' · '+esc(formatDate(data?.start_date))+' to '+esc(formatDate(data?.end_date))+'</p></div>'+
+      root.innerHTML='<div class="panel-header attendance-week-header"><div><h3>Weekly Attendance History</h3><p>Week '+Number(data?.week_number||0)+' · '+esc(formatDate(displayedWeekStart))+' to '+esc(formatDate(displayedWeekEnd))+'</p></div>'+
         '<label class="field attendance-week-picker"><span>Attendance week</span><select id="attendanceWeekSelect" aria-label="Select attendance week">'+weekOptions+'</select></label></div>'+
         '<div class="panel-body attendance-week-body"><div class="attendance-week-totals">'+
         '<div><span>Scheduled teaching days</span><strong>'+Number(data?.scheduled_days||0)+'</strong></div>'+

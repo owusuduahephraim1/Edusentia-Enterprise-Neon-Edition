@@ -1209,6 +1209,28 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .attendance-week-day[data-week-state="weekend"] span,.attendance-week-day[data-week-state="upcoming"] span{background:#e2e8f0;color:#475569}
 .attendance-week-day:disabled{cursor:default;opacity:1}
 .attendance-week-students td small{display:block;margin-top:4px;font-size:11px}
+
+/* Clear semantic numeric values in weekly attendance history.
+   Always retain the visible column labels and ratio slash for accessibility. */
+.attendance-week-students .attendance-week-ratio{
+  display:inline-flex;
+  align-items:baseline;
+  gap:5px;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.attendance-week-students .attendance-week-value{
+  font-weight:800;
+  font-size:14px;
+  font-variant-numeric:tabular-nums;
+}
+.attendance-week-students .attendance-week-value--present{color:#1d4ed8}
+.attendance-week-students .attendance-week-value--recorded{color:#15803d}
+.attendance-week-students .attendance-week-value--absent{color:#b91c1c}
+.attendance-week-students .attendance-week-value--late{color:#a16207}
+.attendance-week-students .attendance-week-value--excused{color:#7e22ce}
+.attendance-week-students .attendance-week-ratio-divider{color:#64748b;font-weight:600}
+
 .attendance-week-footnote{font-size:12px;margin:0}
 .attendance-closure-notice{border:1px solid #d8b4fe;background:#faf5ff;color:#5b2580;padding:20px;border-radius:14px;display:grid;gap:8px}
 .attendance-closure-notice strong{font-size:17px}
