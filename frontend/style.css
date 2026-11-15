@@ -1192,6 +1192,21 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .attendance-week-totals>div{display:grid;gap:6px;padding:13px 16px;border-radius:12px;background:#f2f6fc;border:1px solid #e1e8f2}
 .attendance-week-totals span{font-size:12px;color:#526780;font-weight:650}
 .attendance-week-totals strong{font-size:24px;color:#12284e;font-variant-numeric:tabular-nums}
+
+/* Meaningful weekly summary categories. Labels and values use the same readable tone. */
+.attendance-week-totals > .attendance-week-total--scheduled{background:#eff6ff;border-color:#bfdbfe}
+.attendance-week-totals > .attendance-week-total--scheduled span,
+.attendance-week-totals > .attendance-week-total--scheduled strong{color:#1d4ed8}
+.attendance-week-totals > .attendance-week-total--recorded{background:#f0fdf4;border-color:#86efac}
+.attendance-week-totals > .attendance-week-total--recorded span,
+.attendance-week-totals > .attendance-week-total--recorded strong{color:#15803d}
+.attendance-week-totals > .attendance-week-total--closed{background:#faf5ff;border-color:#d8b4fe}
+.attendance-week-totals > .attendance-week-total--closed span,
+.attendance-week-totals > .attendance-week-total--closed strong{color:#7e22ce}
+.attendance-week-totals > .attendance-week-total--unrecorded{background:#fffbeb;border-color:#fcd34d}
+.attendance-week-totals > .attendance-week-total--unrecorded span,
+.attendance-week-totals > .attendance-week-total--unrecorded strong{color:#a16207}
+
 .attendance-week-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
 .attendance-week-day{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-height:104px;padding:12px 10px;border-radius:12px;border:1px solid #d7e2ee;background:#fff;text-align:left;color:#173354;cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease}
 .attendance-week-day strong{font-size:12px;line-height:1.4}

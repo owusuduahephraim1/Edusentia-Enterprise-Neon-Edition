@@ -194,10 +194,10 @@
       root.innerHTML='<div class="panel-header attendance-week-header"><div><h3>Weekly Attendance History</h3><p>Week '+Number(data?.week_number||0)+' · '+esc(formatDate(displayedWeekStart))+' to '+esc(formatDate(displayedWeekEnd))+'</p></div>'+
         '<label class="field attendance-week-picker"><span>Attendance week</span><select id="attendanceWeekSelect" aria-label="Select attendance week">'+weekOptions+'</select></label></div>'+
         '<div class="panel-body attendance-week-body"><div class="attendance-week-totals">'+
-        '<div><span>Scheduled teaching days</span><strong>'+Number(data?.scheduled_days||0)+'</strong></div>'+
-        '<div><span>Days recorded</span><strong>'+Number(data?.recorded_days||0)+'</strong></div>'+
-        '<div><span>School closure days</span><strong>'+Number(data?.closed_days||0)+'</strong></div>'+
-        '<div><span>Unrecorded past days</span><strong>'+Number(data?.unrecorded_days||0)+'</strong></div></div>'+
+        '<div class="attendance-week-total attendance-week-total--scheduled"><span>Scheduled teaching days</span><strong>'+Number(data?.scheduled_days||0)+'</strong></div>'+
+        '<div class="attendance-week-total attendance-week-total--recorded"><span>Days recorded</span><strong>'+Number(data?.recorded_days||0)+'</strong></div>'+
+        '<div class="attendance-week-total attendance-week-total--closed"><span>School closure days</span><strong>'+Number(data?.closed_days||0)+'</strong></div>'+
+        '<div class="attendance-week-total attendance-week-total--unrecorded"><span>Unrecorded past days</span><strong>'+Number(data?.unrecorded_days||0)+'</strong></div></div>'+
         '<div class="attendance-week-days">'+daysMarkup+'</div>'+
         '<div class="section-title"><h4>Student attendance for selected week</h4></div>'+studentsMarkup+
         '<p class="muted attendance-week-footnote">Scheduled days exclude weekends and school holidays. Unrecorded days are not absences. Attendance totals use saved daily registers only.</p></div>';
