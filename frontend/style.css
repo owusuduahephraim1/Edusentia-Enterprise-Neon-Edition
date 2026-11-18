@@ -1247,6 +1247,27 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .attendance-week-students .attendance-week-ratio-divider{color:#64748b;font-weight:600}
 
 .attendance-week-footnote{font-size:12px;margin:0}
+
+/* Official attendance PDF entry points and Principal's review navigator. */
+.attendance-week-export-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.attendance-week-export-actions .button{white-space:normal;min-height:34px}
+.attendance-navigator-controls{align-items:end}
+.attendance-navigator-info{margin:18px 0;padding:15px 17px;background:#f4f7fc;border:1px solid #dee7f5;border-radius:12px;color:#173354}
+.attendance-navigator-info strong{display:block;font-size:13px;font-weight:750}
+.attendance-navigator-info p{font-size:12px;line-height:1.55;margin:7px 0 0}
+.attendance-navigator-info p.muted{color:#526780}
+#navigatorMessage[data-kind="error"]{color:#b91c1c;font-weight:650}
+#navigatorMessage[data-kind="success"]{color:#15803d;font-weight:650}
+@media(max-width:800px){
+  .attendance-week-header{align-items:stretch}
+  .attendance-week-export-actions{flex-basis:100%;justify-content:flex-start}
+  .attendance-week-export-actions .button{flex:1 1 160px}
+  .attendance-navigator-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  .attendance-navigator-controls{grid-template-columns:minmax(0,1fr)}
+}
+
 .attendance-closure-notice{border:1px solid #d8b4fe;background:#faf5ff;color:#5b2580;padding:20px;border-radius:14px;display:grid;gap:8px}
 .attendance-closure-notice strong{font-size:17px}
 .attendance-closure-notice p{margin:0;font-weight:650}
