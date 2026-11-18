@@ -171,6 +171,16 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const weekStart=dateArg(args,"target_week_start");
       return singleResult(sql,ctx,txn=>txn`select public.get_attendance_weekly_history(${termId}::uuid,${classId}::uuid,${weekStart}::date) result`);
     }
+    case "list_attendance_export_classes":{
+      const termId=uuidArg(args,"target_term_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.list_attendance_export_classes(${termId}::uuid) result`);
+    }
+    case "get_attendance_register_export":{
+      const termId=uuidArg(args,"target_term_id",true);
+      const classId=uuidArg(args,"target_class_id",true);
+      const throughWeek=dateArg(args,"target_through_week_start");
+      return singleResult(sql,ctx,txn=>txn`select public.get_attendance_register_export(${termId}::uuid,${classId}::uuid,${throughWeek}::date) result`);
+    }
     case "list_school_closures":{
       const termId=uuidArg(args,"target_term_id",true);
       return singleResult(sql,ctx,txn=>txn`select public.list_school_closures(${termId}::uuid) result`);
