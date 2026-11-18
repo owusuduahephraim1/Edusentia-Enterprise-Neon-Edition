@@ -8,6 +8,8 @@ const EXPLICIT_CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_academic_configuration",
   "get_academic_calendar_context",
   "get_attendance_weekly_history",
+  "list_attendance_export_classes",
+  "get_attendance_register_export",
   "list_school_closures",
   "save_school_closure",
   "archive_school_closure",
