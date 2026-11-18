@@ -120,7 +120,9 @@
     }
     function rate(student,through){
       const start=String(data.term_start),c=stats(student,start,through);
-      const eligible=countDays(start,through,"recorded")-c.e;
+      // A missing student mark must never lower the attendance percentage.
+      // Only explicitly marked present/late or absent days enter the denominator.
+      const eligible=c.p+c.a;
       return eligible>0?Math.min(100,Math.round(c.p*1000/eligible)/10).toFixed(1)+"%":"N/A";
     }
     return {weeks:selected,students:sorted,calendar,stats,countDays,symbol,rate,from,through};
@@ -148,7 +150,7 @@
       drawText(p,shortText([school.motto,school.address,school.phone].filter(Boolean).join("  |  "),113),807,457,7,COLORS.muted,false,"right");
       line(p,34,42,807,42,COLORS.line,.7);
       drawText(p,"I Present  |  0 Absent  |  I(L) Late + present  |  E Excused  |  H Closed  |  U Unrecorded  |  F Future",34,30,7,COLORS.muted);
-      drawText(p,"W = weekly; C = cumulative from term opening; Rate excludes excused days.",34,19,6.8,COLORS.muted);
+      drawText(p,"W = weekly; C = cumulative from term opening; Rate uses marked present/absent only.",34,19,6.8,COLORS.muted);
       return p;
     }
     function sectionHeader(p,title,subtitle){
