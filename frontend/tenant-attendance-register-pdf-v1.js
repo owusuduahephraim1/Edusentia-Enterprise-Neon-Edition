@@ -180,9 +180,11 @@
           nameLines.forEach((part,j)=>drawText(p,part,x+5,y-height/2+((nameLines.length-1)/2-j)*9+1,7.5,COLORS.ink,true,"left",widths[i]-9));
         }else{
           const symbolValue=String(value??"");
-          const tone=symbolValue==="0"?COLORS.red:symbolValue==="I"||symbolValue==="I(L)"?COLORS.green:
-            symbolValue==="E"||symbolValue==="H"?COLORS.purple:symbolValue==="U"?COLORS.amber:
-            [8,12].includes(i)?COLORS.blue:COLORS.ink;
+          const tone=i>=3&&i<=7?(symbolValue==="0"?COLORS.red:
+            symbolValue==="I"?COLORS.green:symbolValue==="I(L)"?COLORS.amber:
+            symbolValue==="E"||symbolValue==="H"?COLORS.purple:symbolValue==="U"?COLORS.amber:COLORS.muted):
+            i===8||i===12?COLORS.blue:i===9||i===13?COLORS.red:
+            i===10||i===14?COLORS.amber:i===11||i===15?COLORS.purple:COLORS.ink;
           drawText(p,symbolValue,x+widths[i]/2,y-height/2-2.5,7.6,tone,i>7,"center",widths[i]-4);
         }
         x+=widths[i];
@@ -192,7 +194,13 @@
     }
     function renderWeekGroup(week,gender){
       const group=index.students.filter(st=>(classes.includes(st.gender)?st.gender:"review")===gender);
-      if(!group.length)return;
+      if(!group.length&&gender==="review")return;
+      if(!group.length){
+        const p=newPage(groupLabels[gender]+" - WEEKLY ATTENDANCE",fmtWeek(week));
+        sectionHeader(p,groupLabels[gender]+" ATTENDANCE REGISTER",fmtWeek(week));
+        drawText(p,"No students registered in this category.",35,395,10,COLORS.muted);
+        return;
+      }
       let offset=0,p=null,y=0;
       while(offset<group.length){
         p=newPage(groupLabels[gender]+" - WEEKLY ATTENDANCE",fmtWeek(week));
@@ -217,7 +225,13 @@
     }
     function summaryPage(gender,lastWeek){
       const group=index.students.filter(st=>(classes.includes(st.gender)?st.gender:"review")===gender);
-      if(!group.length)return;
+      if(!group.length&&gender==="review")return;
+      if(!group.length){
+        const p=newPage(groupLabels[gender]+" - CUMULATIVE SUMMARY","Cumulative totals from term opening through "+niceDate(lastWeek.end_date));
+        sectionHeader(p,groupLabels[gender]+" - CUMULATIVE ATTENDANCE","Through Week "+lastWeek.week_number);
+        drawText(p,"No students registered in this category.",35,397,10,COLORS.muted);
+        return;
+      }
       let n=0,y=0,p=null;
       const labels=["#","Student name","Admission number","Present","Absent","Late","Excused","Days recorded","Rate"];
       const dims=[26,246,122,66,64,52,62,74,60];
@@ -306,7 +320,10 @@
   }
   async function schoolLogo(){
     try{
-      const url=await window.EdusentiaShell?.resolveTenantLogoSource?.();
+      // Prefer the already authenticated school branding image instead of re-fetching
+      // and potentially revoking the sidebar's current R2 object URL.
+      const currentLogo=document.getElementById("brandLogo");
+      const url=currentLogo?.src||await window.EdusentiaShell?.resolveTenantLogoSource?.();
       if(!url)return null;
       const img=new Image();
       img.crossOrigin="anonymous";
