@@ -192,7 +192,10 @@
           '<td><span class="attendance-week-value attendance-week-value--excused">'+Number(st.excused||0)+'</span></td></tr>').join("")+'</tbody></table></div>':
         '<p class="muted">No active students are enrolled in this class for this term.</p>';
       root.innerHTML='<div class="panel-header attendance-week-header"><div><h3>Weekly Attendance History</h3><p>Week '+Number(data?.week_number||0)+' · '+esc(formatDate(displayedWeekStart))+' to '+esc(formatDate(displayedWeekEnd))+'</p></div>'+
-        '<label class="field attendance-week-picker"><span>Attendance week</span><select id="attendanceWeekSelect" aria-label="Select attendance week">'+weekOptions+'</select></label></div>'+
+        '<label class="field attendance-week-picker"><span>Attendance week</span><select id="attendanceWeekSelect" aria-label="Select attendance week">'+weekOptions+'</select></label>'+
+        '<div class="button-row attendance-week-export-actions">'+
+        '<button class="button secondary small" id="attendanceWeekPdf" type="button">Download selected week PDF</button>'+
+        '<button class="button outline small" id="attendanceTermPdf" type="button">Download term-to-date PDF</button></div></div>'+
         '<div class="panel-body attendance-week-body"><div class="attendance-week-totals">'+
         '<div class="attendance-week-total attendance-week-total--scheduled"><span>Scheduled teaching days</span><strong>'+Number(data?.scheduled_days||0)+'</strong></div>'+
         '<div class="attendance-week-total attendance-week-total--recorded"><span>Days recorded</span><strong>'+Number(data?.recorded_days||0)+'</strong></div>'+
@@ -202,6 +205,26 @@
         '<div class="section-title"><h4>Student attendance for selected week</h4></div>'+studentsMarkup+
         '<p class="muted attendance-week-footnote">Scheduled days exclude weekends and school holidays. Unrecorded days are not absences. Attendance totals use saved daily registers only.</p></div>';
       byId("attendanceWeekSelect")?.addEventListener("change",()=>{a.weekStart=byId("attendanceWeekSelect").value;loadWeeklyAttendanceHistory();});
+      async function exportAttendancePdf(allWeeks){
+        const button=byId(allWeeks?"attendanceTermPdf":"attendanceWeekPdf");
+        if(!button)return;
+        const original=button.textContent;button.disabled=true;button.textContent="Preparing PDF...";
+        try{
+          const exportData=await certified("get_attendance_register_export",{
+            target_term_id:a.termId,target_class_id:a.classId,
+            target_through_week_start:allWeeks?null:a.weekStart
+          });
+          const available=arr(exportData?.weeks),from=allWeeks?available[0]?.week_start:a.weekStart;
+          const to=allWeeks?available[available.length-1]?.week_start:a.weekStart;
+          if(!from||!to)throw new Error("Attendance weeks are not available for this class.");
+          const name=await window.EdusentiaAttendancePdf.download(exportData,{fromWeek:from,toWeek:to});
+          notify("Attendance PDF downloaded",name);
+        }catch(error){notify("Attendance PDF could not be generated",friendly(error),"error");}
+        finally{if(button.isConnected){button.disabled=false;button.textContent=original;}}
+      }
+      byId("attendanceWeekPdf")?.addEventListener("click",()=>exportAttendancePdf(false));
+      byId("attendanceTermPdf")?.addEventListener("click",()=>exportAttendancePdf(true));
+
       root.querySelectorAll("[data-week-day]").forEach(btn=>btn.addEventListener("click",()=>{
         a.date=btn.dataset.weekDay;
         if(byId("attendanceDate"))byId("attendanceDate").value=a.date;

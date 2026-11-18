@@ -8,6 +8,8 @@ const EXPLICIT_CERTIFIED_RPC_OPERATIONS = Object.freeze([
   "get_academic_configuration",
   "get_academic_calendar_context",
   "get_attendance_weekly_history",
+  "list_attendance_export_classes",
+  "get_attendance_register_export",
   "list_school_closures",
   "save_school_closure",
   "archive_school_closure",
@@ -168,6 +170,16 @@ export async function invokeCertifiedRpc(sql:Sql,ctx:SessionContext,operation:st
       const classId=uuidArg(args,"target_class_id",true);
       const weekStart=dateArg(args,"target_week_start");
       return singleResult(sql,ctx,txn=>txn`select public.get_attendance_weekly_history(${termId}::uuid,${classId}::uuid,${weekStart}::date) result`);
+    }
+    case "list_attendance_export_classes":{
+      const termId=uuidArg(args,"target_term_id",true);
+      return singleResult(sql,ctx,txn=>txn`select public.list_attendance_export_classes(${termId}::uuid) result`);
+    }
+    case "get_attendance_register_export":{
+      const termId=uuidArg(args,"target_term_id",true);
+      const classId=uuidArg(args,"target_class_id",true);
+      const throughWeek=dateArg(args,"target_through_week_start");
+      return singleResult(sql,ctx,txn=>txn`select public.get_attendance_register_export(${termId}::uuid,${classId}::uuid,${throughWeek}::date) result`);
     }
     case "list_school_closures":{
       const termId=uuidArg(args,"target_term_id",true);
