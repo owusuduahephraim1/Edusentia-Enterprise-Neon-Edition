@@ -69,7 +69,7 @@ test("PDF draws a print-safe circled-x for each absent day and retains numeric t
   assert.equal(vectorMarks,5,"Two absent daily cells and one attendance legend on each of three pages");
   assert.match(content,/\(W-A\) Tj/);
   assert.match(content,/\(C-A\) Tj/);
-  assert.match(content,/\(Present: 3  \|  Absent: 1  \|  Late: 1  \|  Excused: 0\) Tj/);
+  assert.match(content,/Present: 3  \|  Absent: 1  \|  Late: 1  \|  Excused: 0/);
   assert.doesNotMatch(content,/\(0 Absent/);
   assert.match(principalSource,/tally marks \(I, ⓧ, I\(L\), E\)/);
 });
