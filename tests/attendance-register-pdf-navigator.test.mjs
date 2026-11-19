@@ -124,6 +124,18 @@ test("large classes continue safely onto additional pages without dropping atten
   assert.match(content,/Boy Learner Number 42/);
   assert.match(content,/Girl Learner Number 43/);
   assert.match(content,/Girl Learner Number 88/);
+  for(const student of students){
+    assert.equal(content.split("("+student.name+")").length-1,2,
+      "Every student must appear once in the weekly register and once in cumulative totals: "+student.name);
+  }
+  const streams=[...content.matchAll(/\/Length \d+ >>\nstream\n([\s\S]*?)\nendstream/g)].map(match=>match[1]);
+  assert.equal(streams.length,pageCount);
+  streams.forEach((page,i)=>{
+    assert.match(page,/NIPE INTERNATIONAL SCHOOL/);
+    assert.match(page,/MAIN CLASS TEACHER/);
+    assert.ok(page.includes("Page "+(i+1)+" of "+pageCount));
+    assert.match(page,/Generated:/);
+  });
   assert.match(content,/BOYS ATTENDANCE REGISTER/);
   assert.match(content,/GIRLS ATTENDANCE REGISTER/);
   assert.match(content,/BOYS - CUMULATIVE ATTENDANCE/);
