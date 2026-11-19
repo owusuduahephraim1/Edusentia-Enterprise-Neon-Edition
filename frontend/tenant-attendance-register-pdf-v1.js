@@ -145,7 +145,7 @@
       pages.push(p);
       rect(p,28,493,786,80,pColor);
       if(logo)p.cmd.push("q 56 0 0 56 39 506 cm /Logo Do Q");
-      drawText(p,schoolName,421,549,16,"#ffffff",true,"center",logo?475:670);
+      drawText(p,String(schoolName).toUpperCase(),421,549,16,"#ffffff",true,"center",logo?475:670);
       drawText(p,"STUDENTS REGISTER ATTENDANCE SUMMARY DETAILS",421,527,11.6,"#ffffff",true,"center",690);
       drawText(p,(className+"  |  "+(data.term||"Term")).toUpperCase(),421,509,10,"#ffffff",true,"center",670);
       rect(p,34,449,774,37,COLORS.pale);
