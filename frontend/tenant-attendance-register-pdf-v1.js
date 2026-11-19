@@ -51,6 +51,20 @@
   function line(p,x1,y1,x2,y2,color=COLORS.line,thick=.5){
     p.cmd.push(rgb(color)+" RG "+thick+" w "+x1+" "+y1.toFixed(2)+" m "+x2+" "+y2.toFixed(2)+" l S");
   }
+  // Draw an absence mark as paths because Helvetica/WinAnsi cannot encode U+24E7 (ⓧ).
+  // Stroked vector graphics stay crisp in PDF viewers and on school printers.
+  function drawCircledAbsent(p,x,y,r=4.3,color=COLORS.red){
+    const k=r*0.55228475,inner=r*0.52,f=n=>n.toFixed(2);
+    p.cmd.push("% Attendance absent circled-x (vector)");
+    p.cmd.push(rgb(color)+" RG 0.9 w "+
+      f(x+r)+" "+f(y)+" m "+
+      f(x+r)+" "+f(y+k)+" "+f(x+k)+" "+f(y+r)+" "+f(x)+" "+f(y+r)+" c "+
+      f(x-k)+" "+f(y+r)+" "+f(x-r)+" "+f(y+k)+" "+f(x-r)+" "+f(y)+" c "+
+      f(x-r)+" "+f(y-k)+" "+f(x-k)+" "+f(y-r)+" "+f(x)+" "+f(y-r)+" c "+
+      f(x+k)+" "+f(y-r)+" "+f(x+r)+" "+f(y-k)+" "+f(x+r)+" "+f(y)+" c S");
+    line(p,x-inner,y-inner,x+inner,y+inner,color,.9);
+    line(p,x-inner,y+inner,x+inner,y-inner,color,.9);
+  }
   function cleanDate(value){return /^\d{4}-\d{2}-\d{2}$/.test(String(value||""))?String(value):"";}
   function niceDate(value){
     const d=cleanDate(value);
@@ -121,7 +135,7 @@
       if(state==="upcoming")return "F";
       if(state!=="recorded")return "U";
       const mark=marks.get(String(student.enrollment_id)+"|"+day);
-      return ({present:"I",absent:"0",late:"I(L)",excused:"E"})[mark]||"U";
+      return ({present:"I",absent:"ⓧ",late:"I(L)",excused:"E"})[mark]||"U";
     }
     function rate(student,through){
       const start=String(data.term_start),c=stats(student,start,through);
@@ -154,7 +168,12 @@
       drawText(p,range,44,457,8,COLORS.muted);
       drawText(p,shortText([school.motto,school.address,school.phone].filter(Boolean).join("  |  "),113),807,457,7,COLORS.muted,false,"right");
       line(p,34,42,807,42,COLORS.line,.7);
-      drawText(p,"I Present  |  0 Absent  |  I(L) Late + present  |  E Excused  |  H Closed  |  U Unrecorded  |  F Future",34,30,7,COLORS.muted);
+      const legendPrefix="I Present  |";
+      drawText(p,legendPrefix,34,30,7,COLORS.muted);
+      const absentLegendX=34+textWidth(legendPrefix,7)+9;
+      drawCircledAbsent(p,absentLegendX,32.5,3.35,COLORS.red);
+      drawText(p," Absent  |  I(L) Late + present  |  E Excused  |  H Closed  |  U Unrecorded  |  F Future",
+        absentLegendX+5.7,30,7,COLORS.muted);
       drawText(p,"W = weekly; C = cumulative from term opening; Rate uses marked present/absent only.",34,19,6.8,COLORS.muted);
       return p;
     }
@@ -187,12 +206,14 @@
           nameLines.forEach((part,j)=>drawText(p,part,x+5,y-height/2+((nameLines.length-1)/2-j)*9+1,7.5,COLORS.ink,true,"left",widths[i]-9));
         }else{
           const symbolValue=String(value??"");
-          const tone=i>=3&&i<=7?(symbolValue==="0"?COLORS.red:
+          const tone=i>=3&&i<=7?(symbolValue==="ⓧ"?COLORS.red:
             symbolValue==="I"?COLORS.green:symbolValue==="I(L)"?COLORS.amber:
             symbolValue==="E"||symbolValue==="H"?COLORS.purple:symbolValue==="U"?COLORS.amber:COLORS.muted):
             i===8||i===12?COLORS.blue:i===9||i===13?COLORS.red:
             i===10||i===14?COLORS.amber:i===11||i===15?COLORS.purple:COLORS.ink;
-          drawText(p,symbolValue,x+widths[i]/2,y-height/2-2.5,7.6,tone,i>7,"center",widths[i]-4);
+          if(i>=3&&i<=7&&symbolValue==="ⓧ")
+            drawCircledAbsent(p,x+widths[i]/2,y-height/2+0.3,4.3,tone);
+          else drawText(p,symbolValue,x+widths[i]/2,y-height/2-2.5,7.6,tone,i>7,"center",widths[i]-4);
         }
         x+=widths[i];
       });
