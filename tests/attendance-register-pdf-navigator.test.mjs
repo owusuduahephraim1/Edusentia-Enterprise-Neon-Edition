@@ -83,7 +83,7 @@ test("builds a native vector PDF with separate gender sections, class header and
   }
   const pageCount=(body.match(/\/Type \/Page /g)||[]).length;
   assert.equal(pageCount,3,"Two teaching weeks and one cumulative report should use three pages for this small class");
-  const streams=[...body.matchAll(/\/Length \\d+ >>\\nstream\\n([\\s\\S]*?)\\nendstream/g)].map(match=>match[1]);
+  const streams=[...body.matchAll(/\/Length \d+ >>\nstream\n([\s\S]*?)\nendstream/g)].map(match=>match[1]);
   assert.equal(streams.length,3);
   assert.match(streams[0],/BOYS ATTENDANCE REGISTER/);
   assert.match(streams[0],/GIRLS ATTENDANCE REGISTER/);
