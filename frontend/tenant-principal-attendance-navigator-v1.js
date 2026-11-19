@@ -73,7 +73,7 @@
         '<label class="field"><span>From week</span><select id="navigatorFromWeek">'+weekOptions(weeks,persist.fromWeek)+'</select></label>'+
         '<label class="field"><span>Through week</span><select id="navigatorToWeek">'+weekOptions(weeks,persist.toWeek)+'</select></label>'+
         '</div>'+
-        '<div class="attendance-navigator-info"><strong>Report format</strong><p>School report-card header, Monday to Friday tally marks (I, 0, I(L), E), separate boys and girls sections, weekly and cumulative totals and attendance percentages.</p>'+
+        '<div class="attendance-navigator-info"><strong>Report format</strong><p>School report-card header, Monday to Friday tally marks (I, ⓧ, I(L), E), separate boys and girls sections, weekly and cumulative totals and attendance percentages.</p>'+
         '<p class="muted">Public holidays and closure days are excluded. Unrecorded days are not absences. Gender values not classified as male or female appear in a separate review section.</p></div>'+
         '<div class="page-actions"><button type="button" class="button primary" id="navigatorDownload" '+(clazz&&weeks.length?"":"disabled")+'>Download attendance PDF</button>'+
         '<button type="button" class="button outline" id="navigatorTermToDate" '+(clazz&&weeks.length?"":"disabled")+'>Download term-to-date PDF</button></div>'+

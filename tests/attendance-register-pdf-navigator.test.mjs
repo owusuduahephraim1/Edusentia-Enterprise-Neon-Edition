@@ -54,12 +54,24 @@ test("tally symbols distinguish present, absent, late, excused, closure, unrecor
   const records=lib.getRecords(sample,{fromWeek:"2026-11-16",toWeek:"2026-11-23"});
   const boy=sample.students[0],girl=sample.students[1];
   assert.equal(records.symbol(boy,"2026-11-16"),"I");
-  assert.equal(records.symbol(girl,"2026-11-16"),"0");
+  assert.equal(records.symbol(girl,"2026-11-16"),"ⓧ");
   assert.equal(records.symbol(boy,"2026-11-17"),"I(L)");
   assert.equal(records.symbol(girl,"2026-11-17"),"E");
   assert.equal(records.symbol(boy,"2026-11-18"),"H");
   assert.equal(records.symbol(boy,"2026-11-19"),"U");
   assert.equal(records.symbol(boy,"2026-11-20"),"F");
+});
+
+test("PDF draws a print-safe circled-x for each absent day and retains numeric totals",async()=>{
+  const blob=lib.buildBlob(sample,{fromWeek:"2026-11-16",toWeek:"2026-11-23"});
+  const content=Buffer.from(await blob.arrayBuffer()).toString("latin1");
+  const vectorMarks=(content.match(/% Attendance absent circled-x \(vector\)/g)||[]).length;
+  assert.equal(vectorMarks,5,"Two absent daily cells and one attendance legend on each of three pages");
+  assert.match(content,/\(W-A\) Tj/);
+  assert.match(content,/\(C-A\) Tj/);
+  assert.match(content,/Present: 3  \|  Absent: 1  \|  Late: 1  \|  Excused: 0/);
+  assert.doesNotMatch(content,/\(0 Absent/);
+  assert.match(principalSource,/tally marks \(I, ⓧ, I\(L\), E\)/);
 });
 
 test("weekly and cumulative present count late as one present, but not an excused day",()=>{
