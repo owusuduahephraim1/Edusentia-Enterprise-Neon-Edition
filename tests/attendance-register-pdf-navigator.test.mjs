@@ -166,7 +166,9 @@ test("PDF week range validation prevents inverted or unknown week choices",()=>{
 
 test("role-based navigator and teacher controls are registered and protected",()=>{
   assert.match(shell,/principal:\["dashboard","operations","student_services","staff","history","attendance_navigator","timetable"/);
-  assert.match(principalSource,/id:"attendance_navigator",label:"Attendance Navigator"/);
+  assert.match(principalSource,/id:"attendance_navigator",label:"Attendance Records"/);
+  assert.ok(principalSource.includes("<h3>Attendance Records</h3>"));
+  assert.doesNotMatch(principalSource,/Attendance Navigator/);
   assert.match(principalSource,/roles:\["principal"\]/);
   assert.match(principalSource,/list_attendance_export_classes/);
   assert.match(principalSource,/get_attendance_register_export/);

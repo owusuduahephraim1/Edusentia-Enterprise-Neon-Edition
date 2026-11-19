@@ -37,9 +37,9 @@
       'Week '+w.week_number+' · '+esc(formatDate(w.start_date))+' to '+esc(formatDate(w.end_date))+'</option>').join("");
   }
   async function renderAttendanceNavigator(){
-    byId("content").innerHTML='<div class="page-head"><div><h3>Attendance Navigator</h3><p>Review and export class attendance by academic year, term and teaching week.</p></div></div>'+loading("Loading attendance navigator");
+    byId("content").innerHTML='<div class="page-head"><div><h3>Attendance Records</h3><p>Review and export class attendance by academic year, term and teaching week.</p></div></div>'+loading("Loading attendance records");
     try{
-      if(S.role()!=="principal")throw new Error("The Attendance Navigator is reserved for the Principal");
+      if(S.role()!=="principal")throw new Error("The Attendance Records is reserved for the Principal");
       const config=await academicConfig();
       const years=arr(config?.academic_years),terms=arr(config?.terms);
       const activeYear=years.find(x=>x.is_active)||years[0];
@@ -50,7 +50,7 @@
         availableTerms.find(t=>t.is_active)||availableTerms[0];
       persist.yearId=yearId;persist.termId=term?.id||"";
       if(!term){
-        byId("content").innerHTML='<div class="page-head"><div><h3>Attendance Navigator</h3></div></div>'+
+        byId("content").innerHTML='<div class="page-head"><div><h3>Attendance Records</h3></div></div>'+
           empty("Configure an academic year and term with opening and closing dates first.");
         return;
       }
@@ -64,7 +64,7 @@
       if(!weeks.some(w=>w.week_start===persist.fromWeek)||persist.fromWeek>persist.toWeek)persist.fromWeek=weeks[0]?.week_start||"";
       const yearOptions=options(years,yearId);
       byId("content").innerHTML=
-        '<div class="page-head"><div><h3>Attendance Navigator</h3><p>Official boys and girls attendance registers, weekly tallies and cumulative term totals.</p></div></div>'+
+        '<div class="page-head"><div><h3>Attendance Records</h3><p>Official boys and girls attendance registers, weekly tallies and cumulative term totals.</p></div></div>'+
         '<section class="panel pad"><div class="section-title"><h4>Filter attendance records</h4><span class="chip">Principal oversight</span></div>'+
         '<div class="form-grid three attendance-navigator-controls">'+
         '<label class="field"><span>Academic year</span><select id="navigatorYear">'+yearOptions+'</select></label>'+
@@ -117,10 +117,10 @@
       byId("navigatorDownload")?.addEventListener("click",()=>exportPdf(false));
       byId("navigatorTermToDate")?.addEventListener("click",()=>exportPdf(true));
     }catch(error){
-      byId("content").innerHTML='<div class="page-head"><div><h3>Attendance Navigator</h3></div></div>'+pageError(error);
+      byId("content").innerHTML='<div class="page-head"><div><h3>Attendance Records</h3></div></div>'+pageError(error);
     }
   }
-  registerView({id:"attendance_navigator",label:"Attendance Navigator",icon:"▤",
+  registerView({id:"attendance_navigator",label:"Attendance Records",icon:"▤",
     subtitle:"Class-level weekly and cumulative attendance PDF reports",roles:["principal"],
     feature:"attendance",render:renderAttendanceNavigator});
 })();
