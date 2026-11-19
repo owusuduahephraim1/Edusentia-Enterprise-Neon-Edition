@@ -24,8 +24,11 @@
     if(!/^\d{4}-\d{2}-\d{2}$/.test(term?.start_date||"")||!/^\d{4}-\d{2}-\d{2}$/.test(term?.end_date||""))return [];
     const first=monday(term.start_date),last=monday(term.end_date),out=[];
     for(let d=first,i=1;d<=last&&i<=54;d=addDays(d,7),i++){
-      out.push({week_start:d,week_number:i,start_date:term.start_date>d?term.start_date:d,
-        end_date:term.end_date<addDays(d,6)?term.end_date:addDays(d,6)});
+      const weekStart=term.start_date>d?term.start_date:d;
+      const friday=addDays(d,4);
+      const weekEnd=term.end_date<friday?term.end_date:friday;
+      // Do not offer a calendar week with no teaching days (e.g., a term starting on Sunday).
+      if(weekStart<=weekEnd)out.push({week_start:d,week_number:i,start_date:weekStart,end_date:weekEnd});
     }
     return out;
   };
