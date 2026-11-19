@@ -149,6 +149,20 @@
     date.setUTCDate(date.getUTCDate()-(weekday===0?6:weekday-1));
     return date.toISOString().slice(0,10);
   };
+  // Attendance reporting weeks are Monday-Friday even when the API uses seven-day calendar boundaries.
+  const teachingWeekEnd=(weekStart,rangeEnd)=>{
+    const monday=weekMonday(weekStart);
+    if(!monday)return rangeEnd||"";
+    const friday=new Date(monday+"T12:00:00Z");
+    friday.setUTCDate(friday.getUTCDate()+4);
+    const last=friday.toISOString().slice(0,10);
+    return rangeEnd&&rangeEnd<last?rangeEnd:last;
+  };
+  const isTeachingDay=value=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||"")))return false;
+    const day=new Date(value+"T12:00:00Z").getUTCDay();
+    return day>=1&&day<=5;
+  };
   async function loadWeeklyAttendanceHistory(){
     const root=byId("attendanceWeeklyHistory"),a=local.attendance;
     if(!root||!a.termId||!a.classId)return;
@@ -160,14 +174,14 @@
       });
       if(a.historyLoadId!==loadId||!root.isConnected)return;
       a.weekStart=String(data?.week_start||a.weekStart||"");
-      const weeks=arr(data?.weeks),days=arr(data?.days),students=arr(data?.students);
+      const weeks=arr(data?.weeks),days=arr(data?.days).filter(day=>isTeachingDay(day.date)),students=arr(data?.students);
       const selectedWeek=weeks.find(w=>String(w.week_start)===String(a.weekStart));
       // The weekly API returns the range in "weeks" rather than on the top-level
       // object. Prefer the term-clipped range (important for the first and last week).
       const displayedWeekStart=selectedWeek?.start_date||days[0]?.date||data?.week_start||"";
-      const displayedWeekEnd=selectedWeek?.end_date||days[days.length-1]?.date||data?.week_end||"";
+      const displayedWeekEnd=teachingWeekEnd(a.weekStart,selectedWeek?.end_date||days[days.length-1]?.date||data?.week_end||"");
       const weekOptions=weeks.map(w=>'<option value="'+esc(w.week_start)+'" '+(String(w.week_start)===String(a.weekStart)?"selected":"")+'>'+
-        'Week '+Number(w.week_number||0)+' · '+esc(formatDate(w.start_date))+' – '+esc(formatDate(w.end_date))+'</option>').join("");
+        'Week '+Number(w.week_number||0)+' · '+esc(formatDate(w.start_date))+' – '+esc(formatDate(teachingWeekEnd(w.week_start,w.end_date)))+'</option>').join("");
       const daysMarkup=days.map(day=>{
         const type=String(day.day_status||"unrecorded");
         const text={recorded:"Recorded",unrecorded:"Not recorded",closed:"School closed",weekend:"Weekend",upcoming:"Upcoming"}[type]||"Not recorded";
