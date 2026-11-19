@@ -63,6 +63,11 @@
     date.setUTCDate(date.getUTCDate()+offset);
     return date.toISOString().slice(0,10);
   }
+  function teachingWeekEnd(week){
+    const friday=shiftDate(week?.week_start,4);
+    const through=cleanDate(week?.end_date);
+    return friday&&through&&through<friday?through:friday||through;
+  }
   function shortText(v,n=30){
     const text=normalized(v);
     if(text.length<=n)return text;
@@ -134,7 +139,7 @@
     const className=data.class_name||"Class";
     const pColor=/^#[0-9a-f]{6}$/i.test(school.primary_colour||"")?school.primary_colour:COLORS.navy;
     const tableX=34,tableWidth=widths.reduce((a,b)=>a+b,0);
-    const fmtWeek=w=>"Week "+Number(w.week_number||0)+"  |  "+niceDate(w.start_date)+" - "+niceDate(w.end_date);
+    const fmtWeek=w=>"Week "+Number(w.week_number||0)+"  |  "+niceDate(w.start_date)+" - "+niceDate(teachingWeekEnd(w));
     function newPage(heading,range){
       const p={cmd:[],heading};
       pages.push(p);
@@ -172,10 +177,10 @@
       const height=Math.max(25,12+nameLines.length*8);
       if(indexNo%2===0)rect(p,tableX,y-height,tableWidth,height,"#f7fafd");
       const dayValues=Array.from({length:5},(_,d)=>cursor.symbol(student,shiftDate(week.week_start,d)));
-      const weekly=cursor.stats(student,week.start_date,week.end_date);
-      const cumulative=cursor.stats(student,data.term_start,week.end_date);
+      const weekly=cursor.stats(student,week.start_date,teachingWeekEnd(week));
+      const cumulative=cursor.stats(student,data.term_start,teachingWeekEnd(week));
       const cells=[String(indexNo),null,student.admission_no||"",...dayValues,
-        weekly.p,weekly.a,weekly.l,weekly.e,cumulative.p,cumulative.a,cumulative.l,cumulative.e,cursor.rate(student,week.end_date)];
+        weekly.p,weekly.a,weekly.l,weekly.e,cumulative.p,cumulative.a,cumulative.l,cumulative.e,cursor.rate(student,teachingWeekEnd(week))];
       let x=tableX;
       cells.forEach((value,i)=>{
         if(i===1){
@@ -217,10 +222,10 @@
         if(offset===group.length){
           const counts={p:0,a:0,l:0,e:0};
           for(const st of group){
-            const c=index.stats(st,week.start_date,week.end_date);
+            const c=index.stats(st,week.start_date,teachingWeekEnd(week));
             for(const k of ["p","a","l","e"])counts[k]+=c[k];
           }
-          const recorded=index.countDays(week.start_date,week.end_date,"recorded");
+          const recorded=index.countDays(week.start_date,teachingWeekEnd(week),"recorded");
           drawText(p,group.length+" learners  |  "+recorded+" recorded teaching days  |  "+counts.p+" present pupil-days  |  "+counts.a+" absences",35,Math.max(60,y-17),8,COLORS.navy,true);
         }
       }
@@ -229,7 +234,7 @@
       const group=index.students.filter(st=>(classes.includes(st.gender)?st.gender:"review")===gender);
       if(!group.length&&gender==="review")return;
       if(!group.length){
-        const p=newPage(groupLabels[gender]+" - CUMULATIVE SUMMARY","Cumulative totals from term opening through "+niceDate(lastWeek.end_date));
+        const p=newPage(groupLabels[gender]+" - CUMULATIVE SUMMARY","Cumulative totals from term opening through "+niceDate(teachingWeekEnd(lastWeek)));
         sectionHeader(p,groupLabels[gender]+" - CUMULATIVE ATTENDANCE","Through Week "+lastWeek.week_number);
         drawText(p,"No students registered in this category.",35,397,10,COLORS.muted);
         return;
@@ -239,7 +244,7 @@
       const dims=[26,246,122,66,64,52,62,74,60];
       const wide=dims.reduce((a,b)=>a+b,0);
       while(n<group.length){
-        p=newPage(groupLabels[gender]+" - CUMULATIVE SUMMARY","Cumulative totals from term opening through "+niceDate(lastWeek.end_date));
+        p=newPage(groupLabels[gender]+" - CUMULATIVE SUMMARY","Cumulative totals from term opening through "+niceDate(teachingWeekEnd(lastWeek)));
         sectionHeader(p,groupLabels[gender]+" - CUMULATIVE ATTENDANCE","Through Week "+lastWeek.week_number);
         rect(p,tableX,395,wide,23,COLORS.pale);
         let x=tableX;
@@ -249,9 +254,9 @@
           const student=group[n],nameLines=wrapName(student.name,48),height=Math.max(25,12+nameLines.length*8);
           if(y-height<77)break;
           if(n%2===0)rect(p,tableX,y-height,wide,height,"#f7fafd");
-          const c=index.stats(student,data.term_start,lastWeek.end_date);
+          const c=index.stats(student,data.term_start,teachingWeekEnd(lastWeek));
           const values=[n+1,null,student.admission_no||"",c.p,c.a,c.l,c.e,
-            index.countDays(data.term_start,lastWeek.end_date,"recorded"),index.rate(student,lastWeek.end_date)];
+            index.countDays(data.term_start,teachingWeekEnd(lastWeek),"recorded"),index.rate(student,teachingWeekEnd(lastWeek))];
           let dx=tableX;
           values.forEach((v,i)=>{
             if(i===1)nameLines.forEach((val,j)=>drawText(p,val,dx+5,y-height/2+((nameLines.length-1)/2-j)*9,8,COLORS.ink,true));
@@ -263,7 +268,7 @@
         }
         if(n===group.length){
           const sums={p:0,a:0,l:0,e:0};
-          group.forEach(st=>{const c=index.stats(st,data.term_start,lastWeek.end_date);for(const k of ["p","a","l","e"])sums[k]+=c[k]});
+          group.forEach(st=>{const c=index.stats(st,data.term_start,teachingWeekEnd(lastWeek));for(const k of ["p","a","l","e"])sums[k]+=c[k]});
           drawText(p,group.length+" learners  |  Present: "+sums.p+"  |  Absent: "+sums.a+"  |  Late: "+sums.l+"  |  Excused: "+sums.e,35,Math.max(57,y-19),8.5,COLORS.navy,true);
         }
       }
@@ -355,5 +360,5 @@
     else {const url=URL.createObjectURL(pdf),a=document.createElement("a");a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),15000);}
     return filename;
   }
-  window.EdusentiaAttendancePdf=Object.freeze({buildBlob,download,getRecords});
+  window.EdusentiaAttendancePdf=Object.freeze({buildBlob,download,getRecords,teachingWeekEnd});
 })();

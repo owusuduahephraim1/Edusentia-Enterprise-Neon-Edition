@@ -87,6 +87,22 @@ test("builds a native vector PDF with separate gender sections, class header and
   assert.match(body,/W-P/);
   assert.match(body,/C-P/);
 });
+test("teaching week ranges end on Friday, including legacy Sunday-ended API data",async()=>{
+  assert.equal(lib.teachingWeekEnd(sample.weeks[0]),"2026-11-20");
+  assert.equal(lib.teachingWeekEnd(sample.weeks[1]),"2026-11-27");
+  assert.equal(lib.teachingWeekEnd({week_start:"2026-11-16",end_date:"2026-11-18"}),"2026-11-18");
+  const blob=lib.buildBlob(sample,{fromWeek:"2026-11-16",toWeek:"2026-11-16"});
+  const content=Buffer.from(await blob.arrayBuffer()).toString("latin1");
+  assert.match(content,/16\/11\/2026 - 20\/11\/2026/);
+  assert.doesNotMatch(content,/16\/11\/2026 - 22\/11\/2026/);
+  assert.match(teacherSource,/days=arr\(data\?\.days\)\.filter\(day=>isTeachingDay\(day\.date\)\)/);
+  assert.match(teacherSource,/formatDate\(teachingWeekEnd\(w\.week_start,w\.end_date\)\)/);
+  assert.match(principalSource,/const friday=addDays\(d,4\)/);
+  assert.match(principalSource,/if\(weekStart<=weekEnd\)out\.push/);
+  const css=fs.readFileSync("frontend/style.css","utf8");
+  assert.match(css,/\.attendance-week-days\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+});
+
 test("PDF week range validation prevents inverted or unknown week choices",()=>{
   assert.throws(()=>lib.getRecords(sample,{fromWeek:"2026-11-23",toWeek:"2026-11-16"}),/valid start and end week/);
   assert.throws(()=>lib.getRecords(sample,{fromWeek:"2025-01-01",toWeek:"2026-11-23"}),/valid start and end week/);
