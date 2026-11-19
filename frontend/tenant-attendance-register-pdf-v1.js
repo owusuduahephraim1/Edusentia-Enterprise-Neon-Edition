@@ -158,9 +158,9 @@
       drawText(p,"W = weekly; C = cumulative from term opening; Rate uses marked present/absent only.",34,19,6.8,COLORS.muted);
       return p;
     }
-    function sectionHeader(p,title,subtitle){
-      drawText(p,title,34,432,11,COLORS.navy,true);
-      drawText(p,subtitle,807,433,7.8,COLORS.muted,false,"right");
+    function sectionHeader(p,title,subtitle,y=432){
+      drawText(p,title,34,y,11,COLORS.navy,true);
+      drawText(p,subtitle,807,y+1,7.8,COLORS.muted,false,"right");
     }
     function tableHeader(p,y){
       rect(p,tableX,y-23,tableWidth,23,COLORS.pale);
@@ -199,84 +199,165 @@
       line(p,tableX,y-height,tableX+tableWidth,y-height,COLORS.line,.5);
       return y-height;
     }
-    function renderWeekGroup(week,gender){
-      const group=index.students.filter(st=>(classes.includes(st.gender)?st.gender:"review")===gender);
-      if(!group.length&&gender==="review")return;
-      if(!group.length){
-        const p=newPage(groupLabels[gender]+" - WEEKLY ATTENDANCE",fmtWeek(week));
-        sectionHeader(p,groupLabels[gender]+" ATTENDANCE REGISTER",fmtWeek(week));
-        drawText(p,"No students registered in this category.",35,395,10,COLORS.muted);
-        return;
-      }
-      let offset=0,p=null,y=0;
-      while(offset<group.length){
-        p=newPage(groupLabels[gender]+" - WEEKLY ATTENDANCE",fmtWeek(week));
-        sectionHeader(p,groupLabels[gender]+" ATTENDANCE REGISTER",fmtWeek(week)+(offset?"  |  continued":""));
-        y=tableHeader(p,418);
-        while(offset<group.length){
-          const student=group[offset];
-          const need=Math.max(25,12+wrapName(student.name,36).length*8);
-          if(y-need<77)break;
-          y=weeklyRow(p,student,offset+1,week,y,index);offset++;
-        }
-        if(offset===group.length){
-          const counts={p:0,a:0,l:0,e:0};
-          for(const st of group){
-            const c=index.stats(st,week.start_date,teachingWeekEnd(week));
-            for(const k of ["p","a","l","e"])counts[k]+=c[k];
-          }
-          const recorded=index.countDays(week.start_date,teachingWeekEnd(week),"recorded");
-          drawText(p,group.length+" learners  |  "+recorded+" recorded teaching days  |  "+counts.p+" present pupil-days  |  "+counts.a+" absences",35,Math.max(60,y-17),8,COLORS.navy,true);
-        }
+    // Match the approved school template: put both gender registers on the
+    // same page when they fit; begin a new page only when necessary for legibility.
+    // For each teaching week, weekly and cumulative sections occupy separate
+    // pages, each with a single school header, footer and page counter.
+    const TOP_SECTION_Y=432,LOWEST_BODY_Y=66,AFTER_SUMMARY_GAP=47;
+    const genderGroup=gender=>index.students.filter(student=>
+      (classes.includes(student.gender)?student.gender:"review")===gender);
+    const weeklyHeight=student=>Math.max(25,12+wrapName(student.name,36).length*8);
+    const summaryHeight=student=>Math.max(25,12+wrapName(student.name,48).length*8);
+
+    function nextLayoutPage(cursor,title,range){
+      cursor.page=newPage(title,range);
+      cursor.y=TOP_SECTION_Y;
+    }
+    function keepSectionTogether(cursor,totalHeight,title,range){
+      // A group that fits on an empty page is moved intact, rather than
+      // leaving a heading and a few rows separated from the rest of the group.
+      if(cursor.page&&cursor.y<TOP_SECTION_Y&&
+        cursor.y-totalHeight<LOWEST_BODY_Y&&TOP_SECTION_Y-totalHeight>=LOWEST_BODY_Y){
+        nextLayoutPage(cursor,title,range);
       }
     }
-    function summaryPage(gender,lastWeek){
-      const group=index.students.filter(st=>(classes.includes(st.gender)?st.gender:"review")===gender);
+    function renderWeekGroup(week,gender,cursor){
+      const group=genderGroup(gender);
       if(!group.length&&gender==="review")return;
+      const range=fmtWeek(week),pageTitle="WEEKLY ATTENDANCE";
       if(!group.length){
-        const p=newPage(groupLabels[gender]+" - CUMULATIVE SUMMARY","Cumulative totals from term opening through "+niceDate(teachingWeekEnd(lastWeek)));
-        sectionHeader(p,groupLabels[gender]+" - CUMULATIVE ATTENDANCE","Through Week "+lastWeek.week_number);
-        drawText(p,"No students registered in this category.",35,397,10,COLORS.muted);
+        if(!cursor.page||cursor.y<120)nextLayoutPage(cursor,pageTitle,range);
+        sectionHeader(cursor.page,groupLabels[gender]+" ATTENDANCE REGISTER",range,cursor.y);
+        drawText(cursor.page,"No students registered in this category.",35,cursor.y-28,9,COLORS.muted);
+        cursor.y-=77;
         return;
       }
-      let n=0,y=0,p=null;
-      const labels=["#","Student name","Admission number","Present","Absent","Late","Excused","Days recorded","Rate"];
-      const dims=[26,246,122,66,64,52,62,74,60];
-      const wide=dims.reduce((a,b)=>a+b,0);
-      while(n<group.length){
-        p=newPage(groupLabels[gender]+" - CUMULATIVE SUMMARY","Cumulative totals from term opening through "+niceDate(teachingWeekEnd(lastWeek)));
-        sectionHeader(p,groupLabels[gender]+" - CUMULATIVE ATTENDANCE","Through Week "+lastWeek.week_number);
-        rect(p,tableX,395,wide,23,COLORS.pale);
-        let x=tableX;
-        labels.forEach((v,i)=>{drawText(p,v,x+dims[i]/2,403,8,COLORS.navy,true,"center",dims[i]-5);x+=dims[i]});
-        y=395;
-        while(n<group.length){
-          const student=group[n],nameLines=wrapName(student.name,48),height=Math.max(25,12+nameLines.length*8);
-          if(y-height<77)break;
-          if(n%2===0)rect(p,tableX,y-height,wide,height,"#f7fafd");
-          const c=index.stats(student,data.term_start,teachingWeekEnd(lastWeek));
-          const values=[n+1,null,student.admission_no||"",c.p,c.a,c.l,c.e,
-            index.countDays(data.term_start,teachingWeekEnd(lastWeek),"recorded"),index.rate(student,teachingWeekEnd(lastWeek))];
-          let dx=tableX;
-          values.forEach((v,i)=>{
-            if(i===1)nameLines.forEach((val,j)=>drawText(p,val,dx+5,y-height/2+((nameLines.length-1)/2-j)*9,8,COLORS.ink,true));
-            else drawText(p,String(v),dx+dims[i]/2,y-height/2-2.5,8,i===3?COLORS.blue:i===4?COLORS.red:COLORS.ink,i>=3,"center",dims[i]-6);
-            dx+=dims[i];
+      const needed=37+group.reduce((sum,student)=>sum+weeklyHeight(student),0)+17;
+      keepSectionTogether(cursor,needed,pageTitle,range);
+      let offset=0;
+      while(offset<group.length){
+        if(!cursor.page||cursor.y-37-weeklyHeight(group[offset])-17<LOWEST_BODY_Y){
+          nextLayoutPage(cursor,pageTitle,range);
+        }
+        sectionHeader(cursor.page,groupLabels[gender]+" ATTENDANCE REGISTER",
+          range+(offset?"  |  continued":""),cursor.y);
+        let y=tableHeader(cursor.page,cursor.y-14);
+        const before=offset;
+        while(offset<group.length){
+          const height=weeklyHeight(group[offset]),isLast=offset===group.length-1;
+          if(y-height-(isLast?17:0)<LOWEST_BODY_Y)break;
+          y=weeklyRow(cursor.page,group[offset],offset+1,week,y,index);
+          offset++;
+        }
+        if(offset===before)throw new Error("Unable to fit an attendance row on a PDF page.");
+        if(offset!==group.length){
+          nextLayoutPage(cursor,pageTitle,range);
+          continue;
+        }
+        const counts={p:0,a:0,l:0,e:0};
+        for(const student of group){
+          const c=index.stats(student,week.start_date,teachingWeekEnd(week));
+          for(const key of ["p","a","l","e"])counts[key]+=c[key];
+        }
+        const recorded=index.countDays(week.start_date,teachingWeekEnd(week),"recorded");
+        const summaryY=y-17;
+        drawText(cursor.page,group.length+" learners  |  "+recorded+
+          " recorded teaching days  |  "+counts.p+" present pupil-days  |  "+counts.a+
+          " absences",35,summaryY,8,COLORS.navy,true);
+        cursor.y=summaryY-AFTER_SUMMARY_GAP;
+      }
+    }
+    const labels=["#","Student name","Admission number","Present","Absent","Late","Excused","Days recorded","Rate"];
+    const dims=[26,246,122,66,64,52,62,74,60];
+    const wide=dims.reduce((sum,dim)=>sum+dim,0);
+    function summaryTableHeader(page,y){
+      rect(page,tableX,y-23,wide,23,COLORS.pale);
+      let x=tableX;
+      labels.forEach((label,i)=>{
+        drawText(page,label,x+dims[i]/2,y-14,8,COLORS.navy,true,"center",dims[i]-5);
+        x+=dims[i];
+      });
+      line(page,tableX,y-23,tableX+wide,y-23,"#96aecd",.7);
+      return y-23;
+    }
+    function summaryRow(page,student,rowNo,y,through){
+      const nameLines=wrapName(student.name,48),height=summaryHeight(student);
+      if(rowNo%2===1)rect(page,tableX,y-height,wide,height,"#f7fafd");
+      const c=index.stats(student,data.term_start,through);
+      const values=[rowNo,null,student.admission_no||"",c.p,c.a,c.l,c.e,
+        index.countDays(data.term_start,through,"recorded"),index.rate(student,through)];
+      let x=tableX;
+      values.forEach((value,i)=>{
+        if(i===1){
+          nameLines.forEach((part,j)=>{
+            drawText(page,part,x+5,y-height/2+((nameLines.length-1)/2-j)*9,8,COLORS.ink,true,
+              "left",dims[i]-9);
           });
-          line(p,tableX,y-height,tableX+wide,y-height,COLORS.line,.5);
-          y-=height;n++;
+        }else{
+          drawText(page,String(value),x+dims[i]/2,y-height/2-2.5,8,
+            i===3?COLORS.blue:i===4?COLORS.red:COLORS.ink,i>=3,"center",dims[i]-6);
         }
-        if(n===group.length){
-          const sums={p:0,a:0,l:0,e:0};
-          group.forEach(st=>{const c=index.stats(st,data.term_start,teachingWeekEnd(lastWeek));for(const k of ["p","a","l","e"])sums[k]+=c[k]});
-          drawText(p,group.length+" learners  |  Present: "+sums.p+"  |  Absent: "+sums.a+"  |  Late: "+sums.l+"  |  Excused: "+sums.e,35,Math.max(57,y-19),8.5,COLORS.navy,true);
+        x+=dims[i];
+      });
+      line(page,tableX,y-height,tableX+wide,y-height,COLORS.line,.5);
+      return y-height;
+    }
+    function renderSummaryGroup(gender,lastWeek,cursor){
+      const group=genderGroup(gender);
+      if(!group.length&&gender==="review")return;
+      const through=teachingWeekEnd(lastWeek);
+      const range="Cumulative totals from term opening through "+niceDate(through);
+      const pageTitle="CUMULATIVE ATTENDANCE";
+      const heading=groupLabels[gender]+" - CUMULATIVE ATTENDANCE";
+      const subtitle="Through Week "+lastWeek.week_number;
+      if(!group.length){
+        if(!cursor.page||cursor.y<120)nextLayoutPage(cursor,pageTitle,range);
+        sectionHeader(cursor.page,heading,subtitle,cursor.y);
+        drawText(cursor.page,"No students registered in this category.",35,cursor.y-28,9,COLORS.muted);
+        cursor.y-=77;
+        return;
+      }
+      const needed=37+group.reduce((sum,student)=>sum+summaryHeight(student),0)+17;
+      keepSectionTogether(cursor,needed,pageTitle,range);
+      let offset=0;
+      while(offset<group.length){
+        if(!cursor.page||cursor.y-37-summaryHeight(group[offset])-17<LOWEST_BODY_Y){
+          nextLayoutPage(cursor,pageTitle,range);
         }
+        sectionHeader(cursor.page,heading,subtitle+(offset?"  |  continued":""),cursor.y);
+        let y=summaryTableHeader(cursor.page,cursor.y-14);
+        const before=offset;
+        while(offset<group.length){
+          const height=summaryHeight(group[offset]),isLast=offset===group.length-1;
+          if(y-height-(isLast?17:0)<LOWEST_BODY_Y)break;
+          y=summaryRow(cursor.page,group[offset],offset+1,y,through);
+          offset++;
+        }
+        if(offset===before)throw new Error("Unable to fit a cumulative attendance row on a PDF page.");
+        if(offset!==group.length){
+          nextLayoutPage(cursor,pageTitle,range);
+          continue;
+        }
+        const sums={p:0,a:0,l:0,e:0};
+        group.forEach(student=>{
+          const c=index.stats(student,data.term_start,through);
+          for(const key of ["p","a","l","e"])sums[key]+=c[key];
+        });
+        const summaryY=y-17;
+        drawText(cursor.page,group.length+" learners  |  Present: "+sums.p+
+          "  |  Absent: "+sums.a+"  |  Late: "+sums.l+"  |  Excused: "+sums.e,
+          35,summaryY,8.5,COLORS.navy,true);
+        cursor.y=summaryY-AFTER_SUMMARY_GAP;
       }
     }
 
-    index.weeks.forEach(week=>classes.forEach(group=>renderWeekGroup(week,group)));
+    index.weeks.forEach(week=>{
+      const weeklyLayout={page:null,y:TOP_SECTION_Y};
+      classes.forEach(gender=>renderWeekGroup(week,gender,weeklyLayout));
+    });
     const lastWeek=index.weeks[index.weeks.length-1];
-    classes.forEach(group=>summaryPage(group,lastWeek));
+    const cumulativeLayout={page:null,y:TOP_SECTION_Y};
+    classes.forEach(gender=>renderSummaryGroup(gender,lastWeek,cumulativeLayout));
     if(!pages.length){
       const p=newPage("No active enrollments","Selected academic term");
       drawText(p,"There are no students currently enrolled in this class and term.",34,419,11,COLORS.muted);
