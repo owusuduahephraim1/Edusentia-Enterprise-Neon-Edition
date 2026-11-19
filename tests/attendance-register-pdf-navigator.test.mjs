@@ -81,12 +81,68 @@ test("builds a native vector PDF with separate gender sections, class header and
   for(const item of ["STUDENTS REGISTER ATTENDANCE SUMMARY DETAILS","BOYS ATTENDANCE REGISTER","GIRLS ATTENDANCE REGISTER","GENDER REVIEW REQUIRED","CUMULATIVE ATTENDANCE","NIPE INTERNATIONAL SCHOOL","I\\(L\\)","xref","%%EOF"]){
     assert.ok(body.includes(item),"Missing PDF component "+item);
   }
-  assert.ok((body.match(/\/Type \/Page /g)||[]).length>=6,"Each gender and cumulative section must be paginated");
+  const pageCount=(body.match(/\/Type \/Page /g)||[]).length;
+  assert.equal(pageCount,3,"Two teaching weeks and one cumulative report should use three pages for this small class");
+  const streams=[...body.matchAll(/\/Length \d+ >>\nstream\n([\s\S]*?)\nendstream/g)].map(match=>match[1]);
+  assert.equal(streams.length,3);
+  assert.match(streams[0],/BOYS ATTENDANCE REGISTER/);
+  assert.match(streams[0],/GIRLS ATTENDANCE REGISTER/);
+  assert.match(streams[1],/BOYS ATTENDANCE REGISTER/);
+  assert.match(streams[1],/GIRLS ATTENDANCE REGISTER/);
+  assert.match(streams[2],/BOYS - CUMULATIVE ATTENDANCE/);
+  assert.match(streams[2],/GIRLS - CUMULATIVE ATTENDANCE/);
   assert.match(body,/\/BaseFont \/Helvetica-Bold/);
   assert.match(body,/Page 1 of /);
   assert.match(body,/W-P/);
   assert.match(body,/C-P/);
 });
+test("single-week attendance mirrors the two-page school template without splitting gender groups",async()=>{
+  const blob=lib.buildBlob(sample,{fromWeek:"2026-11-16",toWeek:"2026-11-16"});
+  const content=Buffer.from(await blob.arrayBuffer()).toString("latin1");
+  const streams=[...content.matchAll(/\/Length \d+ >>\nstream\n([\s\S]*?)\nendstream/g)].map(match=>match[1]);
+  assert.equal(streams.length,2,"A small class must have one weekly page and one cumulative page");
+  assert.ok(streams[0].indexOf("BOYS ATTENDANCE REGISTER")<streams[0].indexOf("GIRLS ATTENDANCE REGISTER"));
+  assert.ok(streams[1].indexOf("BOYS - CUMULATIVE ATTENDANCE")<streams[1].indexOf("GIRLS - CUMULATIVE ATTENDANCE"));
+  assert.ok(streams[0].includes("NIPE INTERNATIONAL SCHOOL")&&streams[1].includes("NIPE INTERNATIONAL SCHOOL"));
+  assert.ok(streams[0].includes("ACADEMIC YEAR: 2026/2027")&&streams[1].includes("ACADEMIC YEAR: 2026/2027"));
+  assert.ok(streams[0].includes("Page 1 of 2")&&streams[1].includes("Page 2 of 2"));
+  assert.match(streams[0],/16\/11\/2026 - 20\/11\/2026/);
+  assert.doesNotMatch(content,/16\/11\/2026 - 22\/11\/2026/);
+});
+test("large classes continue safely onto additional pages without dropping attendance rows",async()=>{
+  const students=Array.from({length:88},(_,i)=>({
+    enrollment_id:"batch-"+i,
+    gender:i<42?"boys":"girls",
+    name:(i<42?"Boy":"Girl")+" Learner Number "+String(i+1).padStart(2,"0"),
+    admission_no:"NIS-TEST-"+String(i+1).padStart(3,"0")
+  }));
+  const blob=lib.buildBlob({...sample,students},{fromWeek:"2026-11-16",toWeek:"2026-11-16"});
+  const content=Buffer.from(await blob.arrayBuffer()).toString("latin1");
+  const pageCount=(content.match(/\/Type \/Page /g)||[]).length;
+  assert.ok(pageCount>2,"Overflow requires additional pages rather than text shrinkage");
+  assert.match(content,/Boy Learner Number 01/);
+  assert.match(content,/Boy Learner Number 42/);
+  assert.match(content,/Girl Learner Number 43/);
+  assert.match(content,/Girl Learner Number 88/);
+  for(const student of students){
+    assert.equal(content.split("("+student.name+")").length-1,2,
+      "Every student must appear once in the weekly register and once in cumulative totals: "+student.name);
+  }
+  const streams=[...content.matchAll(/\/Length \d+ >>\nstream\n([\s\S]*?)\nendstream/g)].map(match=>match[1]);
+  assert.equal(streams.length,pageCount);
+  streams.forEach((page,i)=>{
+    assert.match(page,/NIPE INTERNATIONAL SCHOOL/);
+    assert.match(page,/MAIN CLASS TEACHER/);
+    assert.ok(page.includes("Page "+(i+1)+" of "+pageCount));
+    assert.match(page,/Generated:/);
+  });
+  assert.match(content,/BOYS ATTENDANCE REGISTER/);
+  assert.match(content,/GIRLS ATTENDANCE REGISTER/);
+  assert.match(content,/BOYS - CUMULATIVE ATTENDANCE/);
+  assert.match(content,/GIRLS - CUMULATIVE ATTENDANCE/);
+  assert.match(content,/continued/);
+});
+
 test("teaching week ranges end on Friday, including legacy Sunday-ended API data",async()=>{
   assert.equal(lib.teachingWeekEnd(sample.weeks[0]),"2026-11-20");
   assert.equal(lib.teachingWeekEnd(sample.weeks[1]),"2026-11-27");
