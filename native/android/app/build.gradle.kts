@@ -13,8 +13,8 @@ android {
     applicationId = "app.edusentia.enterprise.neon"
     minSdk = 23
     targetSdk = 36
-    versionCode = 704001
-    versionName = "7.4.0-neon-r42"
+    versionCode = 704002
+    versionName = "7.4.1-neon-r42"
   }
   signingConfigs {
     if (hasReleaseSigning) {
@@ -36,4 +36,6 @@ android {
 
 dependencies {
   implementation("com.google.android.play:app-update:2.1.0")
+  // Secure, origin-checked WebMessageListener for native Save As file handling.
+  implementation("androidx.webkit:webkit:1.15.0")
 }

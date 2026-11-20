@@ -23,7 +23,14 @@
   }
   function yesNo(value){return value?'<span class="status active">Yes</span>':'<span class="status inactive">No</span>';}
   function showMessage(id,text,kind="error"){const el=byId(id);if(!el)return;el.textContent=text||"";el.classList.toggle("hidden",!text);el.dataset.kind=kind;}
-  function downloadBlob(name,blob){const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  function downloadBlob(name,blob){
+    if(window.EdusentiaNativeDownloads?.supported)
+      return window.EdusentiaNativeDownloads.saveBlob(name,blob);
+    const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
+    return Promise.resolve({saved:true,initiated:true,filename:name});
+  }
   function safeName(value){return String(value||"file").replace(/[^A-Za-z0-9._-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,100)||"file";}
   async function sha256(blob){const bytes=await blob.arrayBuffer(),digest=await crypto.subtle.digest("SHA-256",bytes);return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");}
   function csvParse(text){

@@ -1,6 +1,6 @@
 [package]
 name = "edusentia-enterprise-neon"
-version = "7.4.0"
+version = "7.4.1"
 description = "Edusentia Enterprise Neon Edition secure Windows application shell"
 authors = ["Ephraim Owusu-Duah"]
 edition = "2021"
@@ -15,3 +15,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+rfd = "0.17.2"

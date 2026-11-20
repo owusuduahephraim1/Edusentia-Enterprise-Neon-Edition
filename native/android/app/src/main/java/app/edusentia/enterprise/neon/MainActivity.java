@@ -15,6 +15,23 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.util.Base64;
+
+import androidx.webkit.JavaScriptReplyProxy;
+import androidx.webkit.WebMessageCompat;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
@@ -31,10 +48,53 @@ public class MainActivity extends Activity {
     private static final String HOME_URL = "https://owusuduahephraim1.github.io/Edusentia-Enterprise-Neon-Edition/";
     private static final int FILE_CHOOSER_REQUEST = 6040;
     private static final int PLAY_UPDATE_REQUEST = 6050;
+    private static final int DOCUMENT_SAVE_REQUEST = 6060;
+    private static final long MAX_DOCUMENT_BYTES = 64L * 1024L * 1024L;
+    private static final int MAX_BASE64_CHUNK = 48 * 1024;
 
     private WebView webView;
     private AppUpdateManager appUpdateManager;
     private ValueCallback<Uri[]> filePathCallback;
+    private final ExecutorService documentIo = Executors.newSingleThreadExecutor();
+    private PendingDocument pendingDocument;
+    private boolean documentPickerOpen;
+
+    private static final class PendingDocument {
+        final String id;
+        final String filename;
+        final String mimeType;
+        final long size;
+        final File stagingFile;
+        final FileOutputStream output;
+        final JavaScriptReplyProxy reply;
+        long received;
+        boolean closed;
+
+        PendingDocument(String id, String filename, String mimeType, long size,
+                        File stagingFile, FileOutputStream output, JavaScriptReplyProxy reply) {
+            this.id = id;
+            this.filename = filename;
+            this.mimeType = mimeType;
+            this.size = size;
+            this.stagingFile = stagingFile;
+            this.output = output;
+            this.reply = reply;
+        }
+
+        void close() throws Exception {
+            if (!closed) {
+                closed = true;
+                output.flush();
+                output.close();
+            }
+        }
+
+        void discard() {
+            try { if (!closed) output.close(); } catch (Exception ignored) {}
+            closed = true;
+            if (stagingFile.exists()) stagingFile.delete();
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -88,6 +148,8 @@ public class MainActivity extends Activity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
+
+        configureNativeDocumentSave();
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -145,6 +207,144 @@ public class MainActivity extends Activity {
                     return false;
                 }
             }
+        });
+    }
+
+    private void configureNativeDocumentSave() {
+        // WebMessageListener is origin-scoped and checks isMainFrame. Unlike
+        // addJavascriptInterface, third-party iframes cannot request filesystem access.
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            return;
+        }
+        WebViewCompat.addWebMessageListener(webView, "EdusentiaAndroidDownloads",
+                Collections.singleton("https://owusuduahephraim1.github.io"),
+                (view, message, origin, isMainFrame, reply) -> {
+                    if (!isMainFrame || origin == null
+                            || !"https".equalsIgnoreCase(origin.getScheme())
+                            || !"owusuduahephraim1.github.io".equalsIgnoreCase(origin.getHost())
+                            || !isEdusentiaUri(Uri.parse(view.getUrl()))) return;
+                    handleDocumentMessage(message, reply);
+                });
+    }
+
+    private void respond(JavaScriptReplyProxy reply, String id, String status,
+                         String filename, String message) {
+        try {
+            JSONObject response = new JSONObject();
+            response.put("id", id);
+            response.put("status", status);
+            response.put("filename", filename == null ? "" : filename);
+            response.put("message", message == null ? "" : message);
+            reply.postMessage(response.toString());
+        } catch (Exception ignored) {}
+    }
+
+    private void failDocument(String id, JavaScriptReplyProxy reply, String reason) {
+        if (pendingDocument != null && pendingDocument.id.equals(id)) {
+            pendingDocument.discard();
+            pendingDocument = null;
+        }
+        respond(reply, id, "error", "", reason);
+    }
+
+    private void handleDocumentMessage(WebMessageCompat message, JavaScriptReplyProxy reply) {
+        String id = "";
+        try {
+            JSONObject data = new JSONObject(message.getData());
+            id = data.optString("id", "");
+            if (id.length() == 0 || id.length() > 100) return;
+            String type = data.optString("type", "");
+            if ("begin".equals(type)) {
+                if (pendingDocument != null || documentPickerOpen) {
+                    respond(reply, id, "error", "", "Finish the current download before starting another.");
+                    return;
+                }
+                long size = data.optLong("size", -1);
+                if (size <= 0 || size > MAX_DOCUMENT_BYTES) {
+                    respond(reply, id, "error", "", "Document exceeds the 64 MB save limit or is empty.");
+                    return;
+                }
+                String filename = data.optString("filename", "document")
+                        .replaceAll("[\\\\/<>:\"|?*\\x00-\\x1F]", "_");
+                if (filename.length() == 0) filename = "document";
+                if (filename.length() > 140) filename = filename.substring(0, 140);
+                String mimeType = data.optString("mimeType", "application/octet-stream").split(";")[0];
+                if (!mimeType.matches("[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+"))
+                    mimeType = "application/octet-stream";
+                File temp = File.createTempFile("edusentia-document-", ".tmp", getCacheDir());
+                pendingDocument = new PendingDocument(id, filename, mimeType, size,
+                        temp, new FileOutputStream(temp), reply);
+                return;
+            }
+            if (pendingDocument == null || !pendingDocument.id.equals(id)) return;
+            if ("chunk".equals(type)) {
+                String chunk = data.optString("data", "");
+                if (pendingDocument.closed || chunk.length() == 0 || chunk.length() > MAX_BASE64_CHUNK) {
+                    failDocument(id, reply, "Invalid native document data.");
+                    return;
+                }
+                byte[] decoded = Base64.decode(chunk, Base64.NO_WRAP);
+                if (pendingDocument.received + decoded.length > pendingDocument.size) {
+                    failDocument(id, reply, "Document length verification failed.");
+                    return;
+                }
+                pendingDocument.output.write(decoded);
+                pendingDocument.received += decoded.length;
+            } else if ("finish".equals(type)) {
+                pendingDocument.close();
+                if (pendingDocument.received != pendingDocument.size) {
+                    failDocument(id, reply, "Document transfer was incomplete.");
+                    return;
+                }
+                Intent picker = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                picker.addCategory(Intent.CATEGORY_OPENABLE);
+                picker.setType(pendingDocument.mimeType);
+                picker.putExtra(Intent.EXTRA_TITLE, pendingDocument.filename);
+                try {
+                    documentPickerOpen = true;
+                    startActivityForResult(picker, DOCUMENT_SAVE_REQUEST);
+                } catch (Exception error) {
+                    documentPickerOpen = false;
+                    failDocument(id, reply, "Unable to open the Android Save dialog.");
+                }
+            } else if ("abort".equals(type)) {
+                failDocument(id, reply, "Download cancelled.");
+            }
+        } catch (Exception error) {
+            if (!id.isEmpty()) failDocument(id, reply, "Unable to prepare the document for saving.");
+        }
+    }
+
+    private void finishNativeDocument(int resultCode, Intent data) {
+        documentPickerOpen = false;
+        final PendingDocument document = pendingDocument;
+        pendingDocument = null;
+        if (document == null) return;
+        final Uri uri = data == null ? null : data.getData();
+        if (resultCode != RESULT_OK || uri == null) {
+            document.discard();
+            respond(document.reply, document.id, "cancelled", "", "Save cancelled.");
+            return;
+        }
+        documentIo.execute(() -> {
+            String status = "saved", error = "";
+            try (InputStream input = new FileInputStream(document.stagingFile);
+                 OutputStream output = getContentResolver().openOutputStream(uri, "w")) {
+                if (output == null) throw new Exception("Unable to open the selected destination.");
+                byte[] buffer = new byte[64 * 1024];
+                int len;
+                while ((len = input.read(buffer)) != -1) output.write(buffer, 0, len);
+                output.flush();
+            } catch (Exception ex) {
+                status = "error";
+                error = "The device could not write the selected file.";
+                try { getContentResolver().delete(uri, null, null); } catch (Exception ignored) {}
+            } finally {
+                document.discard();
+            }
+            final String savedStatus = status, savedError = error;
+            runOnUiThread(() -> respond(document.reply, document.id, savedStatus,
+                    document.filename, savedError));
         });
     }
 
@@ -277,6 +477,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == DOCUMENT_SAVE_REQUEST) {
+            finishNativeDocument(resultCode, data);
+            return;
+        }
         if (requestCode == FILE_CHOOSER_REQUEST && filePathCallback != null) {
             Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
             filePathCallback.onReceiveValue(results);
@@ -295,6 +499,11 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (pendingDocument != null) {
+            pendingDocument.discard();
+            pendingDocument = null;
+        }
+        documentIo.shutdown();
         if (webView != null) {
             webView.stopLoading();
             webView.setWebChromeClient(null);

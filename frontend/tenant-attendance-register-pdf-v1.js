@@ -458,8 +458,13 @@
     const safe=P?.safeName||((s)=>String(s).replace(/[^a-z0-9]+/gi,"_"));
     const label=options.fromWeek===options.toWeek?"Week_"+options.fromWeek:"Weeks_"+options.fromWeek+"_to_"+options.toWeek;
     const filename=safe((data.class_name||"Class")+"_Attendance_"+label)+".pdf";
-    if(P?.downloadBlob)P.downloadBlob(filename,pdf);
-    else {const url=URL.createObjectURL(pdf),a=document.createElement("a");a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),15000);}
+    if(P?.downloadBlob){
+      const result=await P.downloadBlob(filename,pdf);
+      if(!result?.saved)throw new Error(result?.cancelled?"Document save cancelled.":result?.message||"Document was not saved.");
+    }else{
+      const result=await window.EdusentiaNativeDownloads.saveBlob(filename,pdf);
+      if(!result?.saved)throw new Error(result?.cancelled?"Document save cancelled.":result?.message||"Document was not saved.");
+    }
     return filename;
   }
   window.EdusentiaAttendancePdf=Object.freeze({buildBlob,download,getRecords,teachingWeekEnd});
