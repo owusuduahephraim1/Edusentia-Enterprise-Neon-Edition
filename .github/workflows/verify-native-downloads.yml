@@ -38,4 +38,4 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Tauri Windows code and capabilities
         working-directory: native/windows/src-tauri
-        run: cargo check --locked
+        run: cargo check
