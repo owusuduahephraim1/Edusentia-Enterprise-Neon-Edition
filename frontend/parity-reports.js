@@ -248,7 +248,13 @@
     try{
       const data=await certifiedAllRows("list_report_cards_v6",{target_term_id:termId,target_class_id:classId,target_status:"published",search_text:"",archive_filter:"active"}),rows=Array.isArray(data?.rows)?data.rows:[];
       if(!rows.length){alert("No published reports are available for this class and term.");return;}
-      for(const row of rows){try{downloadBlob(`${safeName(row.report_number||row.student_name||"report")}.pdf`,await api().downloadReportPdf(row.id));await new Promise(r=>setTimeout(r,120));}catch{}}
+      for(const row of rows){
+        try{
+          const result=await downloadBlob(`${safeName(row.report_number||row.student_name||"report")}.pdf`,await api().downloadReportPdf(row.id));
+          if(!result?.saved)throw new Error(result?.message||"Report download was not saved.");
+          await new Promise(r=>setTimeout(r,120));
+        }catch(error){alert(friendly(error));break;}
+      }
     }catch(error){alert(friendly(error));}
   }
 
