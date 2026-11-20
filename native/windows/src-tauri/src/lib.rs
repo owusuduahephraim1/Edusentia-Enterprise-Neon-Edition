@@ -1,4 +1,4 @@
-use tauri::{LogicalPosition, LogicalSize, Manager};
+use tauri::{LogicalPosition, LogicalSize};
 use tauri_plugin_updater::UpdaterExt;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::Serialize;
@@ -226,6 +226,7 @@ pub fn run() {
                             if !success { eprintln!("webview_download_failed url={url} path={path:?}"); }
                             true
                         }
+                        _ => true, // DownloadEvent is non-exhaustive in Tauri 2.
                     }
                 })
                 .build()?;
