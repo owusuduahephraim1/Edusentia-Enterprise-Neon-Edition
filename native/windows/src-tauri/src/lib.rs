@@ -1,5 +1,71 @@
 use tauri::{LogicalPosition, LogicalSize, Manager};
 use tauri_plugin_updater::UpdaterExt;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde::Serialize;
+use tauri::webview::{DownloadEvent, WebviewWindowBuilder};
+
+const MAX_DOCUMENT_BYTES: usize = 64 * 1024 * 1024;
+
+#[derive(Serialize)]
+struct SavedDocument {
+    filename: String,
+    path: String,
+}
+
+fn clean_document_name(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .map(|ch| if "\\\\/:*?\"<>|".contains(ch) { '_' } else { ch })
+        .take(140)
+        .collect();
+    let cleaned = cleaned.trim().trim_start_matches('.');
+    if cleaned.is_empty() { "document".to_string() } else { cleaned.to_string() }
+}
+
+/// The document is saved only to a destination actively selected by the user.
+/// This command cannot read arbitrary local files and exposes no filesystem API.
+#[tauri::command]
+async fn save_document(
+    filename: String,
+    mime_type: String,
+    data_base64: String,
+) -> Result<SavedDocument, String> {
+    let _mime_type = mime_type; // Content type is carried by the filename in the system picker.
+    if data_base64.len() > (MAX_DOCUMENT_BYTES * 4 / 3) + 8 {
+        return Err("Document exceeds the 64 MB native export limit.".into());
+    }
+    let document = STANDARD
+        .decode(data_base64.as_bytes())
+        .map_err(|_| "The generated document is not valid base64 data.")?;
+    if document.is_empty() || document.len() > MAX_DOCUMENT_BYTES {
+        return Err("Document is empty or exceeds the 64 MB native export limit.".into());
+    }
+    let proposed = clean_document_name(&filename);
+    let selected = rfd::AsyncFileDialog::new()
+        .set_title("Save Edusentia document")
+        .set_file_name(&proposed)
+        .save_file()
+        .await
+        .ok_or("Save cancelled.")?;
+    let destination = selected.path().to_path_buf();
+    tauri::async_runtime::spawn_blocking({
+        let destination = destination.clone();
+        move || std::fs::write(destination, document)
+    })
+    .await
+    .map_err(|_| "The native document writer did not complete.")?
+    .map_err(|_| "Unable to write the document at the selected destination.")?;
+    Ok(SavedDocument {
+        filename: destination
+            .file_name()
+            .and_then(|v| v.to_str())
+            .unwrap_or(&proposed)
+            .to_string(),
+        path: destination.to_string_lossy().into_owned(),
+    })
+}
+
 
 const PREFERRED_DESKTOP_ZOOM: f64 = 0.67;
 const MIN_SAFE_ZOOM: f64 = 0.55;
@@ -83,6 +149,12 @@ mod tests {
     }
 
     #[test]
+    fn document_names_are_safe_and_retain_extensions() {
+        assert_eq!(clean_document_name("../attendance/report.pdf"), "_attendance_report.pdf");
+        assert_eq!(clean_document_name("Grade 3.pdf"), "Grade 3.pdf");
+    }
+
+    #[test]
     fn desktop_uses_67_percent_baseline() {
         assert!(close(workspace_zoom_factor(1600.0, 1000.0), 0.67));
     }
@@ -139,14 +211,26 @@ fn configure_native_updater(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![save_document])
         .setup(|app| {
             configure_native_updater(app)?;
-            if let Some(window) = app.get_webview_window("main") {
-                // Sizing and workspace zoom are best-effort. The conservative
-                // tauri.conf fallback still opens correctly if an API is unavailable.
-                let _ = configure_responsive_window(&window);
-                window.show()?;
-            }
+            // create:false in the configuration lets us install the WebView2
+            // download handler before the external Edusentia page starts.
+            let config = app.config().app.windows.first()
+                .ok_or("Main native window configuration is missing")?;
+            let window = WebviewWindowBuilder::from_config(app.handle(), config)?
+                .on_download(|_, event| {
+                    match event {
+                        DownloadEvent::Requested { .. } => true,
+                        DownloadEvent::Finished { url, path, success } => {
+                            if !success { eprintln!("webview_download_failed url={url} path={path:?}"); }
+                            true
+                        }
+                    }
+                })
+                .build()?;
+            let _ = configure_responsive_window(&window);
+            window.show()?;
             Ok(())
         })
         .run(tauri::generate_context!())
