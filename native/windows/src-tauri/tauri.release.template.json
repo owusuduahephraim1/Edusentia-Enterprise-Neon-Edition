@@ -18,12 +18,35 @@
         "resizable": true,
         "fullscreen": false,
         "center": true,
-        "visible": false
+        "visible": false,
+        "create": false
       }
     ],
     "security": {
-      "csp": null
-    }
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "edusentia-remote-document-save",
+          "description": "Allow only the Edusentia hosted application to open user-selected Save As dialogs",
+          "windows": [
+            "main"
+          ],
+          "remote": {
+            "urls": [
+              "https://owusuduahephraim1.github.io/Edusentia-Enterprise-Neon-Edition/*"
+            ]
+          },
+          "local": false,
+          "platforms": [
+            "windows"
+          ],
+          "permissions": [
+            "allow-save-document"
+          ]
+        }
+      ]
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
