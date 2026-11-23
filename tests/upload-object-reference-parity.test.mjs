@@ -40,7 +40,7 @@ test("school website accepts a typed address and normalizes missing scheme",()=>
   assert.ok(ui.includes('"https://"+raw'));
   assert.ok(routes.includes("website:webAddress(b.website,500)"));
   assert.ok(routes.includes("verification_base_url:webAddress(b.verification_base_url,500)"));
-  assert.ok(ui.includes('field("verification_base_url","Verification base URL",settings.verification_base_url,"text"'));
+  assert.ok(ui.includes('field("verification_base_url","Verification base URL",settings.verification_base_url||edusentiaVerificationBaseUrl(),"text"'));
   assert.ok(!ui.includes('id="schoolLogoFile" type="file" accept="image/png" required'));
 });
 
