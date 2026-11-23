@@ -1,6 +1,6 @@
 [package]
 name = "edusentia-enterprise-neon"
-version = "7.4.1"
+version = "7.4.2"
 description = "Edusentia Enterprise Neon Edition secure Windows application shell"
 authors = ["Ephraim Owusu-Duah"]
 edition = "2021"

@@ -12,9 +12,17 @@
   const trusted = location.origin === TRUSTED_ORIGIN && location.pathname.startsWith(TRUSTED_PATH);
   const android = trusted && typeof window.EdusentiaAndroidDownloads?.postMessage === "function"
     ? window.EdusentiaAndroidDownloads : null;
-  const tauriInvoke = trusted && typeof window.__TAURI__?.core?.invoke === "function"
-    ? window.__TAURI__.core.invoke : null;
-  const supported = !!(android || tauriInvoke);
+  // WebView2 can load a remote service-worker-controlled page without exposing
+  // the optional public Tauri global. Detect the native Windows host separately.
+  const tauriInvoke = !trusted ? null
+    : typeof window.__TAURI__?.core?.invoke === "function"
+      ? (command, args) => window.__TAURI__.core.invoke(command, args)
+      : typeof window.__TAURI_INTERNALS__?.invoke === "function"
+        ? (command, args) => window.__TAURI_INTERNALS__.invoke(command, args)
+        : null;
+  const windowsHost = trusted && (window.__EDUSENTIA_WINDOWS_DESKTOP__ === true || !!tauriInvoke);
+  const windowsPickerAvailable = windowsHost && typeof window.showSaveFilePicker === "function";
+  const supported = !!(android || windowsHost);
   const requests = new Map();
   let serial = 0;
 
@@ -81,6 +89,58 @@
     }
   }
 
+  function saveError(error) {
+    const message = String(error?.message || error || "Save As could not be completed.");
+    return {saved:false, cancelled:error?.name === "AbortError" || /cancelled|canceled/i.test(message), message};
+  }
+
+  // Chromium/WebView2's user-approved Save As picker requires a *direct*
+  // user gesture. Open it at the start of a click, BEFORE any async PDF
+  // rendering or R2 fetch, and write bytes only once the PDF is ready.
+  // This also provides a reliable alternative when remote Tauri IPC is blocked.
+  function prepareSave(filename, mimeType="application/octet-stream") {
+    const safe=cleanName(filename);
+    if(!windowsPickerAvailable)return {filename:safe,saveBlob:blob=>saveBlob(safe,blob)};
+    let picked;
+    try {
+      const extension=safe.match(/\.[a-z0-9]{1,12}$/i)?.[0]?.toLowerCase() || "";
+      const mime=String(mimeType||"application/octet-stream").split(";")[0];
+      const types=extension && /^[\w.+-]+\/[\w.+-]+$/.test(mime)
+        ? [{description:"Edusentia document",accept:{[mime]:[extension]}}] : [];
+      picked=window.showSaveFilePicker({suggestedName:safe,...(types.length?{types}:{})});
+    } catch (error) {
+      picked=Promise.reject(error);
+    }
+    // Prevent an unhandled rejection if PDF preparation later fails.
+    picked.catch(()=>{});
+    let used=false;
+    return {filename:safe,async saveBlob(blob){
+      if(used)return {saved:false,message:"This Save As request has already been used."};
+      used=true;
+      if(!(blob instanceof Blob)||!blob.size)return {saved:false,message:"No document was generated."};
+      if(blob.size>MAX_DOCUMENT_BYTES)return {saved:false,message:"This document exceeds the 64 MB native export limit."};
+      try {
+        const handle=await picked;
+        const writer=await handle.createWritable();
+        try {
+          await writer.write(blob);
+          await writer.close();
+        } catch(error) {
+          try{await writer.abort();}catch{}
+          throw error;
+        }
+        return {saved:true,filename:handle.name || safe,method:"windows-file-picker"};
+      } catch(error) {
+        const result=saveError(error);
+        // A blocked/unsupported WebView2 picker may fall back to the
+        // origin-scoped Tauri native command, which has no gesture requirement.
+        if(!result.cancelled && tauriInvoke && /SecurityError|NotAllowedError|NotSupportedError|user gesture|permission|not supported/i.test(
+          error?.name+" "+result.message)) return windowsSave(safe,blob);
+        return result;
+      }
+    }};
+  }
+
   async function saveBlob(filename, blob) {
     if (!(blob instanceof Blob)) return {saved: false, message: "No document was generated."};
     if (!blob.size) return {saved: false, message: "The generated document is empty."};
@@ -88,7 +148,11 @@
       return {saved: false, message: "This document exceeds the 64 MB native export limit. Export a smaller selection."};
     const safe = cleanName(filename);
     if (android) return androidSave(safe, blob);
-    if (tauriInvoke) return windowsSave(safe, blob);
+    if (windowsHost) {
+      if (windowsPickerAvailable) return prepareSave(safe,blob.type).saveBlob(blob);
+      if (tauriInvoke) return windowsSave(safe, blob);
+      return {saved:false,message:"Windows Save As is not available in this application. Install the updated Edusentia Windows application."};
+    }
     const url = URL.createObjectURL(blob), link = document.createElement("a");
     link.href = url;
     link.download = safe;
@@ -120,5 +184,7 @@
     };
   }
 
-  window.EdusentiaNativeDownloads = Object.freeze({supported, saveBlob, cleanName});
+  window.EdusentiaNativeDownloads = Object.freeze({
+    supported, windowsHost, windowsPickerAvailable, prepareSave, saveBlob, cleanName
+  });
 })();
