@@ -34,7 +34,7 @@
     const key=documentKeys[0],value=String(params.get(key)||"").trim();
     const school=String(params.get("school")||"").trim();
     if(documentKeys.length!==1 || Boolean(staff)||Boolean(student) || !UUID.test(value)
-      || (school&&!/^[A-Z]{3}-\\d{6}$/i.test(school))){
+      || (school&&!/^[A-Z]{3}-\d{6}$/i.test(school))){
       show("invalid","Invalid verification link","The scanned document verification reference is invalid.","×");
       return;
     }
