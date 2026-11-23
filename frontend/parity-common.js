@@ -23,7 +23,11 @@
   }
   function yesNo(value){return value?'<span class="status active">Yes</span>':'<span class="status inactive">No</span>';}
   function showMessage(id,text,kind="error"){const el=byId(id);if(!el)return;el.textContent=text||"";el.classList.toggle("hidden",!text);el.dataset.kind=kind;}
-  function downloadBlob(name,blob){
+  function downloadBlob(name,blob,preparedSave=null){
+    // A prepared Windows Save As dialog is opened during the user's click
+    // while the expensive PDF generation can safely finish afterwards.
+    if(preparedSave && typeof preparedSave.saveBlob==="function")
+      return preparedSave.saveBlob(blob);
     if(window.EdusentiaNativeDownloads?.supported)
       return window.EdusentiaNativeDownloads.saveBlob(name,blob);
     const url=URL.createObjectURL(blob),a=document.createElement("a");
