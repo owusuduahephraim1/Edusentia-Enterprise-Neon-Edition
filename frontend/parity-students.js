@@ -5,6 +5,8 @@
   const shellState=()=>window.EdusentiaShell?.state||{};
   // ---------- Students: reusable admission numbering + protected photo parity ----------
   const studentPhotoUrls=new Map();
+  const studentPhotoRequests=new Map();
+  const STUDENT_BACKGROUND_CONCURRENCY=4;
   function studentInitials(row={}){
     const parts=[row.first_name,row.middle_name,row.last_name].filter(Boolean);
     const words=(parts.join(" ")||"Student").trim().split(/\s+/).filter(Boolean);
@@ -19,16 +21,60 @@
   async function studentPhotoUrl(studentId,photoPath){
     const id=String(studentId||"").trim(),path=String(photoPath||"").trim();if(!id||!path)return "";
     const cacheKey=id+"|"+path;if(studentPhotoUrls.has(cacheKey))return studentPhotoUrls.get(cacheKey);
-    const blob=await api().downloadStudentPhoto(id,path);
-    const url=URL.createObjectURL(blob);studentPhotoUrls.set(cacheKey,url);return url;
+    if(studentPhotoRequests.has(cacheKey))return studentPhotoRequests.get(cacheKey);
+    const pending=api().downloadStudentPhoto(id,path).then(blob=>{
+      const url=URL.createObjectURL(blob);
+      studentPhotoUrls.set(cacheKey,url);
+      return url;
+    }).finally(()=>studentPhotoRequests.delete(cacheKey));
+    studentPhotoRequests.set(cacheKey,pending);
+    return pending;
   }
   async function hydrateStudentPhotos(root=document){
     const images=[...root.querySelectorAll("[data-student-photo]")];
-    await Promise.all(images.map(async img=>{
-      const id=img.dataset.studentId,path=img.dataset.studentPhoto;if(!id||!path)return;
-      try{img.src=await studentPhotoUrl(id,path);img.onload=()=>img.parentElement?.classList.add("loaded");}
-      catch(error){console.warn("student_photo_display_failed",error);}
-    }));
+    let next=0;
+    const worker=async()=>{
+      while(next<images.length){
+        const img=images[next++];
+        // A filter change or navigation can remove an older list while
+        // protected photographs are still loading.
+        if(!img.isConnected)continue;
+        const id=img.dataset.studentId,path=img.dataset.studentPhoto;
+        if(!id||!path)continue;
+        try{
+          const url=await studentPhotoUrl(id,path);
+          if(!img.isConnected)continue;
+          img.onload=()=>img.parentElement?.classList.add("loaded");
+          img.src=url;
+        }catch(error){console.warn("student_photo_display_failed",error);}
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(STUDENT_BACKGROUND_CONCURRENCY,images.length)},()=>worker()));
+  }
+  async function hydrateStudentEditPermissions(box){
+    const buttons=[...box.querySelectorAll("[data-student-view]")];
+    let next=0;
+    const worker=async()=>{
+      while(next<buttons.length){
+        const button=buttons[next++],row=button.closest("tr");
+        if(!row?.isConnected)continue;
+        try{
+          if(!await canEditStudent(button.dataset.studentView)||!row.isConnected)continue;
+          const cell=row.querySelector(".table-actions");
+          if(!cell||cell.querySelector("[data-student-edit]"))continue;
+          const edit=document.createElement("button");
+          edit.className="button secondary small";
+          edit.textContent="Edit";
+          edit.dataset.studentEdit=button.dataset.studentView;
+          edit.onclick=async()=>{
+            const config=await academicConfig();
+            openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},button.dataset.studentView);
+          };
+          cell.append(edit);
+        }catch(error){console.warn("student_edit_permission_check_failed",error);}
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(STUDENT_BACKGROUND_CONCURRENCY,buttons.length)},()=>worker()));
   }
   const canEditStudent=async id=>Boolean(id)&&Boolean(await certified("can_edit_student_record",{target_student_id:id}));
   async function renderStudents(){
@@ -80,20 +126,16 @@
       box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Student</th><th>Admission no.</th><th>Class</th><th>Academic year</th><th>Roll no.</th><th>Status</th><th>Actions</th></tr></thead><tbody>
         ${rows.map(row=>`<tr><td><div class="cell-main">${studentAvatarHtml(row)}<span class="cell-copy"><strong>${esc([row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" "))}</strong><small>${esc(row.gender||"—")} • ${formatDate(row.date_of_birth)}</small></span></div></td><td>${esc(row.admission_no||"—")}</td><td>${esc(row.class_name||"—")}</td><td>${esc(row.academic_year_name||"—")}</td><td>${esc(row.roll_number||"—")}</td><td>${status(row.archived?"archived":row.status)}</td><td><div class="table-actions"><button class="button ghost small" data-student-view="${esc(row.id)}">View</button>${row.enrollment_id&&!row.archived&&["class_teacher","subject_teacher"].includes(currentRole())?`<button class="button outline small" data-student-report="${esc(row.enrollment_id)}" data-student-report-class="${esc(row.class_id||"")}">Report</button>`:""}${canManage&&!row.archived?`<button class="button secondary small" data-student-edit="${esc(row.id)}">Edit</button>`:""}${isSystemAdmin()&&!row.archived?`<button class="button danger small" data-student-archive="${esc(row.id)}">Remove</button>`:""}${isSystemAdmin()&&row.archived?`<button class="button success small" data-student-restore="${esc(row.id)}">Restore</button>`:""}</div></td></tr>`).join("")}
       </tbody></table></div>`;
-      await hydrateStudentPhotos(box);
-      if(currentRole()==="class_teacher"){
-        await Promise.all([...box.querySelectorAll("[data-student-view]")].map(async b=>{
-          const row=b.closest("tr");if(!row)return;
-          try{if(await canEditStudent(b.dataset.studentView)){
-            const cell=row.querySelector(".table-actions");if(cell){const edit=document.createElement("button");edit.className="button secondary small";edit.textContent="Edit";edit.onclick=async()=>{const config=await academicConfig();openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},b.dataset.studentView)};cell.append(edit)}
-          }}catch(error){console.warn("student_edit_permission_check_failed",error)}
-        }));
-      }
+      // Make the visible directory interactive as soon as its verified rows
+      // arrive. Neither individual R2 images nor row-level teacher checks
+      // may hold the global page-ready or connection indicator open.
       box.querySelectorAll("[data-student-view]").forEach(b=>b.onclick=()=>openStudentRecord(b.dataset.studentView));
       box.querySelectorAll("[data-student-report]").forEach(b=>b.onclick=()=>{shellState().pendingReportEnrollmentId=b.dataset.studentReport;shellState().reportClassFilter=b.dataset.studentReportClass||"";window.EdusentiaShell?.navigate?.("reports");});
       box.querySelectorAll("[data-student-edit]").forEach(b=>b.onclick=async()=>{const config=await academicConfig();openStudentEditor({config,years:config?.academic_years||[],classes:config?.classes||[]},b.dataset.studentEdit);});
       box.querySelectorAll("[data-student-archive]").forEach(b=>b.onclick=()=>archiveStudent(b.dataset.studentArchive));
       box.querySelectorAll("[data-student-restore]").forEach(b=>b.onclick=()=>restoreStudent(b.dataset.studentRestore));
+      void hydrateStudentPhotos(box);
+      if(currentRole()==="class_teacher")void hydrateStudentEditPermissions(box);
     }catch(error){box.innerHTML=pageError(error);}
   }
 
