@@ -7,6 +7,9 @@
     retry=byId("verificationRetry");
   const params=new URLSearchParams(location.search);
   const staff=params.get("staffcard"),student=params.get("idcard");
+  const documentParams=["verify","certificate","transcript"];
+  const documentKeys=documentParams.filter(key=>params.has(key));
+  const isDocumentVerification=documentKeys.length>0;
   const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   function show(kind,title,message,symbol){
@@ -26,8 +29,70 @@
     return Number.isFinite(time)?new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeZone:"UTC"}).format(new Date(time)):"";
   }
 
+  async function verifyDocument(){
+    const labels={verify:"Report Card",certificate:"Certificate",transcript:"Academic Transcript"};
+    const key=documentKeys[0],value=String(params.get(key)||"").trim();
+    const school=String(params.get("school")||"").trim();
+    if(documentKeys.length!==1 || Boolean(staff)||Boolean(student) || !UUID.test(value)
+      || (school&&!/^[A-Z]{3}-\\d{6}$/i.test(school))){
+      show("invalid","Invalid verification link","The scanned document verification reference is invalid.","×");
+      return;
+    }
+    const documentName=labels[key];
+    document.title=documentName+" Verification | Edusentia";
+    byId("verifyTitle").textContent=documentName+" Verification";
+    show("loading","Checking "+documentName.toLowerCase(),"Contacting the issuing school's verification service.","◷");
+    const url=new URL("/api/public/document-verification",
+      String(window.EDS_MASTER_CONFIG?.apiBaseUrl||"https://edusentia-enterprise-neon-api.edusentia-enterprise-neon.workers.dev"));
+    url.searchParams.set(key,value);
+    if(school)url.searchParams.set("school",school.toUpperCase());
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),16000);
+    try{
+      const response=await fetch(url.toString(),{method:"GET",credentials:"omit",cache:"no-store",
+        headers:{accept:"application/json"},signal:controller.signal});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(String(result?.error?.message||"The verification service is unavailable."));
+      const v=result.verification||{},state=String(v.status||"not_found");
+      if(!v.found){
+        show("invalid",documentName+" not verified","No issued "+documentName.toLowerCase()+" matches this verification reference.","×");
+        return;
+      }
+      if(state==="active" && v.valid===true){
+        show("valid","Authentic "+documentName.toLowerCase(),
+          "The issuing school confirms this document is currently valid.","✓");
+      }else if(state==="revoked"){
+        show("invalid",documentName+" revoked or withdrawn",
+          "The issuing school has withdrawn or revoked this document. It is no longer valid.","×");
+      }else if(state==="superseded"){
+        show("warning",documentName+" superseded",
+          "A newer document has replaced this issue. This issue is no longer current.","!");
+      }else{
+        show("invalid",documentName+" not valid",
+          "This document is not currently verified as valid.","×");
+      }
+      byId("verificationSchool").textContent=String(v.school_name||"Issuing school");
+      appendField(key==="verify"?"Report number":key==="certificate"?"Certificate number":"Transcript number",v.document_number);
+      appendField(key==="certificate"?"Recipient":"Student",v.recipient_name);
+      appendField("Admission number",v.recipient_identifier);
+      appendField("Document",v.document_title);
+      appendField("Class",v.class_name);
+      appendField("Academic year",v.academic_year);
+      appendField("Term",v.term_name);
+      appendField("Purpose",v.purpose);
+      appendField(key==="verify"?"Published on":"Issued on",formatDate(v.issued_at));
+      appendField("Replacement document",v.replacement_number);
+      container.hidden=false;
+    }catch(error){
+      show("warning","Verification temporarily unavailable",
+        error?.name==="AbortError"?"The verification request timed out. Try again.":String(error?.message||"Check your connection and try again."),"!");
+      retry.hidden=false;
+    }finally{clearTimeout(timeout);}
+  }
+
   async function verify(){
     container.hidden=true;retry.hidden=true;fields.replaceChildren();
+    if(isDocumentVerification)return verifyDocument();
     if(Boolean(staff)===Boolean(student)||!UUID.test(String(staff||student||""))){
       show("invalid","Invalid verification link","The card QR code is incomplete or malformed. Ask the school for a valid card.", "×");
       return;
