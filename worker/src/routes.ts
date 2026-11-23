@@ -14,6 +14,7 @@ import { handleTenantAuthRecovery } from "./recovery-compat";
 import { backupDownloadGateway, handleBackupTransfer, handleScheduledBackupCompat } from "./backup-service";
 import { cancelRestore, executeRestore, handleRestoreTransfer, prepareRestore } from "./restore-service";
 import { handlePublicIdCardVerification } from "./public-id-verification";
+import { handlePublicDocumentVerification } from "./public-document-verification";
 
 // Authentication and authorization routes fail closed before tenant data access. Users, Reports, and Operations include the 0061 Neon production parity repairs.
 // Class Teacher workspace parity: bootstrap exposes certified role-scoped academic arrays and permissions.
@@ -75,6 +76,8 @@ export async function route(request:Request,env:Env,requestId:string):Promise<Re
   // Only a valid, unguessable card UUID can query a read-only certified status.
   const publicCard=await handlePublicIdCardVerification(request,env,requestId);
   if(publicCard)return publicCard;
+  const publicDocument=await handlePublicDocumentVerification(request,env,requestId);
+  if(publicDocument)return publicDocument;
   const platformResponse=await platformRoute(request,env,requestId);if(platformResponse)return platformResponse;
   const backupTransfer=await handleBackupTransfer(request,env);if(backupTransfer)return backupTransfer;
   const restoreTransfer=await handleRestoreTransfer(request,env);if(restoreTransfer)return restoreTransfer;
