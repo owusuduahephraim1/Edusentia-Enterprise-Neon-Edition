@@ -293,7 +293,7 @@
     url.searchParams.set(mode==="staff"?"staffcard":"idcard",String(token||""));
     const tenant=window.EdusentiaShell?.state?.boot?.tenant||{};
     const code=String(school.tenant_code||school.code||tenant.code||tenant.tenant_code||"").trim().toUpperCase();
-    if(/^[A-Z]{3}-\\d{6}$/.test(code))url.searchParams.set("school",code);
+    if(/^[A-Z]{3}-\d{6}$/.test(code))url.searchParams.set("school",code);
     return url.toString();
   }
   async function idCardBlobImage(blob){const url=URL.createObjectURL(blob);try{return await loadImage(url)}finally{URL.revokeObjectURL(url)}}
