@@ -194,11 +194,13 @@
     studentForm.onsubmit=async e=>{
       e.preventDefault();const button=byId("studentCertifiedSave");button.disabled=true;
       try{
-        const v=formValues(e.currentTarget);
+        // Event.currentTarget is only valid while the event is being dispatched.
+        // Use the captured form across the awaited student permission check.
+        const v=formValues(studentForm);
         if(id&&!await canEditStudent(id))throw new Error("You are not assigned as this student’s main class teacher.");
         if(Boolean(v.academic_year_id)!==Boolean(v.class_id))throw new Error("Academic year and class must be selected together.");
         if(!id&&(!v.academic_year_id||!v.class_id))throw new Error("Academic year and class are required for a new student so the admission number can be generated.");
-        const payload={student:{id:v.id||"",updated_at:v.updated_at||"",admission_no:student.admission_no||"",first_name:String(v.first_name||"").trim(),middle_name:String(v.middle_name||"").trim(),last_name:String(v.last_name||"").trim(),gender:v.gender,date_of_birth:v.date_of_birth||"",status:v.status||"active",photo_url:student.photo_url||""},enrollment:teacherEdit?{}:v.academic_year_id&&v.class_id?{academic_year_id:v.academic_year_id,class_id:v.class_id,roll_number:v.roll_number||"",active:true}:{},guardian:teacherEdit?{}:{id:v.guardian_id||"",full_name:String(v.guardian_name||"").trim(),relationship:String(v.relationship||"Guardian").trim(),phone:String(v.guardian_phone||"").trim(),email:String(v.guardian_email||"").trim(),address:String(v.guardian_address||"").trim(),auth_user_id:v.guardian_auth_user_id||"",is_primary:true,can_view_reports:true,can_receive_notifications:e.currentTarget.elements.guardian_notify?.checked!==false},reason:id?"Student record updated":"Student registered"};
+        const payload={student:{id:v.id||"",updated_at:v.updated_at||"",admission_no:student.admission_no||"",first_name:String(v.first_name||"").trim(),middle_name:String(v.middle_name||"").trim(),last_name:String(v.last_name||"").trim(),gender:v.gender,date_of_birth:v.date_of_birth||"",status:v.status||"active",photo_url:student.photo_url||""},enrollment:teacherEdit?{}:v.academic_year_id&&v.class_id?{academic_year_id:v.academic_year_id,class_id:v.class_id,roll_number:v.roll_number||"",active:true}:{},guardian:teacherEdit?{}:{id:v.guardian_id||"",full_name:String(v.guardian_name||"").trim(),relationship:String(v.relationship||"Guardian").trim(),phone:String(v.guardian_phone||"").trim(),email:String(v.guardian_email||"").trim(),address:String(v.guardian_address||"").trim(),auth_user_id:v.guardian_auth_user_id||"",is_primary:true,can_view_reports:true,can_receive_notifications:studentForm.elements.guardian_notify?.checked!==false},reason:id?"Student record updated":"Student registered"};
         let saved=await certified("save_student",{payload}),file=byId("studentPhotoFile")?.files?.[0];
         if(file){
           const savedStudent=saved?.student||saved;
