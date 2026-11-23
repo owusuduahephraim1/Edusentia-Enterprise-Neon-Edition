@@ -16,7 +16,7 @@
   }
   const turnstileSiteKey = String(window.EDS_MASTER_CONFIG?.turnstileSiteKey || "").trim();
   const platformMode = new URLSearchParams(location.search).get("platform")==="1";
-  const state = {session:null, boot:null, view:"dashboard", loginSchool:null, authScope:platformMode?"platform":"tenant", brandLogoUrl:""};
+  const state = {session:null, boot:null, view:"dashboard", loginSchool:null, authScope:platformMode?"platform":"tenant", brandLogoUrl:"", initialDashboardBootstrap:false};
   let turnstileToken = "", turnstileWidgetId = null, mfaChallenge = "", pendingSession = null, pendingScope = state.authScope;
   let registrationToken = "", registrationWidgetId = null, recoveryTurnstileToken = "", recoveryWidgetId = null;
 
@@ -223,7 +223,9 @@
   function showAuthStep(step){for(const id of ["loginForm","mfaPanel","recoveryPanel"])byId(id)?.classList.add("hidden");byId(step)?.classList.remove("hidden");}
   function message(text,kind=""){const el=byId("authMessage");if(!el)return;el.textContent=text||"";el.dataset.kind=kind;el.classList.toggle("hidden",!text);}
   function setSync(kind,label){const el=byId("syncIndicator");if(!el)return;el.className=`sync-pill ${kind}`;byId("syncLabel").textContent=label;}
-  function setBusy(busy){const content=byId("content");if(content)content.setAttribute("aria-busy",busy?"true":"false");setSync(busy?"pending":"online",busy?"Loading":"Connected");}
+  // Workspace data requests are not connection checks. Keep the connection
+  // badge tied to authenticated connectivity, not the loading of a page/photo.
+  function setBusy(busy){const content=byId("content");if(content)content.setAttribute("aria-busy",busy?"true":"false");}
   function status(value){const v=String(value||"unknown").toLowerCase().replace(/[^a-z0-9_]+/g,"_");return `<span class="status ${escapeHtml(v)}">${escapeHtml(String(value||"Unknown").replaceAll("_"," "))}</span>`;}
   function fullName(row){return [row.first_name,row.middle_name,row.last_name].filter(Boolean).join(" ");}
   function formatDate(value){if(!value)return "—";const d=new Date(value);return Number.isNaN(d.valueOf())?escapeHtml(value):escapeHtml(new Intl.DateTimeFormat(undefined,{year:"numeric",month:"short",day:"2-digit"}).format(d));}
@@ -327,14 +329,13 @@
     if(platformMode){location.replace("./platform-saas-admin.html");return;}
     show("loader");
     try{
-      await prepareLoginContext();
-      if(platformMode){
-        const platformSession=await api().platformSession();
-        if(platformSession?.authenticated){location.replace("./platform-saas-admin.html");return;}
+      // Authenticated users do not need the public school-lookup request
+      // before their protected session can be restored.
+      const session=await api().session();
+      if(!session?.authenticated){
+        await prepareLoginContext();
         show("authView");showAuthStep("loginForm");renderTurnstile();return;
       }
-      const session=await api().session();
-      if(!session?.authenticated){show("authView");showAuthStep("loginForm");renderTurnstile();return;}
       await enter(session);
     }catch(error){
       show("authView");showAuthStep("loginForm");renderTurnstile();
@@ -345,6 +346,9 @@
   async function enter(session){
     state.session=session;
     state.boot=await api().bootstrap();
+    // The initial bootstrap includes dashboard data. A user-initiated revisit
+    // still fetches fresh statistics instead of treating these as cached.
+    state.initialDashboardBootstrap=true;
     const userName=session.user?.displayName||session.user?.email||"User";
     const roleLabel=session.membership?.roleLabel||session.membership?.role||"Member";
     const tenantName=state.boot.tenant?.name||"Edusentia Enterprise";
@@ -353,15 +357,17 @@
     byId("userAvatar").textContent=String(userName).trim().charAt(0).toUpperCase()||"E";
     byId("brandName").textContent=tenantName;
     byId("brandLogo").alt=tenantName;
-    await applyTenantBrandLogo(state.boot.tenant||{});
     show("appShell");
-    setSync("online","Connected");
+    setSync(navigator.onLine?"online":"offline",navigator.onLine?"Connected":"Offline");
+    // School logo and the notification badge are enhancements, not gates
+    // that should prevent an authenticated workspace from becoming usable.
+    void applyTenantBrandLogo(state.boot.tenant||{}).catch(error=>console.warn("school_logo_background_load_failed",error));
     if(state.boot?.profile?.must_change_password===true){
       openRequiredPasswordChange();
       return;
     }
     renderNav();
-    await loadNotificationCount();
+    void loadNotificationCount();
     await navigate("dashboard");
   }
 
@@ -517,7 +523,8 @@
   }
 
   async function renderDashboard(){
-    state.boot=await api().bootstrap();
+    if(state.initialDashboardBootstrap&&state.boot)state.initialDashboardBootstrap=false;
+    else state.boot=await api().bootstrap();
     const data=state.boot,tenant=data.tenant||{};
     if(["class_teacher","subject_teacher"].includes(role())){
       const terms=Array.isArray(data.terms)?data.terms:[],years=Array.isArray(data.academic_years)?data.academic_years:[],term=terms.find(item=>item.is_active)||terms[0]||null,year=years.find(item=>item.is_active)||years.find(item=>String(item.id)===String(term?.academic_year_id))||years[0]||null;
