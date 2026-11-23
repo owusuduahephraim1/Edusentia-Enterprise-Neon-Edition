@@ -3,6 +3,14 @@
   <!-- System Administrator blueprint parity release v13: bounded lists and permanent audit reset controls. -->
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#072863"><meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer">
+<script>
+  // Backward compatibility: QR links already printed with ?staffcard or ?idcard
+  // must verify publicly instead of falling through to the tenant sign-in.
+  (()=>{const q=new URLSearchParams(location.search);
+    if(q.has("staffcard")||q.has("idcard"))
+      location.replace("./verify-card.html"+location.search);
+  })();
+</script>
 <title>Edusentia Enterprise™ Neon Edition</title>
 <link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
 <link rel="manifest" href="manifest.webmanifest">
