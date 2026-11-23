@@ -27,6 +27,7 @@ fn clean_document_name(value: &str) -> String {
 /// This command cannot read arbitrary local files and exposes no filesystem API.
 #[tauri::command]
 async fn save_document(
+    window: tauri::WebviewWindow,
     filename: String,
     mime_type: String,
     data_base64: String,
@@ -43,6 +44,9 @@ async fn save_document(
     }
     let proposed = clean_document_name(&filename);
     let selected = rfd::AsyncFileDialog::new()
+        // Keep the dialog on top of its Windows WebView2 application, rather
+        // than creating an unowned picker that can hide behind other windows.
+        .set_parent(&window)
         .set_title("Save Edusentia document")
         .set_file_name(&proposed)
         .save_file()
@@ -219,6 +223,18 @@ pub fn run() {
             let config = app.config().app.windows.first()
                 .ok_or("Main native window configuration is missing")?;
             let window = WebviewWindowBuilder::from_config(app.handle(), config)?
+                // Identify the Windows host without depending on the optional
+                // remote Tauri global, which service-worker restores may omit.
+                // This flag affects only display and picker selection. Native
+                // command authorization remains origin-scoped by Tauri ACL.
+                .initialization_script(r#"
+                  if (window.top === window &&
+                      location.origin === 'https://owusuduahephraim1.github.io' &&
+                      location.pathname.startsWith('/Edusentia-Enterprise-Neon-Edition/')) {
+                    Object.defineProperty(window, '__EDUSENTIA_WINDOWS_DESKTOP__',
+                      {value: true, configurable: false});
+                  }
+                "#)
                 .on_download(|_, event| {
                     match event {
                         DownloadEvent::Requested { .. } => true,
