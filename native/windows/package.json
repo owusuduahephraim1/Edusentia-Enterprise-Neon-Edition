@@ -1,7 +1,7 @@
 {
   "name": "edusentia-enterprise-neon-desktop",
   "private": true,
-  "version": "7.4.1",
+  "version": "7.4.2",
   "scripts": {
     "tauri": "tauri",
     "build": "tauri build"
