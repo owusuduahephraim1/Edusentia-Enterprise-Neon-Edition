@@ -19,7 +19,8 @@
         "fullscreen": false,
         "center": true,
         "visible": false,
-        "create": false
+        "create": false,
+        "label": "main"
       }
     ],
     "security": {
