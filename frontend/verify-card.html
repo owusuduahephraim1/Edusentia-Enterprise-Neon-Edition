@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#092a62">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://edusentia-enterprise-neon-api.edusentia-enterprise-neon.workers.dev; base-uri 'none'; object-src 'none'; form-action 'none'">
+<title>Verify ID Card | Edusentia Enterprise</title>
+<link rel="icon" type="image/svg+xml" href="assets/edusentia-mark.svg">
+<link rel="stylesheet" href="verify-card.css">
+</head>
+<body>
+<main class="verify-main">
+  <header class="brand">
+    <img src="assets/edusentia-mark.svg" alt="Edusentia" width="55" height="55">
+    <div><strong>Edusentia Enterprise</strong><span>Official School ID Card Verification</span></div>
+  </header>
+  <section class="verify-panel" aria-labelledby="verifyTitle">
+    <div class="verify-heading">
+      <span class="eyebrow">SECURE DOCUMENT AUTHENTICATION</span>
+      <h1 id="verifyTitle">ID Card Verification</h1>
+      <p>Verification checks the issuing school's live card records, including expiry, replacement and revocation.</p>
+    </div>
+    <div id="verificationState" class="state state-loading" role="status" aria-live="polite">
+      <span id="verificationIcon" class="state-icon" aria-hidden="true">◷</span>
+      <div>
+        <strong id="verificationLabel">Checking card authenticity</strong>
+        <p id="verificationDetail">Contacting the secure Edusentia verification service.</p>
+      </div>
+    </div>
+    <div id="verificationDetails" class="details" hidden>
+      <div class="school-name"><span>Issuing institution</span><strong id="verificationSchool"></strong></div>
+      <dl id="verificationFields"></dl>
+    </div>
+    <div class="button-row">
+      <button type="button" id="verificationRetry" hidden>Try verification again</button>
+      <a href="./">Edusentia home</a>
+    </div>
+    <p class="trust-note">A printed QR code alone does not establish validity. Only the live result shown here confirms the current status of a card. No sign-in is required to check an issued card.</p>
+  </section>
+  <footer>© Edusentia Enterprise • Verification results reflect the issuing school's current records.</footer>
+</main>
+<script src="config.js"></script><script src="verify-card.js"></script>
+</body>
+</html>
