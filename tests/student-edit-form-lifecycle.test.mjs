@@ -70,9 +70,9 @@ test("existing student save completes after event.currentTarget expires during p
   await studentSubmitHandler(context)(event);
 
   assert.deepEqual(calls.map(c=>c.method),["save_student","uploadFile","set_student_photo"]);
-  assert.equal(calls[0].payload.guardian.can_receive_notifications,false);
-  assert.equal(calls[0].payload.student.admission_no,values.admission_no);
-  assert.equal(calls[0].payload.student.id,studentId);
+  assert.equal(calls[0].payload.payload.guardian.can_receive_notifications,false);
+  assert.equal(calls[0].payload.payload.student.admission_no,values.admission_no);
+  assert.equal(calls[0].payload.payload.student.id,studentId);
   assert.equal(calls[1].options.subfolder,studentId);
   assert.equal(calls[2].payload.target_student_id,studentId);
   assert.equal(calls[2].payload.target_photo_url,studentId+"/updated.jpg");
