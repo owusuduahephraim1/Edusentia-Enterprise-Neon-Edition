@@ -32,8 +32,9 @@ export function corsHeaders(request:Request, env:Env){
     h.set("access-control-allow-origin",PUBLIC_VERIFICATION_ORIGIN);
     h.set("vary","Origin");
   }
-  h.set("access-control-allow-methods","GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  h.set("access-control-allow-headers","content-type,x-request-id,x-csrf-token,authorization");
+  const publicOnly=isAllowedPublicVerification(request) && !isAllowedAppOrigin(env,origin);
+  h.set("access-control-allow-methods",publicOnly?"GET,HEAD,OPTIONS":"GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  h.set("access-control-allow-headers",publicOnly?"accept":"content-type,x-request-id,x-csrf-token,authorization");
   h.set("access-control-max-age","86400");
   return h;
 }
