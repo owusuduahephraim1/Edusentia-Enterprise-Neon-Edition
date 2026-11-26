@@ -26,7 +26,9 @@ test("the history nav entry remains in authorized role navigation order",()=>{
 test("registered full history view upgrades the core fallback and keeps the exact navigation label",()=>{
   assert.match(workspaces,/registerView\(\{id:"history",label:"Student Academic History"/);
   assert.match(workspaces,/render:renderHistory\}/);
-  assert.match(shell,/if\(existing\)Object\.assign\(existing,item\);else NAV\.push\(item\)/);
+  assert.match(shell,/else if\(existing\)Object\.assign\(existing,item\)/);
+  assert.match(shell,/else NAV\.push\(item\)/);
+  assert.match(shell,/teacherHistoryRenderer\(\):schoolHistoryRenderer\(\)/);
   assert.match(shell,/if\(state\.session\)renderNav\(\)/);
 });
 
