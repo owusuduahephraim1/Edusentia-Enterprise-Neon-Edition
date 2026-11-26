@@ -93,6 +93,11 @@
   async function verify(){
     container.hidden=true;retry.hidden=true;fields.replaceChildren();
     if(isDocumentVerification)return verifyDocument();
+    if(!staff&&!student){
+      show("loading","Scan an official school document",
+        "Scan the QR code on an issued ID card, report card, certificate, or academic transcript to verify its status.","◌");
+      return;
+    }
     if(Boolean(staff)===Boolean(student)||!UUID.test(String(staff||student||""))){
       show("invalid","Invalid verification link","The card QR code is incomplete or malformed. Ask the school for a valid card.", "×");
       return;
