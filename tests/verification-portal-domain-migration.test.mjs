@@ -102,9 +102,10 @@ test("existing verification links remain supported and current UI permits both A
   assert.match(buildScript,/join\(frontend,"verify-card\.html"\)/);
 });
 
-test("issued-card QR addresses remain on their currently active hosts until the new verification domain goes live",()=>{
+test("newly printed ID QR links migrate to the official public site without rewriting legacy links",()=>{
   const source=fs.readFileSync(path.join(root,"frontend/parity-enterprise-workspaces.js"),"utf8");
-  assert.match(source,/function idCardVerificationUrl\(token,mode,school=\{\}\)/);
-  assert.match(source,/new URL\("verify-card\.html",edusentiaVerificationBaseUrl\(\)\)/);
-  assert.doesNotMatch(source,/new URL\("https:\/\/verify\.edusentia\.com/);
+  assert.ok(source.includes('function idCardVerificationUrl(token,mode,school={})'));
+  assert.ok(source.includes('const OFFICIAL_VERIFICATION_BASE_URL="https://verify.edusentia.com/";'));
+  assert.ok(source.includes('return officialDocumentVerificationUrl(token,mode==="staff"?"staff":"student",school);'));
+  assert.ok(source.includes('new URL(edusentiaVerificationBaseUrl())'));
 });
