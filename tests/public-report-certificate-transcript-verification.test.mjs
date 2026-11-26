@@ -35,7 +35,7 @@ function pageRun(search,documentValue){
 test("all five document card types have public pre-login QR handlers",()=>{
   for(const key of ["staffcard","idcard","verify","certificate","transcript"])
     assert.ok(index.includes('q.has("'+key+'")'),key+" must route publicly");
-  assert.ok(index.indexOf('location.replace("./verify-card.html"')<index.indexOf('<script src="app.js?v=20261126-history-nav2">'));
+  assert.ok(index.indexOf('location.replace("./verify-card.html"')<index.indexOf('<script src="app.js?v=20261126-history-nav3">'));
   assert.match(page,/id="verificationState"/);
   assert.doesNotMatch(page,/id="loginForm"/);
   assert.match(routes,/handlePublicDocumentVerification\(request,env,requestId\)/);
