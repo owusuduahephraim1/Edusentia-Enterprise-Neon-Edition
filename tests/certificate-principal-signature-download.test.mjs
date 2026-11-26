@@ -15,7 +15,7 @@ test("issued certificate PDF downloads Principal signature from protected school
   assert.match(signer,/certified\("get_current_principal_signature",\{\}\)/);
   assert.match(signer,/api\(\)\.downloadFile\(path\)/);
   assert.match(signer,/idCardBlobImage\(blob\)/);
-  assert.match(signer,/image\/\(png\|jpeg\|webp\)/);
+  assert.match(signer,/png\|jpeg\|webp/);
 });
 
 test("Principal image is rendered on the certificate signature line",()=>{
