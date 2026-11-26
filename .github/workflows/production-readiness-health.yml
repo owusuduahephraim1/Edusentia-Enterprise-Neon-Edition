@@ -1,0 +1,53 @@
+name: Production Readiness Health Check
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/production-readiness-health.yml"
+      - "scripts/check-production-readiness.mjs"
+      - "scripts/check-backup-freshness.sh"
+      - "tests/production-readiness-health.test.mjs"
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-readiness-health
+  cancel-in-progress: false
+
+jobs:
+  public-services:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test monitoring logic
+        run: node --test tests/production-readiness-health.test.mjs
+      - name: Read-only HTTPS and email DNS health check
+        run: node scripts/check-production-readiness.mjs
+
+  tenant-backup-metadata:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate shell syntax
+        run: bash -n scripts/check-backup-freshness.sh
+      - name: Install PostgreSQL client when required
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client >/dev/null
+          fi
+      - name: Read only aggregate backup records
+        shell: bash
+        run: bash scripts/check-backup-freshness.sh
