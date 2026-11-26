@@ -14,7 +14,7 @@ Do not publish prices, guarantees, data protection certifications, or claimed re
 | WEB-01 | Apex and www HTTPS | Both hosted public pages were externally fetched with Edusentia branding | Passed (technical) | Continue read-only monitoring |
 | WEB-02 | App and QR verifier | Existing live subdomains and earlier functional user confirmation | Operational, continue monitoring | Role-based acceptance tests and exceptions documented |
 | WEB-03 | Mobile, accessibility and public links | Responsive website CI checks and public links | Partially validated | Manual mobile keyboard, screen-reader, and browser acceptance |
-| MAIL-01 | Receiving mailbox | On 26 Nov 2026 MX records absent | Blocking | Select inbox provider/forward destination; configure and independently test two inbound messages |
+| MAIL-01 | Receiving mailbox | On 26 Nov 2026 MX records absent; Zoho Mail Lite (two mailboxes) recommended but NOT purchased | Blocking | Verify Zoho domain, create info@ and support@ as separate accounts; configure and independently test two inbound messages |
 | MAIL-02 | Sending authentication | SPF/DMARC absent; DKIM provider unspecified | Blocking | One correctly scoped SPF, valid DKIM selector(s), DMARC, test aligned sent and reply messages |
 | BKP-01 | Production database snapshot | Neon manual snapshot: edusentia-pre-public-domain-launch-2026-11-26, ID snap-soft-tooth-b5rcofnx | Created | Retention and restoration viability checked separately |
 | BKP-02 | Verified encrypted full tenant backup | Prior tenant backup UI last verified September 27, 2026; no live SQL access from connected Neon tool | Unverified | Fresh full export, signature/checksum verification and manifest covering database + protected R2 objects |
@@ -66,3 +66,7 @@ The Supabase reference includes a full-school backup-and-restore workflow with e
 - The provisional 48-hour freshness warning in the monitoring workflow is not a contractually agreed recovery point objective.
 - Neon branch history retention currently reports 86,400 seconds. Snapshot retention and any time-to-restore promise must be verified with the actual plan.
 - Public pages edusentia.com/privacy.html and edusentia.com/security.html are product/marketing statements and must not be treated as the complete school processing agreement.
+
+## Prepared business email provider configuration (not activated)
+
+Zoho Mail Lite (5 GB per user) has been recommended for two independent Edusentia mailboxes. See docs/ZOHO_MAIL_LITE_TWO_MAILBOX_ACTIVATION.md and ops/email/edusentia-zoho-mail-activation.template.json for the provider-specific DNS and launch gates. No subscription has been purchased, no mailboxes have been created, and no email DNS entries have been deployed by this release. Do not publish info@/support@ until tested.
