@@ -21,7 +21,7 @@ test("old staff and student QR links redirect to public verification before auth
 });
 
 test("new ID QR links route to official public page with tenant code",()=>{
-  const beginning=src.indexOf("function edusentiaVerificationBaseUrl(){");
+  const beginning=src.indexOf('const OFFICIAL_VERIFICATION_BASE_URL=');
   const ending=src.indexOf("  async function idCardBlobImage(",beginning);
   assert.ok(beginning>=0&&ending>beginning);
   const code=src.slice(beginning,ending);
@@ -36,8 +36,8 @@ test("new ID QR links route to official public page with tenant code",()=>{
     context);
   for(const href of output) {
     const url=new URL(href);
-    assert.equal(url.origin,"https://owusuduahephraim1.github.io");
-    assert.equal(url.pathname,"/Edusentia-Enterprise-Neon-Edition/verify-card.html");
+    assert.equal(url.origin,"https://verify.edusentia.com");
+    assert.equal(url.pathname,"/");
     assert.equal(url.searchParams.get("school"),"NIS-000001");
   }
   assert.equal(new URL(output[0]).searchParams.get("staffcard"),"6c622ff5-82a8-4db8-8c78-d441522a16f3");
