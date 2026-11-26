@@ -7,12 +7,15 @@ const sw=fs.readFileSync("frontend/service-worker.js","utf8");
 const shell=fs.readFileSync("frontend/app.js","utf8");
 const workspace=fs.readFileSync("frontend/parity-enterprise-workspaces.js","utf8");
 const revision="20261126-history-nav2";
+  const appRevision="20261126-history-nav3";
 
 test("school app loads versioned shell and Academic History modules instead of old cached URLs",()=>{
-  for(const name of ["app.js","parity-enterprise-workspaces.js","official-transcript-pdf.js"]){
+  for(const name of ["parity-enterprise-workspaces.js","official-transcript-pdf.js"]){
     assert.ok(html.includes('src="'+name+'?v='+revision+'"'),name+" missing revision");
     assert.ok(sw.includes('"./'+name+'?v='+revision+'"'),name+" missing from new PWA cache");
   }
+  assert.ok(html.includes('src="app.js?v='+appRevision+'"'));
+  assert.ok(sw.includes('"./app.js?v='+appRevision+'"'));
   assert.ok(!html.includes('src="app.js"'));
   assert.ok(!html.includes('src="parity-enterprise-workspaces.js"'));
 });
