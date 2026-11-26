@@ -104,8 +104,8 @@ test("existing verification links remain supported and current UI permits both A
 
 test("newly printed ID QR links migrate to the official public site without rewriting legacy links",()=>{
   const source=fs.readFileSync(path.join(root,"frontend/parity-enterprise-workspaces.js"),"utf8");
-  assert.match(source,/function idCardVerificationUrl\(token,mode,school=\{\}\)/);
-  assert.match(source,/const OFFICIAL_VERIFICATION_BASE_URL="https:\/\/verify\.edusentia\.com\/";/);
-  assert.match(source,/return officialDocumentVerificationUrl\(token,mode==="staff"\?"staff":"student",school\)/);
-  assert.match(source,/new URL\(edusentiaVerificationBaseUrl\(\)\)/);
+  assert.ok(source.includes('function idCardVerificationUrl(token,mode,school={})'));
+  assert.ok(source.includes('const OFFICIAL_VERIFICATION_BASE_URL="https://verify.edusentia.com/";'));
+  assert.ok(source.includes('return officialDocumentVerificationUrl(token,mode==="staff"?"staff":"student",school);'));
+  assert.ok(source.includes('new URL(edusentiaVerificationBaseUrl())'));
 });
