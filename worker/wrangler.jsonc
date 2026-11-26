@@ -8,6 +8,7 @@
   },
   "vars": {
     "APP_ORIGIN": "https://owusuduahephraim1.github.io",
+    "ADDITIONAL_APP_ORIGINS": "https://edusentia-app.pages.dev,https://app.edusentia.com",
     "APP_BASE_PATH": "/Edusentia-Enterprise-Neon-Edition",
     "SESSION_COOKIE_NAME": "__Host-edusentia_session",
     "SESSION_TTL_SECONDS": "28800",
