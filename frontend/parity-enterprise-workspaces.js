@@ -278,6 +278,7 @@
   // Follow the certified reference: frozen Principal, batch Principal, then current active signature.
   async function certificatePrincipalSignature(data,certificate){
     const frozen=obj(certificate?.snapshot),candidates=[obj(frozen.principal),obj(data?.principal)];
+    const issuedPrincipal=String(obj(frozen.principal).full_name||obj(data?.principal).full_name||"").trim().toLowerCase();
     let lookupError=null;
     try{
       const active=obj(await certified("get_current_principal_signature",{}));
@@ -286,6 +287,7 @@
     const seen=new Set();let lastError=null;
     for(const principal of candidates){
       const path=String(principal.signature_path||"").trim();
+      if(issuedPrincipal&&principal.full_name&&String(principal.full_name).trim().toLowerCase()!==issuedPrincipal)continue;
       if(!path||seen.has(path))continue;
       seen.add(path);
       try{
@@ -390,7 +392,7 @@
     ctx.font="20px Arial, sans-serif";ctx.fillStyle="#334155";
     ctx.fillText(String(certificate.certificate_number),155,1044);
     ctx.font="18px Arial, sans-serif";ctx.fillText("Issued: "+String(certificate.issue_date||certificate.issued_at||"").slice(0,10),155,1076);
-    const principal=obj(frozen.principal||data.principal),approver=String(data.batch?.approved_by_name||principal.full_name||signature.full_name||"");
+    const principal=obj(frozen.principal||data.principal),approver=String(signature.full_name||principal.full_name||data.batch?.approved_by_name||"");
     ctx.textAlign="center";
     idCardDrawSignatureOnLine(ctx,signature.image,675,1115,1030,110);
     draw(approver||"Principal",1063,"bold 23px Arial, sans-serif");
