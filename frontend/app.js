@@ -481,7 +481,22 @@
   function registerView(item){
     if(!item||!item.id||typeof item.render!=="function")throw new Error("A valid workspace view is required");
     const existing=NAV.find(entry=>entry.id===item.id);
-    if(existing)Object.assign(existing,item);else NAV.push(item);
+    // The teacher workspace registers its own academic-history renderer after the
+    // canonical administrator/Principal view. Preserve the original roles and
+    // route teachers to their scoped implementation, rather than replacing the
+    // authorised administrator view and removing its sidebar item.
+    const teacherRoles=["class_teacher","subject_teacher"];
+    if(existing&&item.id==="history"&&existing.roles?.includes("system_admin")&&
+      item.roles?.length===2&&item.roles.every(name=>teacherRoles.includes(name))){
+      const schoolHistoryRenderer=existing.render,teacherHistoryRenderer=item.render;
+      Object.assign(existing,{
+        ...item,
+        label:"Student Academic History",
+        roles:[...new Set([...existing.roles,...item.roles])],
+        render:()=>teacherRoles.includes(role())?teacherHistoryRenderer():schoolHistoryRenderer()
+      });
+    }else if(existing)Object.assign(existing,item);
+    else NAV.push(item);
     if(state.session)renderNav();
     return item;
   }
