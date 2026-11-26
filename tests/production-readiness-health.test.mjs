@@ -91,7 +91,10 @@ test("backup audit is select-only and never prints connection secrets or student
   const sh=fs.readFileSync("scripts/check-backup-freshness.sh","utf8");
   assert.match(sh,/platform\.tenant_control/);
   assert.match(sh,/public\.backup_exports/);
-  assert.match(sh,/verification_status='verified'/);
+  assert.match(sh,/verification_status='passed'/);
+  assert.match(sh,/verification_status='failed'/);
+  assert.match(sh,/completed full backups, but none with successful/);
+  assert.match(sh,/No completed full backup/);
   assert.match(sh,/::add-mask::/);
   assert.doesNotMatch(sh,/\b(?:delete|truncate|insert|update|alter|drop)\s+(?:table|from|into|public\.)/i);
   assert.doesNotMatch(sh,/student_name|student_id|email_address|source_path|backup_path/);
