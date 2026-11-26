@@ -274,6 +274,38 @@
   function certificateDownloadName(certificate){
     return idCardFilename(certificate.certificate_number||"Certificate","Certificate")+"_"+idCardFilename(certificate.recipient_name||"Recipient","Recipient")+".pdf";
   }
+  // Use the authorized Principal's actual uploaded signature, never a fabricated mark.
+  // Follow the certified reference: frozen Principal, batch Principal, then current active signature.
+  async function certificatePrincipalSignature(data,certificate){
+    const frozen=obj(certificate?.snapshot),candidates=[obj(frozen.principal),obj(data?.principal)];
+    const issuedPrincipal=String(obj(frozen.principal).full_name||obj(data?.principal).full_name||"").trim().toLowerCase();
+    let lookupError=null;
+    try{
+      const active=obj(await certified("get_current_principal_signature",{}));
+      if(active.signature_path)candidates.push(active);
+    }catch(error){lookupError=error;}
+    const seen=new Set();let lastError=null;
+    for(const principal of candidates){
+      const path=String(principal.signature_path||"").trim();
+      if(issuedPrincipal&&principal.full_name&&String(principal.full_name).trim().toLowerCase()!==issuedPrincipal)continue;
+      if(!path||seen.has(path))continue;
+      seen.add(path);
+      try{
+        const blob=await api().downloadFile(path);
+        if(blob.type&&!/^image\/(png|jpeg|webp)$/i.test(blob.type))
+          throw new Error("The Principal signature is not a supported image.");
+        const image=await idCardBlobImage(blob);
+        if(!(image?.naturalWidth||image?.width)||!(image?.naturalHeight||image?.height))
+          throw new Error("The Principal signature image could not be decoded.");
+        return {image,full_name:String(principal.full_name||"").trim(),signature_path:path};
+      }catch(error){lastError=error;}
+    }
+    if(lastError)
+      throw new Error("The Principal signature is configured but could not be loaded: "+friendly(lastError)+". Ask the Principal to re-upload it in My Signature if necessary.");
+    if(lookupError)
+      throw new Error("The Principal signature could not be verified: "+friendly(lookupError));
+    throw new Error("No active Principal signature is uploaded. The Principal must open My Signature and upload a PNG, JPEG, or WebP signature before the certificate can be downloaded.");
+  }
   async function certificateDownloadPdf(data,certificate){
     if(!certificate||certificate.status!=="issued")
       throw new Error("Only issued certificates can be downloaded.");
@@ -289,6 +321,7 @@
       }
     }
     const frozen=obj(certificate.snapshot),school=obj(frozen.school||data.school),template=obj(frozen.template||data.template);
+    const signature=await certificatePrincipalSignature(data,certificate);
     const primary=idCardSafeColour(template.primary_colour||school.primary_colour,"#0a2f73");
     const accent=idCardSafeColour(template.accent_colour||school.accent_colour,"#f1b51c");
     const width=1754,height=1240,canvas=document.createElement("canvas");
@@ -359,8 +392,9 @@
     ctx.font="20px Arial, sans-serif";ctx.fillStyle="#334155";
     ctx.fillText(String(certificate.certificate_number),155,1044);
     ctx.font="18px Arial, sans-serif";ctx.fillText("Issued: "+String(certificate.issue_date||certificate.issued_at||"").slice(0,10),155,1076);
-    const principal=obj(frozen.principal||data.principal),approver=String(principal.full_name||data.batch?.approved_by_name||"");
-    ctx.textAlign="center";ctx.strokeStyle="#64748b";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(675,1030);ctx.lineTo(1115,1030);ctx.stroke();
+    const principal=obj(frozen.principal||data.principal),approver=String(signature.full_name||principal.full_name||data.batch?.approved_by_name||"");
+    ctx.textAlign="center";
+    idCardDrawSignatureOnLine(ctx,signature.image,675,1115,1030,110);
     draw(approver||"Principal",1063,"bold 23px Arial, sans-serif");
     draw("PRINCIPAL / HEAD",1090,"18px Arial, sans-serif","#475569");
     ctx.textAlign="center";draw("Scan to verify current status",1132,"17px Arial, sans-serif","#475569");
