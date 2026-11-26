@@ -314,14 +314,16 @@
   async function copyOfficialVerificationLink(token,kind,school={}){
     const url=officialDocumentVerificationUrl(token,kind,school);
     if(!navigator.clipboard?.writeText){
-      window.prompt("Copy official document verification link:",url);
+      if(window.EdusentiaPrompt)await window.EdusentiaPrompt("Select and copy the verification link:",url,{title:"Official verification link",confirmLabel:"Close"});
+      else notify("Official verification link",url,"warning");
       return;
     }
     try{
       await navigator.clipboard.writeText(url);
       notify("Official verification link copied","The link opens verify.edusentia.com.","success");
     }catch(_){
-      window.prompt("Copy official document verification link:",url);
+      if(window.EdusentiaPrompt)await window.EdusentiaPrompt("Select and copy the verification link:",url,{title:"Official verification link",confirmLabel:"Close"});
+      else notify("Official verification link",url,"warning");
     }
   }
   async function idCardBlobImage(blob){const url=URL.createObjectURL(blob);try{return await loadImage(url)}finally{URL.revokeObjectURL(url)}}
