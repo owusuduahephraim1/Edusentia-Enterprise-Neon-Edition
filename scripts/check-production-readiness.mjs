@@ -91,7 +91,7 @@ export function summaryMarkdown(result){
     "",
     "| Business mail component | Result |",
     "|---|---|",
-    ...Object.entries(result.email).map(([k,v])=>"| "+k+" | "+v+" |"),
+    ...Object.entries(result.email).map(([k,v])=>"| "+k+" | "+(v==="pending"?"PENDING":v==="configured"?"CONFIGURED":v==="conflict"?"CONFLICT":v)+" |"),
     "",
     "**Important:** A green web status does not prove authenticated application workflows, verified email delivery, or restore recovery."
   ];
