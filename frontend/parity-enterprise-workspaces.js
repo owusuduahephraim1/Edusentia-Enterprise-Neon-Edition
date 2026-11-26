@@ -1016,7 +1016,7 @@
   registerView({id:"my_class",label:"My Class",icon:"▣",subtitle:"Assigned class, learners, and report progress",roles:["class_teacher"],render:renderMyClass});
   registerView({id:"my_subjects",label:"My Subjects",icon:"⌘",subtitle:"Assigned subjects, classes, and assessment progress",roles:["class_teacher","subject_teacher"],render:renderMySubjects});
   registerView({id:"attendance",label:"Attendance",icon:"✓",subtitle:"Daily class attendance and automatic term totals",roles:["class_teacher"],feature:"attendance",render:renderAttendance});
-  registerView({id:"history",label:"Academic History",icon:"▧",subtitle:"Cumulative transcripts, lifecycle, transfers, and verification",roles:["system_admin","principal","class_teacher","subject_teacher"],feature:"academic_history",render:renderHistory});
+  registerView({id:"history",label:"Student Academic History",icon:"▧",subtitle:"Official academic transcripts, cumulative published results, lifecycle, and verification",roles:["system_admin","principal","class_teacher","subject_teacher"],feature:"academic_history",render:renderHistory});
   registerView({id:"prospectus",label:"School Prospectus",icon:"▤",subtitle:"Academic-year fees, requirements, transportation, policies, revisions, and PDF output",roles:["system_admin"],feature:"school_prospectus",render:renderProspectus});
   registerView({id:"delegations",label:"Emergency Delegation",icon:"⚑",subtitle:"Temporary academic access and continuity",roles:["system_admin","principal"],render:renderDelegations});
   registerView({id:"certificates",label:"Certificates",icon:"✦",subtitle:"Promotion, completion, and teacher recognition awards",roles:["system_admin","principal"],feature:"certificates",render:renderCertificates});
