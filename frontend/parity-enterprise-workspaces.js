@@ -169,6 +169,9 @@
     if(button?.disabled)return;
     if(button)button.disabled=true;
     try{
+      const verification=obj(await certified("verify_transcript",{token:issuance.verification_token}));
+      if(verification.valid!==true||verification.status!=="valid"||String(verification.transcript_number||"")!==String(issuance.transcript_number))
+        throw new Error("This transcript no longer verifies as the current authentic issuance. Refresh the academic history before downloading.");
       const deps={
         readPrivateImage:async path=>{
           const blob=await api().downloadFile(path);
