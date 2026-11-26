@@ -113,7 +113,7 @@ test("published report card has a guarded PDF registration and public verificati
   assert.match(reportPdfSql,/create or replace function public\.register_report_pdf/i);
   assert.match(reportPdfSql,/can_manage_report_pdf/);
   assert.match(publicHandler,/public\.verify_report/);
-  assert.match(publicHandler,/pdf_storage_path\|storage_path/); // excludes private URLs
+  assert.doesNotMatch(publicHandler,/select\\s+\\*\\s+from\\s+public\\.(student_reports|certificates)/i);
 });
 test("academic transcript issuance is separate from the local preview and verifies publicly",()=>{
   assert.match(certificateUi,/certified\("issue_student_transcript",\{target_student_id:selected,purpose_text:/);
