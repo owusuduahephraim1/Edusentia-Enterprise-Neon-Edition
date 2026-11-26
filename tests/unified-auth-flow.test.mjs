@@ -223,7 +223,8 @@ test("Platform session survives hosted-page transition and reload without a seco
   const api=read("frontend/api-client.js");
   const platformApi=read("frontend/platform-api-client.js");
 
-  assert.match(http,/access-control-allow-headers","content-type,x-request-id,x-csrf-token,authorization"/);
+  assert.match(http,/access-control-allow-headers",publicOnly\?"accept":"content-type,x-request-id,x-csrf-token,authorization"/);
+  assert.match(http,/access-control-allow-credentials","true"/);
   assert.match(auth,/authorization\.match\(\/\^Bearer\\s\+\(\.\+\)\$\/i\)/);
   assert.match(auth,/platformRequestTokens\(request,env\)/);
   assert.match(routes,/sessionToken:result\.token/);
