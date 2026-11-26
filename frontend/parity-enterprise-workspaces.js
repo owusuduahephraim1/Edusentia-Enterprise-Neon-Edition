@@ -155,6 +155,51 @@
     pages.forEach((page,index)=>{const stream=["BT","/F1 10 Tf","50 800 Td","14 TL"];page.forEach((line,i)=>{if(i)stream.push("T*");stream.push("("+clean(line)+") Tj");});stream.push("ET");const content=stream.join("\n");add(pageIds[index],"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R >> >> /Contents "+contentIds[index]+" 0 R >>");add(contentIds[index],"<< /Length "+content.length+" >>\nstream\n"+content+"\nendstream");});
     const xref=pdf.length;pdf+="xref\n0 "+(count+1)+"\n0000000000 65535 f \n";for(let i=1;i<=count;i++)pdf+=String(offsets[i]).padStart(10,"0")+" 00000 n \n";pdf+="trailer\n<< /Size "+(count+1)+" /Root 1 0 R >>\nstartxref\n"+xref+"\n%%EOF";return new Blob([pdf],{type:"application/pdf"});
   }
+  // The official download is derived solely from an immutable valid issuance.
+  // This does not overwrite the separate, clearly labelled unofficial preview.
+  async function downloadOfficialIssuedTranscript(issuance,button){
+    if(!issuance||issuance.status!=="valid"||!issuance.snapshot){
+      notify("Official transcript unavailable","Select the current valid issued transcript.","warning");
+      return;
+    }
+    if(!window.EdusentiaOfficialTranscriptPdf){
+      notify("Official transcript unavailable","PDF renderer is missing. Refresh the application.","error");
+      return;
+    }
+    if(button?.disabled)return;
+    if(button)button.disabled=true;
+    try{
+      const verification=obj(await certified("verify_transcript",{token:issuance.verification_token}));
+      if(verification.valid!==true||verification.status!=="valid"||String(verification.transcript_number||"")!==String(issuance.transcript_number))
+        throw new Error("This transcript no longer verifies as the current authentic issuance. Refresh the academic history before downloading.");
+      const deps={
+        readPrivateImage:async path=>{
+          const blob=await api().downloadFile(path);
+          if(blob.type&&!/^image\/(png|jpeg|webp)$/i.test(blob.type))
+            throw new Error("The Principal signature must be a PNG, JPEG, or WebP image.");
+          return idCardBlobImage(blob);
+        },
+        loadSchoolLogo:async school=>{
+          const reference=school.logo_url||school.logo_path||"";
+          return loadImage(await logoPreviewSource(reference));
+        },
+        verificationUrl:officialDocumentVerificationUrl,
+        qrCanvas:idCardQrCanvas,
+        safeColour:idCardSafeColour,
+        drawImageContain,
+        drawSignature:idCardDrawSignatureOnLine,
+        canvasBlob:idCardCanvasBlob,
+        imagesPdf:idCardImagesPdf,
+        releaseCanvas:idCardReleaseCanvas
+      };
+      const pdf=await window.EdusentiaOfficialTranscriptPdf.render(issuance,deps);
+      const file=idCardFilename(issuance.transcript_number,"transcript")+"_"+idCardFilename(issuance.snapshot?.student?.full_name,"student")+"_Official_Transcript.pdf";
+      await downloadBlob(file,pdf);
+      notify("Official transcript PDF downloaded","Frozen academic records, Principal signature, and official verification QR are included.","success");
+    }catch(error){
+      notify("Official transcript PDF unavailable",friendly(error),"error");
+    }finally{if(button)button.disabled=false;}
+  }
   async function renderHistory(){
     byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification")+loading("Loading student history");
     try{
@@ -164,12 +209,13 @@
       if(local.history.studentId&&!students.some(row=>String(row.id)===String(local.history.studentId)))local.history.studentId="";
       const selected=local.history.studentId||students[0]?.id||"";local.history.studentId=selected;
       const data=selected?await certified("get_student_academic_history",{target_student_id:selected}):null,transcript=obj(data?.transcript),student=obj(transcript.student),records=arr(transcript.academic_records),lifecycle=arr(transcript.lifecycle),issuances=arr(data?.issuances);
+      const currentIssuance=obj(data?.current_issuance),officialPdfAvailable=["system_admin","principal"].includes(role())&&currentIssuance.status==="valid"&&Boolean(currentIssuance.snapshot?.academic_records?.length)&&Boolean(currentIssuance.verification_token);
       const studentOptions='<option value="">Select student</option>'+students.map(row=>'<option value="'+esc(row.id)+'" '+(String(row.id)===String(selected)?"selected":"")+'>'+esc(row.full_name||"Student")+(row.admission_no?" • "+esc(row.admission_no):"")+'</option>').join("");
       const recordHtml=records.length?records.map(record=>'<article class="panel pad" style="margin-top:12px"><div class="section-title"><div><h4>'+esc((record.academic_year_name||"Academic year")+" • "+(record.term_name||"Term"))+'</h4><p>'+esc(record.class_name||"Class")+' • '+esc(record.report_number||"")+'</p></div><strong>'+Number(record.average||0).toFixed(1)+'%</strong></div>'+(arr(record.subjects).length?'<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Score</th><th>Grade</th><th>Remark</th></tr></thead><tbody>'+arr(record.subjects).map(subject=>'<tr><td>'+esc(subject.subject_name||"Subject")+'</td><td>'+Number(subject.total_score||0).toFixed(1)+'</td><td>'+esc(subject.grade||"—")+'</td><td>'+esc(subject.remark||"")+'</td></tr>').join("")+'</tbody></table></div>':empty("No subject results recorded."))+'</article>').join(""):empty("No cumulative academic record");
-      const issuanceHtml=issuances.length?'<div class="table-wrap"><table><thead><tr><th>Issued</th><th>Purpose</th><th>Verification</th><th>Status</th><th></th></tr></thead><tbody>'+issuances.map(item=>'<tr><td>'+formatDateTime(item.issued_at)+'</td><td>'+esc(item.purpose||"Academic transcript")+'</td><td><code>'+esc(item.verification_token||"—")+'</code></td><td>'+status(item.revoked_at?"revoked":item.status||"valid")+'</td><td><div class="table-actions">'+(item.verification_token?'<button class="button ghost small" data-transcript-copy="'+esc(item.verification_token)+'">Copy token</button><button class="button secondary small" data-transcript-verification-link="'+esc(item.verification_token)+'">Copy verification link</button>':"")+(!item.revoked_at&&role()==="principal"?'<button class="button danger small" data-transcript-revoke="'+esc(item.id)+'">Revoke</button>':"")+'</div></td></tr>').join("")+'</tbody></table></div>':empty("No official transcript has been issued");
+      const issuanceHtml=issuances.length?'<div class="table-wrap"><table><thead><tr><th>Issued</th><th>Purpose</th><th>Verification</th><th>Status</th><th></th></tr></thead><tbody>'+issuances.map(item=>'<tr><td>'+formatDateTime(item.issued_at)+'</td><td>'+esc(item.purpose||"Academic transcript")+'</td><td><code>'+esc(item.verification_token||"—")+'</code></td><td>'+status(item.revoked_at?"revoked":item.status||"valid")+'</td><td><div class="table-actions">'+(item.verification_token?'<button class="button ghost small" data-transcript-copy="'+esc(item.verification_token)+'">Copy token</button><button class="button secondary small" data-transcript-verification-link="'+esc(item.verification_token)+'">Copy verification link</button>':"")+(officialPdfAvailable&&String(item.id)===String(currentIssuance.id)?'<button class="button primary small" data-transcript-official-pdf="'+esc(item.id)+'" type="button">Download official PDF</button>':"")+(!item.revoked_at&&role()==="principal"?'<button class="button danger small" data-transcript-revoke="'+esc(item.id)+'">Revoke</button>':"")+'</div></td></tr>').join("")+'</tbody></table></div>':empty("No official transcript has been issued");
       byId("content").innerHTML=sectionHead("Student Academic History","Cumulative records, lifecycle events, transcripts, and public verification",selected?'<button id="issueTranscript" class="button primary" type="button">Issue transcript</button>':"")+
         '<section class="panel pad"><div class="form-grid"><label class="field"><span>Find student</span><input id="historySearch" type="search" value="'+esc(search)+'" placeholder="Search name or admission number"></label><label class="field"><span>Student</span><select id="historyStudent">'+studentOptions+'</select></label></div></section>'+
-        (student.id?'<section class="panel pad" style="margin-top:18px"><div class="section-title"><h4>'+esc(student.full_name||"Student")+'</h4>'+status(student.status||"active")+'</div><div class="metric-row wrap"><div class="metric"><span>Admission number</span><strong>'+esc(student.admission_no||"—")+'</strong></div><div class="metric"><span>Academic periods</span><strong>'+records.length+'</strong></div><div class="metric"><span>Transcript issuances</span><strong>'+issuances.length+'</strong></div></div><div class="button-row" style="margin-top:15px"><button class="button ghost" id="enterpriseTranscriptPreview" type="button" '+(records.length?"":"disabled")+'>Preview transcript</button><button class="button outline" id="enterpriseTranscriptDownload" type="button" '+(records.length?"":"disabled")+'>Download transcript preview</button><button class="button secondary" id="enterpriseTranscriptCsv" type="button">Export CSV</button></div><div class="template-information" style="margin-top:12px"><span>Transcript rule: latest currently valid published report per term only. Draft, submitted, approved-only, withdrawn, revoked and superseded report versions are excluded.</span></div></section>':"")+
+        (student.id?'<section class="panel pad" style="margin-top:18px"><div class="section-title"><h4>'+esc(student.full_name||"Student")+'</h4>'+status(student.status||"active")+'</div><div class="metric-row wrap"><div class="metric"><span>Admission number</span><strong>'+esc(student.admission_no||"—")+'</strong></div><div class="metric"><span>Academic periods</span><strong>'+records.length+'</strong></div><div class="metric"><span>Transcript issuances</span><strong>'+issuances.length+'</strong></div></div><div class="button-row" style="margin-top:15px"><button class="button ghost" id="enterpriseTranscriptPreview" type="button" '+(records.length?"":"disabled")+'>Preview transcript</button><button class="button outline" id="enterpriseTranscriptDownload" type="button" '+(records.length?"":"disabled")+'>Download transcript preview</button>'+(officialPdfAvailable?'<button class="button primary" id="enterpriseTranscriptOfficialDownload" type="button">Download official transcript PDF</button>':"")+'<button class="button secondary" id="enterpriseTranscriptCsv" type="button">Export CSV</button></div><div class="template-information" style="margin-top:12px"><span>Transcript rule: latest currently valid published report per term only. Draft, submitted, approved-only, withdrawn, revoked and superseded report versions are excluded.</span></div></section>':"")+
         '<section class="panel pad" style="margin-top:18px"><div class="section-title"><h4>Lifecycle</h4></div>'+(lifecycle.length?'<div class="timeline">'+lifecycle.map(item=>'<div class="timeline-item"><span class="timeline-dot"></span><div class="timeline-copy"><strong>'+esc(title(item.event_type||"Update"))+'</strong><small>'+formatDate(item.effective_date)+(item.reason?" • "+esc(item.reason):"")+'</small></div></div>').join("")+'</div>':'<p class="muted">No transfer, withdrawal, graduation, or reactivation event recorded.</p>')+'</section>'+
         '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Published Academic Results</h3><p>Official transcript source • currently valid published results organized term by term</p></div></div><div class="panel-body">'+recordHtml+'</div></section>'+
         '<section class="panel" style="margin-top:18px"><div class="panel-header"><div><h3>Transcript issuances</h3><p>Only the latest valid issuance verifies as current. Permanent deletion remains restricted to the System Administrator.</p></div></div>'+issuanceHtml+'</section>';
@@ -177,6 +223,8 @@
       let timer;byId("historySearch")?.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>{local.history.search=byId("historySearch").value.trim();local.history.studentId="";renderHistory();},250);});
       byId("enterpriseTranscriptPreview")?.addEventListener("click",()=>enterpriseTranscriptPreview(transcript));
       byId("enterpriseTranscriptDownload")?.addEventListener("click",()=>downloadBlob((student.full_name||"Student").replace(/[^A-Za-z0-9_-]+/g,"_")+"_Academic_Transcript_Preview.pdf",enterpriseTranscriptPdfBlob(transcript)));
+      byId("enterpriseTranscriptOfficialDownload")?.addEventListener("click",e=>downloadOfficialIssuedTranscript(currentIssuance,e.currentTarget));
+      byId("content").querySelectorAll("[data-transcript-official-pdf]").forEach(button=>button.onclick=()=>downloadOfficialIssuedTranscript(currentIssuance,button));
       byId("enterpriseTranscriptCsv")?.addEventListener("click",()=>downloadBlob((student.full_name||"Student").replace(/[^A-Za-z0-9_-]+/g,"_")+"_academic_history.csv",new Blob([enterpriseTranscriptCsv(transcript)],{type:"text/csv;charset=utf-8"})));
       byId("issueTranscript")?.addEventListener("click",async()=>{openModal("Issue official transcript","A new issuance supersedes any currently valid transcript for this student.",'<label class="field"><span>Purpose</span><input id="enterpriseTranscriptPurpose" value="Academic transcript"></label>','<button class="button ghost" id="enterpriseTranscriptCancel">Cancel</button><button class="button primary" id="enterpriseTranscriptConfirm">Issue transcript</button>');byId("enterpriseTranscriptCancel").onclick=closeModal;byId("enterpriseTranscriptConfirm").onclick=async()=>{const b=byId("enterpriseTranscriptConfirm");b.disabled=true;try{await certified("issue_student_transcript",{target_student_id:selected,purpose_text:byId("enterpriseTranscriptPurpose").value.trim()});closeModal();notify("Transcript issued");await renderHistory();}catch(e){showMessage("enterpriseTranscriptMessage",friendly(e));}finally{b.disabled=false;}};});
       byId("content").querySelectorAll("[data-transcript-copy]").forEach(button=>button.onclick=async()=>{try{await navigator.clipboard.writeText(button.dataset.transcriptCopy);notify("Verification token copied");}catch{notify("Copy unavailable","Select and copy the token manually.","warning");}});
