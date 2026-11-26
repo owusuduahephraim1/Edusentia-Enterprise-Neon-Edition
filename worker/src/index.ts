@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 import { route } from "./routes";
-import { corsHeaders, error, withHeaders } from "./http";
+import { corsHeaders, error, isAllowedAppOrigin, withHeaders } from "./http";
 import { dispatchScheduledNotifications } from "./notification-dispatcher";
 import { dispatchScheduledBackups } from "./backup-service";
 import { platformPackageMaintenance } from "./platform-package-service";
@@ -12,7 +12,7 @@ export default { async fetch(request:Request,env:Env):Promise<Response>{
   const origin=request.headers.get('origin')||'';
   const pathname=new URL(request.url).pathname;
   const bootstrapCli=(pathname==='/api/bootstrap/initialize'||pathname==='/api/platform/bootstrap/initialize') && !origin && Boolean(request.headers.get('x-bootstrap-secret'));
-  if(unsafe && !bootstrapCli && origin!==env.APP_ORIGIN) return withHeaders(error('origin_denied','Request origin is not allowed',403,requestId),request,env);
+  if(unsafe && !bootstrapCli && !isAllowedAppOrigin(env,origin)) return withHeaders(error('origin_denied','Request origin is not allowed',403,requestId),request,env);
   try{return withHeaders(await route(request,env,requestId),request,env);}catch(e:any){
     const sqlState=String(e?.code||"");
     const sqlStatus:Record<string,number>={"22023":422,"22001":422,"23514":422,"23505":409,"23503":409,"40001":409,"42501":403,"55000":409,"P0001":422,"P0002":404};

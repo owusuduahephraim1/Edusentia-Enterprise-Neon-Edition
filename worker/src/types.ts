@@ -3,6 +3,7 @@ export interface Env {
   PROVISIONER_DATABASE_URL?: string;
   TENANT_TEMPLATE_DATABASE?: string;
   APP_ORIGIN: string;
+  ADDITIONAL_APP_ORIGINS?: string;
   APP_BASE_PATH?: string;
   SESSION_PEPPER: string;
   BOOTSTRAP_ADMIN_SECRET: string;
