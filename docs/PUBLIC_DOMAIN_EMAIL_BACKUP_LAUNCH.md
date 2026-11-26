@@ -6,7 +6,7 @@ Operational status: 2026-11-26. This is a readiness and configuration record, no
 
 | Hostname | Purpose | Hosting |
 |---|---|---|
-| edusentia.com | Public product website | Independent Cloudflare Pages project: edusentia-main |
+| edusentia.com | Public product website (live HTTPS confirmed 26 Nov 2026) | Independent Cloudflare Pages project: edusentia-main |
 | www.edusentia.com | Redirect to main public site | Same Pages project |
 | app.edusentia.com | Authenticated school operations | Existing edusentia-app Cloudflare Pages |
 | verify.edusentia.com | Live school-document verification | Existing edusentia-verify Cloudflare Pages |
@@ -14,11 +14,11 @@ Operational status: 2026-11-26. This is a readiness and configuration record, no
 
 Public website files are in public-site/. The deploy workflow at .github/workflows/deploy-public-site.yml stages two already-approved brand assets from frontend/assets/, validates static site files, then creates or reuses a separate Cloudflare Pages project. The workflow attempts to attach apex and www. Domain registration and TLS may remain pending after API acceptance.
 
-Acceptance: apex serves the Edusentia landing page on HTTPS; www redirects to it; mobile view, assets, sitemap, robots and security headers are valid. Check app.edusentia.com and verify.edusentia.com remain intact. The static site does not include a form, marketing cookies, third-party trackers, or student record APIs.
+Acceptance: both apex and www served the Edusentia homepage over HTTPS on 26 Nov 2026. A canonical redirect from www to apex is not yet independently demonstrated; check it separately. Continue mobile accessibility, asset, sitemap, robots and security-header checks. Check app.edusentia.com and verify.edusentia.com remain intact. The static site does not include a form, marketing cookies, third-party trackers, or student record APIs.
 
 ## Domain email: recipient choice still needed
 
-Initial domain audit found no MX records and no DMARC TXT record. Do not publish untested mailto links as active contact addresses.
+Repeated domain audit on 26 Nov 2026 found no MX records, no root SPF TXT record, and no DMARC TXT record. Do not publish untested mailto links as active contact addresses.
 
 Option A: Cloudflare Email Routing for incoming messages (forwarding only).
 
@@ -58,7 +58,7 @@ Do not run restore against a live school database. Audit logs should never revea
 | Gate | State |
 |---|---|
 | App and public verification domains | Previously tested operational |
-| Edusentia main website and www DNS/TLS | Await deployment and domain activation |
+| Edusentia main website and www DNS/TLS | Both hostnames were reachable over HTTPS on 26 Nov 2026 |
 | Manual Neon recovery snapshot | Created |
 | Tenant database plus R2 off-site restore drill | Not completed |
 | Business mail aliases, MX, SPF, DKIM, DMARC | Await verified destination and provider |
@@ -66,3 +66,7 @@ Do not run restore against a live school database. Audit logs should never revea
 | SaaS privacy, school data-processing agreements and commercial terms | Requires owner/legal approval |
 
 The website's privacy page covers only the public static site. School data-processing terms must be reviewed separately before broad commercial onboarding.
+
+## Current operational work
+
+The read-only production health workflow is .github/workflows/production-readiness-health.yml. Launch signoffs and evidence are in docs/COMMERCIAL_LAUNCH_GATE_REGISTER.md, and school onboarding, privacy/legal review and incident response guidance are in docs/SCHOOL_ONBOARDING_AND_SUPPORT_PLAYBOOK.md. This monitor reports mail and backup warnings but does not create mailboxes, perform off-site backups, or restore databases.
