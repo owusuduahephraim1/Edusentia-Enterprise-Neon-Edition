@@ -8,7 +8,36 @@ export function isAllowedAppOrigin(env:Env, origin:string){
   const allowed=[env.APP_ORIGIN,...String(env.ADDITIONAL_APP_ORIGINS||"").split(",")].map(v=>String(v||"").trim());
   return allowed.includes(origin);
 }
-export function corsHeaders(request:Request, env:Env){const origin=request.headers.get("origin")||"";const h=new Headers();if(isAllowedAppOrigin(env,origin)){h.set("access-control-allow-origin",origin);h.set("access-control-allow-credentials","true");h.set("vary","Origin");}h.set("access-control-allow-methods","GET,POST,PUT,PATCH,DELETE,OPTIONS");h.set("access-control-allow-headers","content-type,x-request-id,x-csrf-token,authorization");h.set("access-control-max-age","86400");return h;}
+const PUBLIC_VERIFICATION_ORIGIN="https://verify.edusentia.com";
+const PUBLIC_VERIFICATION_ROUTES=new Set([
+  "/api/public/id-card-verification",
+  "/api/public/document-verification"
+]);
+// The public verification site is deliberately NOT a trusted application
+// origin: it may read two token-bound GET routes, never send authenticated
+// or credential-bearing requests to privileged endpoints.
+export function isAllowedPublicVerification(request:Request){
+  return request.headers.get("origin")===PUBLIC_VERIFICATION_ORIGIN &&
+    PUBLIC_VERIFICATION_ROUTES.has(new URL(request.url).pathname) &&
+    ["GET","HEAD","OPTIONS"].includes(request.method.toUpperCase());
+}
+export function corsHeaders(request:Request, env:Env){
+  const origin=request.headers.get("origin")||"";
+  const h=new Headers();
+  if(isAllowedAppOrigin(env,origin)){
+    h.set("access-control-allow-origin",origin);
+    h.set("access-control-allow-credentials","true");
+    h.set("vary","Origin");
+  }else if(isAllowedPublicVerification(request)){
+    h.set("access-control-allow-origin",PUBLIC_VERIFICATION_ORIGIN);
+    h.set("vary","Origin");
+  }
+  const publicOnly=isAllowedPublicVerification(request) && !isAllowedAppOrigin(env,origin);
+  h.set("access-control-allow-methods",publicOnly?"GET,HEAD,OPTIONS":"GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  h.set("access-control-allow-headers",publicOnly?"accept":"content-type,x-request-id,x-csrf-token,authorization");
+  h.set("access-control-max-age","86400");
+  return h;
+}
 export function secureHeaders(h:Headers){h.set("x-content-type-options","nosniff");h.set("referrer-policy","no-referrer");h.set("permissions-policy","camera=(), microphone=(), geolocation=()");h.set("x-frame-options","DENY");h.set("content-security-policy","default-src 'none'; frame-ancestors 'none'; base-uri 'none'");return h;}
 export function withHeaders(response:Response, request:Request, env:Env){const h=new Headers(response.headers);for(const [k,v] of corsHeaders(request,env)) h.set(k,v);secureHeaders(h);return new Response(response.body,{status:response.status,statusText:response.statusText,headers:h});}
 export async function readJson<T=Record<string,unknown>>(request:Request):Promise<T>{if(!(request.headers.get("content-type")||"").toLowerCase().includes("application/json"))throw new Error("invalid_content_type");return await request.json() as T;}
