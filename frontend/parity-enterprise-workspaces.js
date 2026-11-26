@@ -257,13 +257,150 @@
         document.querySelectorAll("[data-certificate-template-remove]").forEach(b=>b.onclick=async()=>{if(!await window.EdusentiaConfirm("Remove this uploaded certificate design? Future certificates will use the built-in design."))return;try{await certified("remove_certificate_template_file",{target_certificate_type:b.dataset.certificateTemplateRemove});closeModal();notify("Certificate design removed");await renderCertificates();}catch(err){notify("Certificate design not removed",friendly(err),"error");}});
       };
       byId("certificateSettings")?.addEventListener("click",openCertificateSettings);
-      byId("content").querySelectorAll("[data-certificate-batch]").forEach(b=>b.onclick=async()=>{try{const detail=await certified("get_certificate_batch",{target_batch_id:b.dataset.certificateBatch}),batch=detail?.batch||{},certs=arr(detail?.certificates),events=arr(detail?.events),issuedTokens=certs.filter(c=>c.verification_token&&/^[0-9a-f-]{36}$/i.test(String(c.verification_token))),certificateLinkSection=issuedTokens.length?'<section class="panel pad"><div class="section-title"><h4>Official certificate verification</h4></div><div class="button-row"><select id="certificateVerifyRecipient" aria-label="Issued certificate">'+issuedTokens.map(c=>'<option value="'+esc(c.verification_token)+'">'+esc(c.recipient_name||c.certificate_number||"Issued certificate")+'</option>').join("")+'</select><button class="button secondary" id="certificateVerifyCopy" type="button">Copy verification link</button></div></section>':"",actions=role()==="system_admin"&&["draft","rejected"].includes(batch.status)?'<button class="button primary" id="certificateSubmitBatch">Submit for Principal approval</button>':role()==="principal"&&batch.status==="submitted"?'<button class="button warning" id="certificateRejectBatch">Reject</button><button class="button primary" id="certificateApproveBatch">Approve all</button>':role()==="system_admin"&&batch.status==="approved"?'<button class="button primary" id="certificateIssueBatch">Issue all</button>':"";openModal(batch.title||"Certificate batch",(batch.type_label||title(batch.certificate_type))+" • "+(batch.academic_year_name||""),'<div class="grid two"><section class="panel pad"><h4>Workflow</h4><div class="detail-grid"><div><span>Status</span><strong>'+esc(title(batch.status))+'</strong></div><div><span>Prepared by</span><strong>'+esc(batch.prepared_by_name||"—")+'</strong></div><div><span>Approved by</span><strong>'+esc(batch.approved_by_name||"—")+'</strong></div><div><span>Issued</span><strong>'+formatDateTime(batch.issued_at)+'</strong></div></div></section><section class="panel pad"><h4>Recipients</h4>'+recordTable(certs,["recipient_name","certificate_number","status","revision_no"])+'</section></div><section class="panel pad"><h4>Immutable certificate history</h4>'+recordTable(events,["created_at","event_type","actor_name","reason"])+'</section>'+certificateLinkSection,'<button class="button ghost" id="certificateBatchClose">Close</button>'+actions);byId("certificateBatchClose").onclick=closeModal;
+      byId("content").querySelectorAll("[data-certificate-batch]").forEach(b=>b.onclick=async()=>{try{const detail=await certified("get_certificate_batch",{target_batch_id:b.dataset.certificateBatch}),batch=detail?.batch||{},certs=arr(detail?.certificates),events=arr(detail?.events),issuedTokens=certs.filter(c=>c.status==="issued"&&c.verification_token&&/^[0-9a-f-]{36}$/i.test(String(c.verification_token))),certificateLinkSection=issuedTokens.length?'<section class="panel pad"><div class="section-title"><h4>Official certificate verification and downloads</h4></div><div class="button-row"><select id="certificateVerifyRecipient" aria-label="Issued certificate">'+issuedTokens.map(c=>'<option value="'+esc(c.verification_token)+'">'+esc(c.recipient_name||c.certificate_number||"Issued certificate")+'</option>').join("")+'</select><button class="button secondary" id="certificateVerifyCopy" type="button">Copy verification link</button><button class="button primary" id="certificateDownloadSingle" type="button">Download certificate PDF</button><button class="button secondary" id="certificateDownloadAll" type="button">Download issued certificates (ZIP)</button></div></section>':"",actions=role()==="system_admin"&&["draft","rejected"].includes(batch.status)?'<button class="button primary" id="certificateSubmitBatch">Submit for Principal approval</button>':role()==="principal"&&batch.status==="submitted"?'<button class="button warning" id="certificateRejectBatch">Reject</button><button class="button primary" id="certificateApproveBatch">Approve all</button>':role()==="system_admin"&&batch.status==="approved"?'<button class="button primary" id="certificateIssueBatch">Issue all</button>':"";openModal(batch.title||"Certificate batch",(batch.type_label||title(batch.certificate_type))+" • "+(batch.academic_year_name||""),'<div class="grid two"><section class="panel pad"><h4>Workflow</h4><div class="detail-grid"><div><span>Status</span><strong>'+esc(title(batch.status))+'</strong></div><div><span>Prepared by</span><strong>'+esc(batch.prepared_by_name||"—")+'</strong></div><div><span>Approved by</span><strong>'+esc(batch.approved_by_name||"—")+'</strong></div><div><span>Issued</span><strong>'+formatDateTime(batch.issued_at)+'</strong></div></div></section><section class="panel pad"><h4>Recipients</h4>'+recordTable(certs,["recipient_name","certificate_number","status","revision_no"])+'</section></div><section class="panel pad"><h4>Immutable certificate history</h4>'+recordTable(events,["created_at","event_type","actor_name","reason"])+'</section>'+certificateLinkSection,'<button class="button ghost" id="certificateBatchClose">Close</button>'+(issuedTokens.length?'<button class="button primary" id="certificateDownloadPrimary" type="button">Download certificate PDF</button>':'')+actions);byId("certificateBatchClose").onclick=closeModal;
+      byId("certificateDownloadPrimary")?.addEventListener("click",e=>{const certificate=certs.find(c=>c.status==="issued"&&c.verification_token===byId("certificateVerifyRecipient")?.value);if(certificate)downloadIssuedCertificate(detail,certificate,e.currentTarget);});byId("certificateDownloadSingle")?.addEventListener("click",e=>{const token=byId("certificateVerifyRecipient")?.value;const certificate=certs.find(c=>c.verification_token===token&&c.status==="issued");if(!certificate){notify("Certificate unavailable","Select a valid issued certificate.","warning");return;}downloadIssuedCertificate(detail,certificate,e.currentTarget);});byId("certificateDownloadAll")?.addEventListener("click",e=>downloadIssuedCertificateBatch(detail,e.currentTarget));
       byId("certificateVerifyCopy")?.addEventListener("click",async()=>{
         try{await copyOfficialVerificationLink(byId("certificateVerifyRecipient").value,"certificate",detail.school||{});}
         catch(error){notify("Verification link unavailable",friendly(error),"warning");}
       });const certificateBatchAction=async(buttonId,action,args,successTitle,successBody="")=>{const button=byId(buttonId);if(!button||button.disabled)return;button.disabled=true;try{await certified(action,args);closeModal();notify(successTitle,successBody);await renderCertificates();}catch(error){notify("Certificate workflow not updated",friendly(error),"error");}finally{button.disabled=false;}};byId("certificateSubmitBatch")?.addEventListener("click",()=>certificateBatchAction("certificateSubmitBatch","submit_certificate_batch",{target_batch_id:batch.id},"Certificate batch submitted","Awaiting Principal review."));byId("certificateApproveBatch")?.addEventListener("click",()=>certificateBatchAction("certificateApproveBatch","review_certificate_batch",{target_batch_id:batch.id,decision:"approved",review_note_text:"Approved by Principal"},"Certificate batch approved"));byId("certificateRejectBatch")?.addEventListener("click",async()=>{const note=String(await window.EdusentiaPrompt("Rejection reason")||"").trim();if(note.length<3){notify("Rejection note required","Enter a reason of at least three characters.","warning");return;}await certificateBatchAction("certificateRejectBatch","review_certificate_batch",{target_batch_id:batch.id,decision:"rejected",review_note_text:note},"Certificate batch rejected");});byId("certificateIssueBatch")?.addEventListener("click",()=>certificateBatchAction("certificateIssueBatch","issue_certificate_batch",{target_batch_id:batch.id,target_issue_date:new Date().toISOString().slice(0,10)},"Certificates issued","The immutable certificate records are now issued. PDF files can be generated from their stored snapshot."));}catch(err){notify("Certificate batch unavailable",friendly(err),"error");}});
       byId("newCertificateBatch")?.addEventListener("click",()=>{openModal("Prepare certificate batch","Select the certificate purpose and load recipients who satisfy the eligibility rules.",'<form id="certificateBatchForm" class="form-stack"><div class="form-grid"><label class="field"><span>Certificate type</span><select name="certificate_type" required><option value="student_promotion">Student promotion</option><option value="jhs_completion">JHS 3 Completion</option><option value="teacher_recognition">Teacher recognition</option></select></label><label class="field"><span>Academic year</span><select name="academic_year_id" required>'+options(cfg.years,yearId)+'</select></label><label class="field" id="certificateTermField"><span>Term</span><select name="term_id">'+options(cfg.terms,cfg.terms.find(t=>t.is_active)?.id||"")+'</select></label><label class="field" id="certificateClassField"><span>Class</span><select name="class_id">'+options(cfg.classes,"")+'</select></label><label class="field hidden" id="certificateAwardField"><span>Teacher award category</span><select name="award_category_id"><option value="">Select category</option>'+categories.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name||"Award")+'</option>').join("")+'</select><small id="certificateAwardHint">'+(categories.length?"Choose an existing recognition category.":"No teacher award categories exist for this school. Create one below before loading recipients.")+'</small><button class="button secondary small" id="certificateAddAwardCategory" type="button">Add teacher award category</button><p class="form-message hidden" id="certificateAwardCreateMessage"></p></label><label class="field full hidden" id="certificateCitationField"><span>Optional personalised citation</span><textarea name="custom_citation" rows="3"></textarea></label><label class="field full"><span>Administrative note</span><textarea name="notes" rows="2"></textarea></label></div><div class="button-row"><button class="button secondary" id="loadCertificateRecipients" type="button">Load eligible recipients</button><button class="button ghost hidden" id="selectCertificateAll" type="button">Select all eligible</button></div><div id="certificateRecipientResults">'+empty("Recipients not loaded. Choose the academic scope, then load eligible recipients.")+'</div><p id="certificateBatchMessage" class="form-message hidden"></p></form>','<button class="button ghost" id="certificateBatchCancel">Cancel</button><button class="button primary" id="createCertificateBatch" disabled>Create batch</button>');const form=byId("certificateBatchForm"),typeSelect=form.elements.certificate_type,termField=byId("certificateTermField"),classField=byId("certificateClassField"),awardField=byId("certificateAwardField"),citationField=byId("certificateCitationField"),sync=()=>{const teacher=typeSelect.value==="teacher_recognition";termField.classList.toggle("hidden",teacher);classField.classList.toggle("hidden",teacher);awardField.classList.toggle("hidden",!teacher);citationField.classList.toggle("hidden",!teacher);form.elements.class_id.required=!teacher;form.elements.award_category_id.required=teacher;};typeSelect.onchange=sync;sync();byId("certificateAddAwardCategory").onclick=async()=>{const name=String(await window.EdusentiaPrompt("Teacher award category name (for example, Excellence in Teaching)")||"").trim();if(!name)return;const button=byId("certificateAddAwardCategory");button.disabled=true;try{await certified("save_teacher_award_category",{payload:{name,default_citation:""}});const latest=await certified("get_certificate_console",{target_academic_year_id:form.elements.academic_year_id.value||null,target_certificate_type:null}),items=arr(latest?.award_categories),select=form.elements.award_category_id;select.innerHTML='<option value="">Select category</option>'+items.map(item=>'<option value="'+esc(item.id)+'">'+esc(item.name||"Award")+'</option>').join("");const saved=items.find(item=>String(item.name).trim().toLowerCase()===name.toLowerCase());if(saved)select.value=String(saved.id);byId("certificateAwardHint").textContent=items.length?"Choose a teacher recognition category.":"No categories returned. Check certificate settings.";notify("Teacher award category saved");}catch(error){showMessage("certificateAwardCreateMessage",friendly(error));}finally{button.disabled=false;}};byId("certificateBatchCancel").onclick=closeModal;byId("loadCertificateRecipients").onclick=async()=>{if(!form.reportValidity())return;const v=formValues(form),b=byId("loadCertificateRecipients");b.disabled=true;try{const result=await certified("list_certificate_eligible_recipients",{target_certificate_type:v.certificate_type,target_academic_year_id:v.academic_year_id,target_term_id:v.term_id||null,target_class_id:v.class_id||null}),rows=arr(result?.rows||result);form.dataset.recipients=JSON.stringify(rows);byId("certificateRecipientResults").innerHTML=rows.length?'<div class="certificate-recipient-results">'+rows.map(item=>'<label class="certificate-recipient-card '+(item.already_issued?"disabled":"")+'"><input type="checkbox" name="certificate_recipient" value="'+esc(item.id)+'" '+(item.already_issued?"disabled":"")+'><span class="certificate-recipient-copy"><strong>'+esc(item.recipient_name||item.full_name||"Recipient")+'</strong><span class="certificate-recipient-meta">'+esc(item.identifier||"")+(item.current_class_name?" • "+esc(item.current_class_name):"")+'</span>'+(item.already_issued?'<span class="form-message">A current certificate already exists.</span>':"")+'</span></label>').join("")+'</div>':empty("No eligible recipients.");const inputs=[...byId("certificateRecipientResults").querySelectorAll('[name="certificate_recipient"]')],syncCount=()=>{byId("createCertificateBatch").disabled=!inputs.some(i=>i.checked)};inputs.forEach(i=>i.onchange=syncCount);byId("selectCertificateAll").classList.toggle("hidden",!inputs.some(i=>!i.disabled));byId("selectCertificateAll").onclick=()=>{inputs.forEach(i=>{if(!i.disabled)i.checked=true});syncCount();};syncCount();}catch(e){showMessage("certificateBatchMessage",friendly(e));}finally{b.disabled=false;}};byId("createCertificateBatch").onclick=async()=>{if(!form.reportValidity())return;const ids=[...form.querySelectorAll('[name="certificate_recipient"]:checked')].map(i=>i.value),v=formValues(form),b=byId("createCertificateBatch");if(!ids.length)return;b.disabled=true;try{if(!templates.some(t=>t.certificate_type===v.certificate_type&&t.active!==false)){const defaults={student_promotion:{name:"Official built-in promotion certificate",title:"Certificate of Promotion",subtitle:"Academic Advancement",statement_template:"This is to certify that {{recipient_name}} has successfully completed {{current_class}} and is promoted to {{next_class}} for the {{academic_year}} academic year."},jhs_completion:{name:"Official built-in completion certificate",title:"Certificate of Completion",subtitle:"Junior High School",statement_template:"This is to certify that {{recipient_name}} has successfully completed {{current_class}} in the {{academic_year}} academic year."},teacher_recognition:{name:"Official built-in teacher recognition certificate",title:"Certificate of Recognition",subtitle:"Excellence in Education",statement_template:"This certificate is presented to {{recipient_name}} in recognition of {{award_category}}. {{custom_citation}}"}};const fallback=defaults[v.certificate_type];if(!fallback)throw new Error("Certificate type is invalid.");await certified("save_certificate_template",{payload:{certificate_type:v.certificate_type,...fallback,footer_text:"Issued by the school administration",primary_colour:"#0a2f73",accent_colour:"#f1b51c"}});notify("Built-in certificate template activated","No active certificate template was configured; the official built-in design has been enabled.");}await certified("create_certificate_batch",{payload:{certificate_type:v.certificate_type,academic_year_id:v.academic_year_id,term_id:v.term_id||"",class_id:v.class_id||"",award_category_id:v.award_category_id||"",custom_citation:v.custom_citation||"",notes:v.notes||""},recipient_ids:ids});closeModal();notify("Certificate batch prepared",ids.length+" recipient"+(ids.length===1?"":"s")+" added.");await renderCertificates();}catch(e){showMessage("certificateBatchMessage",friendly(e));}finally{b.disabled=false;}};});
     }catch(e){byId("content").innerHTML=sectionHead("Certificates","Promotion, completion, and teacher-recognition certificates")+pageError(e);}
+  }
+
+
+  // Issued certificate PDF download. The canonical issued record is read-only.
+  // Stored official PDFs are preferred; when absent, render an A4 landscape
+  // PDF with the verified token, frozen statement, school logo and audit fields.
+  function certificateDownloadName(certificate){
+    return idCardFilename(certificate.certificate_number||"Certificate","Certificate")+"_"+idCardFilename(certificate.recipient_name||"Recipient","Recipient")+".pdf";
+  }
+  async function certificateDownloadPdf(data,certificate){
+    if(!certificate||certificate.status!=="issued")
+      throw new Error("Only issued certificates can be downloaded.");
+    if(!certificate.certificate_number||!certificate.verification_token)
+      throw new Error("The issued certificate is missing its official number or verification token.");
+    if(certificate.pdf_storage_path){
+      try{
+        const stored=await api().downloadFile(certificate.pdf_storage_path);
+        if(stored.type==="application/pdf"||String.fromCharCode(...new Uint8Array(await stored.slice(0,5).arrayBuffer()))==="%PDF-")
+          return {blob:stored,source:"stored"};
+      }catch(_){
+        // A missing stored file must not prevent a verified issued certificate download.
+      }
+    }
+    const frozen=obj(certificate.snapshot),school=obj(frozen.school||data.school),template=obj(frozen.template||data.template);
+    const primary=idCardSafeColour(template.primary_colour||school.primary_colour,"#0a2f73");
+    const accent=idCardSafeColour(template.accent_colour||school.accent_colour,"#f1b51c");
+    const width=1754,height=1240,canvas=document.createElement("canvas");
+    canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext("2d");
+    if(!ctx)throw new Error("Certificate PDF rendering is unavailable on this device.");
+    ctx.fillStyle="#fffdf7";ctx.fillRect(0,0,width,height);
+    const wash=ctx.createLinearGradient(0,0,width,height);
+    wash.addColorStop(0,"#fff9e9");wash.addColorStop(.55,"#ffffff");wash.addColorStop(1,"#f3f7fc");
+    ctx.fillStyle=wash;ctx.fillRect(0,0,width,height);
+    ctx.strokeStyle=primary;ctx.lineWidth=20;ctx.strokeRect(30,30,width-60,height-60);
+    ctx.strokeStyle=accent;ctx.lineWidth=6;ctx.strokeRect(57,57,width-114,height-114);
+    ctx.strokeStyle=primary;ctx.lineWidth=2;ctx.strokeRect(76,76,width-152,height-152);
+    ctx.fillStyle=accent;
+    for(const [x,y,sx,sy] of [[80,80,1,1],[1674,80,-1,1],[80,1160,1,-1],[1674,1160,-1,-1]]){
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+sx*95,y);ctx.lineTo(x,y+sy*95);ctx.closePath();ctx.fill();
+    }
+    let logo=null;
+    try{
+      const logoRef=school.logo_url||school.logo_path||window.EdusentiaShell?.state?.boot?.tenant?.logo_url||"";
+      logo=await loadImage(await logoPreviewSource(logoRef));
+    }catch(_){try{logo=await loadImage(window.EdusentiaShell?.packageSchoolLogo?.()||"assets/school-logo.png");}catch(__){}}
+    if(logo)drawImageContain(ctx,logo,782,91,190,170);
+    const draw=(value,y,font,color=primary)=>{
+      ctx.font=font;ctx.fillStyle=color;ctx.fillText(String(value||""),877,y);
+    };
+    const fit=(value,initial,min,maxWidth,family="Georgia, serif")=>{
+      let size=initial;do{ctx.font="bold "+size+"px "+family;if(ctx.measureText(String(value||"")).width<=maxWidth||size<=min)break;size-=2;}while(true);
+      return "bold "+size+"px "+family;
+    };
+    const schoolName=String(school.school_name||school.name||window.EdusentiaShell?.state?.boot?.tenant?.name||"Issuing school");
+    ctx.textAlign="center";
+    draw(schoolName.toUpperCase(),300,fit(schoolName.toUpperCase(),45,26,1400));
+    draw(String(school.motto||""),345,"italic 24px Georgia, serif","#64748b");
+    ctx.fillStyle=accent;ctx.fillRect(502,375,750,5);
+    const heading=String(certificate.certificate_title||template.title||"Certificate of Recognition");
+    draw(heading,462,fit(heading,66,35,1440));
+    draw(String(template.subtitle||data.batch?.type_label||"Official School Certificate"),512,"27px Arial, sans-serif","#58697f");
+    draw("THIS CERTIFICATE IS PRESENTED TO",577,"23px Arial, sans-serif","#42516b");
+    draw(certificate.recipient_name,666,fit(certificate.recipient_name,69,35,1480));
+    ctx.strokeStyle=accent;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(440,690);ctx.lineTo(1314,690);ctx.stroke();
+    const statement=String(certificate.statement_text||"").trim();
+    if(!statement)throw new Error("This certificate does not contain its frozen official statement.");
+    const wrap=(value,maxWidth)=>{
+      const words=value.split(/\s+/).filter(Boolean),lines=[];let line="";
+      for(const word of words){
+        const next=line?line+" "+word:word;
+        if(ctx.measureText(next).width>maxWidth&&line){lines.push(line);line=word;}else line=next;
+      }
+      if(line)lines.push(line);return lines;
+    };
+    let lines=[],fontSize=30;
+    do{
+      ctx.font=fontSize+"px Georgia, serif";lines=wrap(statement,1330);
+      if(lines.length<=5)break;
+      fontSize-=2;
+    }while(fontSize>=21);
+    ctx.fillStyle="#263449";ctx.font=fontSize+"px Georgia, serif";
+    const lineHeight=fontSize+15,top=752;
+    lines.slice(0,6).forEach((line,i)=>ctx.fillText(line,877,top+i*lineHeight));
+    const verification=officialDocumentVerificationUrl(certificate.verification_token,"certificate",school);
+    const qr=await idCardQrCanvas(verification,170);
+    ctx.fillStyle="#fff";ctx.fillRect(1430,900,204,204);
+    ctx.drawImage(qr,1447,917,170,170);
+    ctx.textAlign="left";
+    ctx.font="bold 20px Arial, sans-serif";ctx.fillStyle=primary;
+    ctx.fillText("Certificate No.",155,1012);
+    ctx.font="20px Arial, sans-serif";ctx.fillStyle="#334155";
+    ctx.fillText(String(certificate.certificate_number),155,1044);
+    ctx.font="18px Arial, sans-serif";ctx.fillText("Issued: "+String(certificate.issue_date||certificate.issued_at||"").slice(0,10),155,1076);
+    const principal=obj(frozen.principal||data.principal),approver=String(principal.full_name||data.batch?.approved_by_name||"");
+    ctx.textAlign="center";ctx.strokeStyle="#64748b";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(675,1030);ctx.lineTo(1115,1030);ctx.stroke();
+    draw(approver||"Principal",1063,"bold 23px Arial, sans-serif");
+    draw("PRINCIPAL / HEAD",1090,"18px Arial, sans-serif","#475569");
+    ctx.textAlign="center";draw("Scan to verify current status",1132,"17px Arial, sans-serif","#475569");
+    const image=await idCardCanvasBlob(canvas,.96);
+    const pdf=await idCardImagesPdf([image],842,595,width,height);
+    idCardReleaseCanvas(canvas);
+    return {blob:pdf,source:"generated"};
+  }
+  async function downloadIssuedCertificate(data,certificate,button){
+    if(button?.disabled)return;
+    if(button)button.disabled=true;
+    try{
+      const result=await certificateDownloadPdf(data,certificate);
+      await downloadBlob(certificateDownloadName(certificate),result.blob);
+      notify("Certificate PDF downloaded",result.source==="stored"?"The stored issued certificate was downloaded.":"A verified PDF was generated from the issued record with its QR verification link.","success");
+    }catch(error){notify("Certificate PDF unavailable",friendly(error),"error");}
+    finally{if(button)button.disabled=false;}
+  }
+  async function downloadIssuedCertificateBatch(data,button){
+    if(button?.disabled)return;
+    if(!window.JSZip)throw new Error("Certificate ZIP creation library is unavailable.");
+    if(button)button.disabled=true;
+    try{
+      const issued=arr(data.certificates).filter(c=>c.status==="issued");
+      if(!issued.length)throw new Error("There are no issued certificates to download.");
+      const zip=new window.JSZip(),manifest=[];
+      for(const certificate of issued){
+        try{
+          const result=await certificateDownloadPdf(data,certificate);
+          zip.file(certificateDownloadName(certificate),result.blob);
+          manifest.push({number:certificate.certificate_number,status:"included",source:result.source});
+        }catch(error){manifest.push({number:certificate.certificate_number,status:"failed",source:friendly(error)});}
+      }
+      if(!manifest.some(row=>row.status==="included"))throw new Error("No certificate PDFs could be created.");
+      zip.file("MANIFEST.txt",manifest.map(row=>[row.number,row.status,row.source].join(" | ")).join("\n"));
+      await downloadBlob(idCardFilename(data.batch?.title||"Certificates")+"_Issued_Certificates.zip",
+        await zip.generateAsync({type:"blob",compression:"DEFLATE"}));
+      notify("Certificate package downloaded",manifest.filter(row=>row.status==="included").length+" issued certificate PDF(s) included.","success");
+    }catch(error){notify("Certificate package unavailable",friendly(error),"error");}
+    finally{if(button)button.disabled=false;}
   }
 
   // ID-card issue/expiry date parity release for production.
