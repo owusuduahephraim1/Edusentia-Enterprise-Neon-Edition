@@ -14,7 +14,7 @@ const router=fs.readFileSync("worker/src/routes.ts","utf8");
 test("old staff and student QR links redirect to public verification before auth initializes",()=>{
   assert.match(shell,/<script>[\s\S]*?q\.has\("staffcard"\)\|\|q\.has\("idcard"\)/);
   assert.match(shell,/location\.replace\("\.\/verify-card\.html"\+location\.search\)/);
-  assert.ok(shell.indexOf('location.replace("./verify-card.html"')<shell.indexOf('<script src="app.js">'));
+  assert.ok(shell.indexOf('location.replace("./verify-card.html"')<shell.indexOf('<script src="app.js?v=20261126-history-nav2">'));
   assert.doesNotMatch(page,/id="loginForm"/);
   assert.match(page,/id="verificationState"/);
   assert.match(page,/id="verificationRetry"/);

@@ -34,5 +34,5 @@ test("authorized history page continues to expose official transcript download",
   assert.match(workspaces,/enterpriseTranscriptOfficialDownload/);
   assert.match(workspaces,/window\.EdusentiaOfficialTranscriptPdf\.render\(issuance,deps\)/);
   assert.match(workspaces,/const verification=obj\(await certified\("verify_transcript"/);
-  assert.ok(index.includes('src="official-transcript-pdf.js"'));
+  assert.ok(index.includes('src="official-transcript-pdf.js?v=20261126-history-nav2"'));
 });

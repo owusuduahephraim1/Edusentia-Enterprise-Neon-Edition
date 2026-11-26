@@ -137,7 +137,7 @@ test("unavailable stored signature rejects instead of outputting an unsigned off
 });
 
 test("official download is gated to valid frozen issuance while preview remains clearly unofficial",()=>{
-  assert.ok(index.indexOf('src="official-transcript-pdf.js"')<index.indexOf('src="parity-enterprise-workspaces.js"'));
+  assert.ok(index.indexOf('src="official-transcript-pdf.js?v=20261126-history-nav2"')<index.indexOf('src="parity-enterprise-workspaces.js?v=20261126-history-nav2"'));
   assert.match(workspace,/currentIssuance=obj\(data\?\.current_issuance\)/);
   assert.match(workspace,/currentIssuance\.status==="valid"/);
   assert.match(workspace,/data-transcript-official-pdf/);

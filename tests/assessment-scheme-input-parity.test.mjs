@@ -31,6 +31,6 @@ test("Neon save_assessment_scheme keeps the certified Supabase total-weight tole
 
 test("assessment input fix is cache-busted for deployed tenants",()=>{
   const sw=read("frontend/service-worker.js");
-  assert.match(sw,/edusentia-neon-v44/);
+  assert.match(sw,/edusentia-neon-v45-academic-history/);
   assert.ok(sw.includes("./parity-academics.js"));
 });
