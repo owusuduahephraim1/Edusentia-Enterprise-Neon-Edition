@@ -62,7 +62,7 @@ test("successful school registration offers WhatsApp and SMS app alerts",()=>{
   assert.match(shellCss,/registration-alert-actions/);
   assert.match(shellCss,/registration-alert-whatsapp/);
   assert.match(shellCss,/registration-alert-sms/);
-  assert.match(serviceWorker,/edusentia-neon-v43/);
+  assert.match(serviceWorker,/edusentia-neon-v44/);
 });
 
 test("platform capacity telemetry counts the certified public student directory",()=>{
