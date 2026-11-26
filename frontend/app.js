@@ -25,6 +25,9 @@
     {id:"student_services",label:"Student Services",icon:"◎",subtitle:"Admissions, wellbeing, health, communication, boarding and alumni",roles:["principal","class_teacher","subject_teacher"],render:renderStudentServices},
     {id:"academics",label:"Academics",icon:"⌘",subtitle:"Academic structure and assessment",permission:"manage_academics",render:renderAcademics},
     {id:"students",label:"Students",icon:"◉",subtitle:"Student records and enrolment",roles:["system_admin","class_teacher","subject_teacher"],render:renderStudents},
+    // Always reserve the academic history navigation entry in the core shell.
+    // The workspace implementation below replaces this fallback when its module loads.
+    {id:"history",label:"Student Academic History",icon:"▧",subtitle:"Official academic transcripts, cumulative published results, and verification",roles:["system_admin","principal","class_teacher","subject_teacher"],feature:"academic_history",render:()=>{byId("content").innerHTML='<section class="panel pad"><h3>Student Academic History</h3><p>The academic history workspace is not ready. Refresh the application and try again.</p></section>';}},
     {id:"staff",label:"Staff & HR",icon:"♙",subtitle:"Staff directory, employment records and leave",roles:["system_admin","principal"],render:renderStaff},
     {id:"teachers",label:"Teachers",icon:"♜",subtitle:"Teacher records and assignments",permission:"manage_teachers",render:renderTeachers},
     {id:"headteachers",label:"Principals",icon:"★",subtitle:"Principal records and appointments",permission:"manage_headteachers",render:renderPrincipal},
