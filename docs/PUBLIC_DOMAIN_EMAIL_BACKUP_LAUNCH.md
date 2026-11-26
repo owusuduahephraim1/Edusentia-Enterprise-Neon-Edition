@@ -16,7 +16,7 @@ Public website files are in public-site/. The deploy workflow at .github/workflo
 
 Acceptance: both apex and www served the Edusentia homepage over HTTPS on 26 Nov 2026. A canonical redirect from www to apex is not yet independently demonstrated; check it separately. Continue mobile accessibility, asset, sitemap, robots and security-header checks. Check app.edusentia.com and verify.edusentia.com remain intact. The static site does not include a form, marketing cookies, third-party trackers, or student record APIs.
 
-## Domain email: recipient choice still needed
+## Domain email: Zoho Mail Lite selected for preparation; not yet activated
 
 Repeated domain audit on 26 Nov 2026 found no MX records, no root SPF TXT record, and no DMARC TXT record. Do not publish untested mailto links as active contact addresses.
 
@@ -70,3 +70,7 @@ The website's privacy page covers only the public static site. School data-proce
 ## Current operational work
 
 The read-only production health workflow is .github/workflows/production-readiness-health.yml. Launch signoffs and evidence are in docs/COMMERCIAL_LAUNCH_GATE_REGISTER.md, and school onboarding, privacy/legal review and incident response guidance are in docs/SCHOOL_ONBOARDING_AND_SUPPORT_PLAYBOOK.md. This monitor reports mail and backup warnings but does not create mailboxes, perform off-site backups, or restore databases.
+
+## Zoho Mail setup preparation (26 November 2026)
+
+A two-inbox send/receive setup using Zoho Mail Lite is prepared in docs/ZOHO_MAIL_LITE_TWO_MAILBOX_ACTIVATION.md. The machine-readable placeholder manifest is ops/email/edusentia-zoho-mail-activation.template.json. MX/SPF/DKIM/DMARC must be sourced from the actual Zoho domain setup after payment and verification; business addresses are not yet active. The existing five website/API records remain unchanged.

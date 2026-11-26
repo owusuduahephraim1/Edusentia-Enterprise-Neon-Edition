@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "purpose": "NON-EXECUTABLE configuration checklist; replace placeholders only from the Zoho Admin Console after verified signup",
+  "created_at": "2026-11-26",
+  "domain": "edusentia.com",
+  "dns_host": "Cloudflare",
+  "provider": "Zoho Mail",
+  "plan": "Mail Lite 5GB",
+  "plan_purchase_state": "NOT_PURCHASED_OR_VERIFIED",
+  "expected_mailboxes": [
+    {
+      "address": "info@edusentia.com",
+      "type": "independent_user_mailbox",
+      "display_name": "Edusentia Business Enquiries",
+      "verified": false
+    },
+    {
+      "address": "support@edusentia.com",
+      "type": "independent_user_mailbox",
+      "display_name": "Edusentia Technical Support",
+      "verified": false
+    }
+  ],
+  "mail_records_to_confirm_with_provider": {
+    "domain_ownership": {
+      "type": "TXT or CNAME",
+      "name": "COPY_EXACT_ZOHO_VERIFICATION_HOST",
+      "value": "COPY_EXACT_ZOHO_VERIFICATION_VALUE",
+      "dns_only": true,
+      "status": "NOT_CONFIGURED"
+    },
+    "inbound_mx": {
+      "name": "@",
+      "type": "MX",
+      "hosts_and_priorities": "COPY_EXACT_ZOHO_ACCOUNT_REGION_MX_LIST",
+      "status": "NOT_CONFIGURED"
+    },
+    "sender_policy": {
+      "name": "@",
+      "type": "TXT",
+      "value": "COPY_SINGLE_COMBINED_SPF_FROM_ZOHO_AFTER_SENDER_INVENTORY",
+      "status": "NOT_CONFIGURED"
+    },
+    "dkim": {
+      "name": "COPY_ZOHO_SELECTOR._domainkey",
+      "type": "TXT_OR_PROVIDER_DEFINED",
+      "value": "COPY_ZOHO_DKIM_PUBLIC_KEY",
+      "status": "NOT_CONFIGURED"
+    },
+    "dmarc": {
+      "name": "_dmarc",
+      "type": "TXT",
+      "staged_example": "v=DMARC1; p=none; adkim=r; aspf=r; pct=100",
+      "report_destination": "OPTIONAL_VALIDATED_DMARC_ALIAS_REQUIRED",
+      "status": "NOT_CONFIGURED"
+    }
+  },
+  "preserve_unchanged": {
+    "apex_public_site": "edusentia.com -> edusentia-main.pages.dev",
+    "www_site": "www.edusentia.com -> edusentia-main.pages.dev",
+    "authenticated_application": "app.edusentia.com -> edusentia-app.pages.dev",
+    "document_verifier": "verify.edusentia.com -> edusentia-verify.pages.dev",
+    "worker_api": "api.edusentia.com -> edusentia-enterprise-neon-api"
+  },
+  "approval_gates": [
+    "mailbox_plan_subscribed",
+    "zoho_domain_ownership_verified",
+    "both_accounts_provisioned_with_mfa",
+    "inbound_mx_zoho_verified",
+    "single_spf_policy_verified",
+    "dkim_signing_activated",
+    "dmarc_monitoring_policy_verified",
+    "external_gmail_to_info_inbound_passed",
+    "external_outlook_to_support_inbound_passed",
+    "both_mailboxes_sent_outbound_and_replies_received",
+    "spf_or_dkim_aligned_dmarc_pass_confirmed",
+    "business_email_public_site_release_approved"
+  ],
+  "notes": [
+    "This file contains no API keys or passwords.",
+    "Do not deploy these placeholders as DNS entries.",
+    "MX and SPF must come from the account's selected Zoho data center; generic help examples are not authoritative.",
+    "Outgoing mail delivery, domain alignment and support workflows require independent testing."
+  ]
+}
