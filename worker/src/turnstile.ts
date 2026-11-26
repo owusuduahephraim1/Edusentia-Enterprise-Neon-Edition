@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { isAllowedAppOrigin } from "./http";
 
 type SiteverifyResult = {
   success?: boolean;
@@ -39,8 +40,12 @@ export async function verifyTurnstile(env: Env, token: string, request: Request,
   }
 
   const result = await response.json<SiteverifyResult>();
-  const expectedHostname = new URL(env.APP_ORIGIN).hostname;
-  const hostnameMismatch=result.hostname !== expectedHostname;
+  // Bind each challenge to the exact trusted application hostname that
+  // initiated it. Old GitHub Pages users remain valid during the migration.
+  const requestOrigin=request.headers.get("origin")||"";
+  const originTrusted=isAllowedAppOrigin(env,requestOrigin);
+  const expectedHostname=originTrusted?new URL(requestOrigin).hostname:"";
+  const hostnameMismatch=!originTrusted||result.hostname!==expectedHostname;
   const actionMismatch=result.action !== expectedAction;
   const metadataInvalid=!testMode && (hostnameMismatch || actionMismatch);
   if (!result.success || metadataInvalid) {
