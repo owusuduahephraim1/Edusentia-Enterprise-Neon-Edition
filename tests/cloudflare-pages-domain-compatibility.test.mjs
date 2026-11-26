@@ -22,7 +22,7 @@ const appOrigin="https://app.edusentia.com";
 
 function originCheck(){
   const start=corsSource.indexOf("export function isAllowedAppOrigin(");
-  const end=corsSource.indexOf("export function corsHeaders(",start);
+  const end=corsSource.indexOf("const PUBLIC_VERIFICATION_ORIGIN=",start);
   assert.ok(start>=0 && end>start);
   const src=corsSource.slice(start,end)
     .replace("export function isAllowedAppOrigin(env:Env, origin:string)","function isAllowedAppOrigin(env, origin)");
